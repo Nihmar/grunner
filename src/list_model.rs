@@ -1,12 +1,12 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::thread::spawn;
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use glib::MainContext; // <-- added for spawn_blocking
+use glib::idle_add_local_once;
 use glib::object::Cast;
-use glib::spawn_future_local;
 use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
