@@ -1,0 +1,15 @@
+[package]
+name = "grunner"
+version = "0.1.0"
+edition = "2024"
+description = "A rofi-like application launcher for GNOME, written in Rust"
+
+[[bin]]
+name = "grunner"
+path = "src/main.rs"
+
+[dependencies]
+gtk4 = "0.10"
+libadwaita = { version = "0.8", features = ["v1_6"] }
+glib = "0.21"
+fuzzy-matcher = "0.3"
