@@ -128,8 +128,6 @@ impl AppListModel {
         let argument = argument.to_string();
         let model_clone = self.clone();
 
-        let (sender, receiver) = glib::MainContext::channel(glib::Priority::DEFAULT);
-
         std::thread::spawn(move || {
             let output = std::process::Command::new("sh")
                 .arg("-c")
@@ -137,12 +135,9 @@ impl AppListModel {
                 .arg("--")
                 .arg(&argument)
                 .output();
-            let _ = sender.send(output);
-        });
 
-        receiver.attach(None, move |output_result| {
-            let lines = match output_result {
-                Ok(output) => String::from_utf8_lossy(&output.stdout)
+            let lines = match output {
+                Ok(out) => String::from_utf8_lossy(&out.stdout)
                     .lines()
                     .take(max_results)
                     .map(String::from)
@@ -150,17 +145,18 @@ impl AppListModel {
                 Err(_) => Vec::new(),
             };
 
-            if model_clone.task_gen.get() == generation {
-                model_clone.store.remove_all();
-                for line in lines {
-                    let item = CommandItem::new(line);
-                    model_clone.store.append(&item);
+            glib::idle_add_local_once(move || {
+                if model_clone.task_gen.get() == generation {
+                    model_clone.store.remove_all();
+                    for line in lines {
+                        let item = CommandItem::new(line);
+                        model_clone.store.append(&item);
+                    }
+                    if model_clone.store.n_items() > 0 {
+                        model_clone.selection.set_selected(0);
+                    }
                 }
-                if model_clone.store.n_items() > 0 {
-                    model_clone.selection.set_selected(0);
-                }
-            }
-            glib::ControlFlow::Break
+            });
         });
     }
 
