@@ -27,6 +27,8 @@ pub struct AppListModel {
     commands: HashMap<String, String>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
+    // NEW: flag to indicate that the Obsidian action buttons should be shown
+    obsidian_action_mode: Rc<Cell<bool>>,
 }
 
 impl AppListModel {
@@ -51,10 +53,14 @@ impl AppListModel {
             commands,
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
+            obsidian_action_mode: Rc::new(Cell::new(false)),
         }
     }
 
     pub fn populate(&self, query: &str) {
+        // Reset Obsidian action mode at the start of every population
+        self.obsidian_action_mode.set(false);
+
         // Increment generation to cancel previous async tasks
         self.task_gen.set(self.task_gen.get() + 1);
         self.store.remove_all();
@@ -308,31 +314,21 @@ impl AppListModel {
         match cmd {
             "ob" => {
                 if arg.is_empty() {
-                    // Show action buttons as items
-                    self.store
-                        .append(&ObsidianActionItem::new(ObsidianAction::OpenVault, None));
-                    self.store
-                        .append(&ObsidianActionItem::new(ObsidianAction::NewNote, None));
-                    self.store
-                        .append(&ObsidianActionItem::new(ObsidianAction::DailyNote, None));
-                    self.store.append(&ObsidianActionItem::new(
-                        ObsidianAction::QuickNote,
-                        Some(arg.to_string()),
-                    ));
-                    if self.store.n_items() > 0 {
-                        self.selection.set_selected(0);
-                    }
+                    // Show action buttons as a separate UI element, not in the list
+                    self.store.remove_all();
+                    self.obsidian_action_mode.set(true);
+                    self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
+                    return; // <-- important: do not proceed to normal app search
                 } else {
-                    // Run find in vault
+                    self.obsidian_action_mode.set(false);
                     self.run_find_in_vault(vault_path, arg);
                 }
             }
             "obg" => {
                 if arg.is_empty() {
-                    // Nothing to search – show empty list
-                    return;
+                    return; // nothing to search
                 } else {
-                    // Run ripgrep in vault
+                    self.obsidian_action_mode.set(false);
                     self.run_rg_in_vault(vault_path, arg);
                 }
             }
@@ -438,5 +434,10 @@ impl AppListModel {
             Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
         });
+    }
+
+    // Public getter for the Obsidian action mode flag
+    pub fn obsidian_action_mode(&self) -> bool {
+        self.obsidian_action_mode.get()
     }
 }

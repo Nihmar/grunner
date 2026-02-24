@@ -7,7 +7,7 @@ use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
-use crate::obsidian_item::ObsidianActionItem;
+use crate::obsidian_item::{ObsidianAction, ObsidianActionItem}; // <-- added ObsidianAction
 use glib::clone;
 use gtk4::gdk::Key;
 use gtk4::prelude::DisplayExt;
@@ -18,7 +18,7 @@ use gtk4::{
 };
 use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
-use std::rc::Rc; // <-- new
+use std::rc::Rc;
 
 pub fn build_ui(app: &Application, cfg: &Config) {
     // Load CSS
@@ -31,14 +31,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     );
 
     let all_apps: Rc<Vec<launcher::DesktopApp>> = Rc::new(launcher::load_apps(&cfg.app_dirs));
-    let obsidian_cfg = cfg.obsidian.clone(); // <-- new
+    let obsidian_cfg = cfg.obsidian.clone();
 
     let model = AppListModel::new(
         all_apps,
         cfg.max_results,
         cfg.calculator,
         cfg.commands.clone(),
-        obsidian_cfg, // <-- pass it to the model
+        obsidian_cfg,
     );
 
     let window = ApplicationWindow::builder()
@@ -65,6 +65,35 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .build();
     entry.add_css_class("search-entry");
 
+    // --- Obsidian action button bar (initially hidden) ---
+    let obsidian_bar = GtkBox::new(Orientation::Horizontal, 8);
+    obsidian_bar.set_halign(Align::Center);
+    obsidian_bar.set_margin_top(6);
+    obsidian_bar.set_margin_bottom(6);
+    obsidian_bar.set_visible(false);
+
+    let actions = [
+        ("Open Vault", ObsidianAction::OpenVault),
+        ("New Note", ObsidianAction::NewNote),
+        ("Daily Note", ObsidianAction::DailyNote),
+        ("Quick Note", ObsidianAction::QuickNote),
+    ];
+
+    for (label, action) in actions {
+        let btn = Button::with_label(label);
+        btn.add_css_class("power-button"); // reuse existing style
+        let model_clone = model.clone();
+        let window_clone = window.clone();
+        btn.connect_clicked(move |_| {
+            if let Some(cfg) = &model_clone.obsidian_cfg {
+                perform_obsidian_action(action, None, cfg);
+            }
+            window_clone.close();
+        });
+        obsidian_bar.append(&btn);
+    }
+    // --------------------------------------------------------
+
     let power_bar = build_power_bar(&window, &entry);
 
     let factory = AppListModel::create_factory();
@@ -79,17 +108,21 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     root.append(&entry);
     root.append(&scrolled);
+    root.append(&obsidian_bar); // <-- inserted between scrolled and power_bar
     root.append(&power_bar);
     window.set_content(Some(&root));
 
     window.connect_show(clone!(
         #[weak]
         entry,
+        #[weak]
+        obsidian_bar,
         #[strong]
         model,
         move |_| {
             entry.set_text("");
             model.populate("");
+            obsidian_bar.set_visible(false); // hide bar on window show
             entry.grab_focus();
         }
     ));
@@ -97,8 +130,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry.connect_changed(clone!(
         #[strong]
         model,
+        #[weak]
+        obsidian_bar,
         move |e| {
             model.populate(&e.text());
+            // Show/hide the Obsidian button bar based on the model flag
+            obsidian_bar.set_visible(model.obsidian_action_mode());
         }
     ));
 
@@ -134,7 +171,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                             open_file_or_line(&cmd_item.line());
                         } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
-                            // <-- new branch
                             if let Some(cfg) = &model.obsidian_cfg {
                                 let action = obs_item.action();
                                 let arg = obs_item.arg();
@@ -210,7 +246,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     open_file_or_line(&cmd_item.line());
                     window.close();
                 } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
-                    // <-- new branch
                     if let Some(cfg) = &model.obsidian_cfg {
                         let action = obs_item.action();
                         let arg = obs_item.arg();
