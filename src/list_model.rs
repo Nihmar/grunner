@@ -63,7 +63,7 @@ impl AppListModel {
     // Cancel any pending debounced command
     fn cancel_debounce(&self) {
         if let Some(source_id) = self.command_debounce.borrow_mut().take() {
-            source_id.remove();
+            let _ = source_id.remove(); // ignore error – source may already be gone
         }
     }
 
@@ -73,10 +73,17 @@ impl AppListModel {
         F: FnOnce() + 'static,
     {
         self.cancel_debounce();
-        let source_id = glib::timeout_add_local(Duration::from_millis(delay_ms), move || {
-            f();
-            glib::ControlFlow::Break
-        });
+        let mut f_opt = Some(f);
+        let debounce_ref = self.command_debounce.clone(); // clone to use in the closure
+        let source_id =
+            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
+                // Clear the stored SourceId *before* calling f, because the timer has already fired.
+                *debounce_ref.borrow_mut() = None;
+                if let Some(f) = f_opt.take() {
+                    f();
+                }
+                glib::ControlFlow::Break
+            });
         *self.command_debounce.borrow_mut() = Some(source_id);
     }
 
@@ -101,13 +108,15 @@ impl AppListModel {
                     Some(c) => c.clone(),
                     None => {
                         self.store.remove_all();
-                        let item = CommandItem::new("Obsidian not configured – edit config".to_string());
+                        let item =
+                            CommandItem::new("Obsidian not configured – edit config".to_string());
                         self.store.append(&item);
                         self.selection.set_selected(0);
                         return;
                     }
                 };
-                let vault_path = expand_home(&obs_cfg.vault, &std::env::var("HOME").unwrap_or_default());
+                let vault_path =
+                    expand_home(&obs_cfg.vault, &std::env::var("HOME").unwrap_or_default());
                 if !vault_path.exists() {
                     self.store.remove_all();
                     let item = CommandItem::new(format!(
