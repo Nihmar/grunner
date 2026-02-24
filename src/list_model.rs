@@ -5,7 +5,6 @@ use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
 use crate::config::expand_home;
 use crate::launcher::DesktopApp;
-use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use glib::object::Cast;
