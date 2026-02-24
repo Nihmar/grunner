@@ -128,6 +128,8 @@ impl AppListModel {
         let argument = argument.to_string();
         let model_clone = self.clone();
 
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
+
         std::thread::spawn(move || {
             let output = std::process::Command::new("sh")
                 .arg("-c")
@@ -145,7 +147,11 @@ impl AppListModel {
                 Err(_) => Vec::new(),
             };
 
-            glib::idle_add_local_once(move || {
+            let _ = tx.send(lines);
+        });
+
+        glib::idle_add_local(move || match rx.try_recv() {
+            Ok(lines) => {
                 if model_clone.task_gen.get() == generation {
                     model_clone.store.remove_all();
                     for line in lines {
@@ -156,7 +162,10 @@ impl AppListModel {
                         model_clone.selection.set_selected(0);
                     }
                 }
-            });
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
         });
     }
 
