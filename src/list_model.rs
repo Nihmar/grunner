@@ -15,6 +15,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct AppListModel {
@@ -72,7 +73,7 @@ impl AppListModel {
         F: FnOnce() + 'static,
     {
         self.cancel_debounce();
-        let source_id = glib::timeout_add_local(delay_ms, move || {
+        let source_id = glib::timeout_add_local(Duration::from_millis(delay_ms), move || {
             f();
             glib::ControlFlow::Break
         });
@@ -155,9 +156,10 @@ impl AppListModel {
             if let Some(template) = self.commands.get(cmd_name) {
                 let template = template.clone();
                 let arg = arg.to_string();
+                let cmd_name = cmd_name.to_string(); // clone to avoid lifetime issues
                 let model_clone = self.clone();
                 self.schedule_command(300, move || {
-                    model_clone.run_command(cmd_name, &template, &arg);
+                    model_clone.run_command(&cmd_name, &template, &arg);
                 });
                 return; // Do NOT clear the list yet
             } else {
