@@ -8,7 +8,7 @@ Fast, fuzzy‑searching, with an inline calculator, custom colon commands, and i
 ## Features
 
 - 🔍 **Fuzzy search** through desktop applications (`.desktop` files)
-- 🧮 **Inline calculator** – evaluate expressions while typing (e.g., `2+2`, `sqrt(16)`)
+- 🧮 **Inline calculator** – evaluate expressions while typing (e.g., `2+2`, `16^(1/4)`)
 - ⚡ **System actions**: Suspend, Restart, Power Off, Log Out (with confirmation)
 - ⚙️ **Settings button** – opens the configuration file in your default editor
 - ⌨️ **Keyboard navigation** (arrows, page up/down, Enter, Esc)
@@ -170,8 +170,8 @@ All actions fall back to the `xdg-open` URI scheme, so Obsidian must be installe
 
 If the calculator is enabled (`[calculator] enabled = true`), typing a mathematical expression shows a result item at the top of the list.
 
-- **Examples**: `2+2`, `sqrt(16)`, `3^3`, `(5+3)*2`
-- Pressing `Enter` on the calculator item copies the result to the clipboard (without the `= ` prefix).
+- **Examples**: `2+2`, `16^(1/4)`, `3^3`, `(5+3)*2`
+- **NOT WORKING**: Pressing `Enter` on the calculator item copies the result to the clipboard (without the `= ` prefix).
 
 The calculator uses the [`evalexpr`](https://crates.io/crates/evalexpr) crate, which supports basic arithmetic, parentheses, and common functions. It automatically converts integers to floats so that division yields decimal results (e.g., `7/5` → `1.4`). If the full expression cannot be evaluated, it tries the longest valid prefix.
 
