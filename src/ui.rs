@@ -12,6 +12,7 @@ use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance
 
 use crate::actions::{launch_app, open_settings, power_action};
 use crate::app_item::AppItem;
+use crate::calc_item::CalcItem;
 use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
@@ -109,12 +110,17 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 }
                 Key::Return | Key::KP_Enter => {
                     let pos = model.selection.selected();
-                    if let Some(item) = model
-                        .store
-                        .item(pos)
-                        .and_then(|o| o.downcast::<AppItem>().ok())
-                    {
-                        launch_app(&item.exec(), item.terminal());
+                    if let Some(obj) = model.store.item(pos) {
+                        if let Some(app_item) = obj.downcast_ref::<AppItem>() {
+                            launch_app(&app_item.exec(), app_item.terminal());
+                        } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
+                            let result = calc_item.result();
+                            let number = result.strip_prefix("= ").unwrap_or(&result);
+                            let display =
+                                gtk4::gdk::Display::default().expect("cannot get display");
+                            let clipboard = display.clipboard();
+                            clipboard.set_text(number);
+                        }
                     }
                     window.close();
                     glib::Propagation::Stop
@@ -169,14 +175,22 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         #[strong]
         model,
         move |_, pos| {
-            if let Some(item) = model
-                .store
-                .item(pos)
-                .and_then(|o| o.downcast::<AppItem>().ok())
-            {
-                launch_app(&item.exec(), item.terminal());
+            if let Some(obj) = model.store.item(pos) {
+                if let Some(app_item) = obj.downcast_ref::<AppItem>() {
+                    launch_app(&app_item.exec(), app_item.terminal());
+                    window.close();
+                } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
+                    // Copia il risultato negli appunti (senza il prefisso "= ")
+                    let result = calc_item.result();
+                    let number = result.strip_prefix("= ").unwrap_or(&result);
+                    let display = gtk4::gdk::Display::default().expect("cannot get display");
+                    let clipboard = display.clipboard();
+                    clipboard.set_text(number);
+                    window.close();
+                }
+            } else {
+                window.close();
             }
-            window.close();
         }
     ));
 

@@ -4,6 +4,8 @@ mod config;
 mod launcher;
 mod list_model;
 mod ui;
+mod calc_item;
+mod calculator; 
 
 use gtk4::prelude::*;
 use libadwaita::Application;

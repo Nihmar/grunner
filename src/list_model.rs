@@ -8,6 +8,8 @@ use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
 
 use crate::app_item::AppItem;
+use crate::calc_item::CalcItem;
+use crate::calculator::eval_expression;
 use crate::launcher::DesktopApp;
 
 #[derive(Clone)]
@@ -20,7 +22,8 @@ pub struct AppListModel {
 
 impl AppListModel {
     pub fn new(all_apps: Rc<Vec<DesktopApp>>, max_results: usize) -> Self {
-        let store = gio::ListStore::new::<AppItem>();
+        // Crea una ListStore che può contenere qualsiasi oggetto derivato da glib::Object
+        let store = gio::ListStore::new::<glib::Object>(); // <-- MODIFICATO
         let selection = SingleSelection::new(Some(store.clone()));
         selection.set_autoselect(true);
         selection.set_can_unselect(false);
@@ -36,44 +39,54 @@ impl AppListModel {
     pub fn populate(&self, query: &str) {
         self.store.remove_all();
 
-        if query.is_empty() {
-            let items: Vec<AppItem> = self.all_apps.iter().map(|app| AppItem::new(app)).collect();
-            self.store.extend_from_slice(&items);
-            if self.store.n_items() > 0 {
-                self.selection.set_selected(0);
+        // --- Calcolatrice: se l'espressione è valida, aggiungi una riga speciale ---
+        if !query.is_empty() {
+            if let Some(result_str) = eval_expression(query) {
+                let calc_item = CalcItem::new(result_str);
+                self.store.append(&calc_item);          // <-- NUOVO
             }
-            return;
         }
 
-        let matcher = SkimMatcherV2::default();
-        let mut results: Vec<(i64, &DesktopApp)> = self
-            .all_apps
-            .iter()
-            .filter_map(|app| {
-                let name_score = matcher.fuzzy_match(&app.name, query).unwrap_or(i64::MIN);
-                let desc_score = if !app.description.is_empty() {
-                    matcher
-                        .fuzzy_match(&app.description, query)
-                        .unwrap_or(i64::MIN)
-                        / 2
-                } else {
-                    i64::MIN
-                };
-                let score = name_score.max(desc_score);
-                if score == i64::MIN {
-                    None
-                } else {
-                    Some((score, app))
-                }
-            })
-            .collect();
+        // --- App ---
+        if query.is_empty() {
+            // Mostra tutte le app in ordine alfabetico
+            for app in self.all_apps.iter() {
+                self.store.append(&AppItem::new(app));  // <-- AppItem è un glib::Object
+            }
+        } else {
+            // Filtro fuzzy
+            let matcher = SkimMatcherV2::default();
+            let mut results: Vec<(i64, &DesktopApp)> = self
+                .all_apps
+                .iter()
+                .filter_map(|app| {
+                    let name_score = matcher.fuzzy_match(&app.name, query).unwrap_or(i64::MIN);
+                    let desc_score = if !app.description.is_empty() {
+                        matcher
+                            .fuzzy_match(&app.description, query)
+                            .unwrap_or(i64::MIN)
+                            / 2
+                    } else {
+                        i64::MIN
+                    };
+                    let score = name_score.max(desc_score);
+                    if score == i64::MIN {
+                        None
+                    } else {
+                        Some((score, app))
+                    }
+                })
+                .collect();
 
-        results.sort_by(|a, b| b.0.cmp(&a.0));
-        results.truncate(self.max_results);
+            results.sort_by(|a, b| b.0.cmp(&a.0));
+            results.truncate(self.max_results);
 
-        let items: Vec<AppItem> = results.iter().map(|(_, app)| AppItem::new(app)).collect();
-        self.store.extend_from_slice(&items);
+            for (_, app) in results {
+                self.store.append(&AppItem::new(app));
+            }
+        }
 
+        // Seleziona il primo elemento (che potrebbe essere la calcolatrice)
         if self.store.n_items() > 0 {
             self.selection.set_selected(0);
         }
@@ -119,54 +132,63 @@ impl AppListModel {
 
         factory.connect_bind(|_, list_item| {
             let list_item = list_item.downcast_ref::<ListItem>().unwrap();
-            let item = match list_item.item().and_then(|o| o.downcast::<AppItem>().ok()) {
-                Some(i) => i,
+            let obj = match list_item.item() {
+                Some(o) => o,
                 None => return,
             };
 
+            // Recupera i widget figli (creati nello setup)
             let hbox = list_item
                 .child()
                 .and_then(|c| c.downcast::<gtk4::Box>().ok())
                 .expect("missing hbox");
-
             let image = hbox
                 .first_child()
                 .and_then(|c| c.downcast::<gtk4::Image>().ok())
                 .expect("missing image");
-
             let vbox = image
                 .next_sibling()
                 .and_then(|c| c.downcast::<gtk4::Box>().ok())
                 .expect("missing vbox");
-
             let name_label = vbox
                 .first_child()
                 .and_then(|c| c.downcast::<gtk4::Label>().ok())
                 .expect("missing name_label");
-
             let desc_label = name_label
                 .next_sibling()
                 .and_then(|c| c.downcast::<gtk4::Label>().ok())
                 .expect("missing desc_label");
 
-            let icon = item.icon();
-            if icon.is_empty() {
-                image.set_icon_name(Some("application-x-executable"));
-            } else if icon.starts_with('/') {
-                image.set_from_file(Some(&icon));
-            } else {
-                image.set_icon_name(Some(&icon));
-            }
-
-            name_label.set_text(&item.name());
-
-            let desc = item.description();
-            if desc.is_empty() {
+            // --- Gestione in base al tipo di oggetto ---
+            if let Some(app_item) = obj.downcast_ref::<AppItem>() {
+                // Elemento applicazione
+                let icon = app_item.icon();
+                if icon.is_empty() {
+                    image.set_icon_name(Some("application-x-executable"));
+                } else if icon.starts_with('/') {
+                    image.set_from_file(Some(&icon));
+                } else {
+                    image.set_icon_name(Some(&icon));
+                }
+                name_label.set_text(&app_item.name());
+                let desc = app_item.description();
+                if desc.is_empty() {
+                    desc_label.set_visible(false);
+                    desc_label.set_text("");
+                } else {
+                    desc_label.set_visible(true);
+                    desc_label.set_text(&desc);
+                }
+            } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
+                // Elemento calcolatrice
+                image.set_icon_name(Some("accessories-calculator")); // icona predefinita
+                name_label.set_text(&calc_item.result());
                 desc_label.set_visible(false);
                 desc_label.set_text("");
             } else {
-                desc_label.set_visible(true);
-                desc_label.set_text(&desc);
+                // Fallback (non dovrebbe accadere)
+                name_label.set_text("?");
+                desc_label.set_visible(false);
             }
         });
 
