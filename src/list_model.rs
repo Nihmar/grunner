@@ -121,37 +121,35 @@ impl AppListModel {
         }
     }
 
-    fn run_command(&self, cmd_name: &str, template: &str, argument: &str) {
+    fn run_command(&self, _cmd_name: &str, template: &str, argument: &str) {
         let generation = self.task_gen.get();
         let max_results = self.max_results;
         let template = template.to_string();
         let argument = argument.to_string();
         let model_clone = self.clone();
 
-        spawn_future_local(async move {
-            // Get the default main context and spawn a blocking task
-            let ctx = MainContext::default(); // <-- obtain context
-            let output_result = ctx
-                .spawn_blocking(move || {
-                    std::process::Command::new("sh")
-                        .arg("-c")
-                        .arg(&template)
-                        .arg("--") // $0
-                        .arg(&argument) // $1
-                        .output()
-                })
-                .await;
+        let (sender, receiver) = glib::MainContext::channel(glib::Priority::DEFAULT);
 
+        std::thread::spawn(move || {
+            let output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&template)
+                .arg("--")
+                .arg(&argument)
+                .output();
+            let _ = sender.send(output);
+        });
+
+        receiver.attach(None, move |output_result| {
             let lines = match output_result {
-                Ok(Ok(output)) => String::from_utf8_lossy(&output.stdout)
+                Ok(output) => String::from_utf8_lossy(&output.stdout)
                     .lines()
                     .take(max_results)
                     .map(String::from)
                     .collect::<Vec<_>>(),
-                _ => Vec::new(),
+                Err(_) => Vec::new(),
             };
 
-            // Only update if we are still the latest generation
             if model_clone.task_gen.get() == generation {
                 model_clone.store.remove_all();
                 for line in lines {
@@ -162,6 +160,7 @@ impl AppListModel {
                     model_clone.selection.set_selected(0);
                 }
             }
+            glib::ControlFlow::Break
         });
     }
 
