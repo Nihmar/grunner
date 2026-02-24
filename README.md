@@ -1,19 +1,22 @@
 # grunner
 
 A rofi-like application launcher for GNOME, written in Rust using GTK4 and libadwaita.  
-Fast, fuzzy‑searching, with an inline calculator and system actions.
+Fast, fuzzy‑searching, with an inline calculator, custom colon commands, and integrated Obsidian vault actions.
 
 ---
 
 ## Features
 
 - 🔍 **Fuzzy search** through desktop applications (`.desktop` files)
-- 🧮 **Inline calculator** – evaluate expressions while typing (e.g., `2+2`)
+- 🧮 **Inline calculator** – evaluate expressions while typing (e.g., `2+2`, `sqrt(16)`)
 - ⚡ **System actions**: Suspend, Restart, Power Off, Log Out (with confirmation)
 - ⚙️ **Settings button** – opens the configuration file in your default editor
-- 🎨 **Adwaita‑style theming** – follows light/dark mode and the system accent colour
 - ⌨️ **Keyboard navigation** (arrows, page up/down, Enter, Esc)
+- 🎨 **Adwaita‑style theming** – follows light/dark mode and the system accent colour
 - 🧩 **Highly configurable** – window size, max results, app directories, calculator toggle
+- **Colon commands** – define your own shell‑based commands (e.g., `:f pattern` to find files)
+- **Obsidian integration** – open vaults, create daily/quick notes, search filenames and content
+- **Smart file opening** – for command results like `file:line:content`, opens at the correct line in `$EDITOR`
 
 ---
 
@@ -51,7 +54,7 @@ cd grunner
 ```
 
 The `build.sh` script compiles the project in release mode and copies the binary to `~/.local/bin/grunner`.  
-Make sure `~/.local/bin` is in your `PATH` (you can add `export PATH="$HOME/.local/bin:$PATH"` to your shell configuration).
+Make sure `~/.local/bin` is in your `PATH` (add `export PATH="$HOME/.local/bin:$PATH"` to your shell configuration).
 
 ---
 
@@ -60,7 +63,7 @@ Make sure `~/.local/bin` is in your `PATH` (you can add `export PATH="$HOME/.loc
 Run `grunner` from a terminal or bind it to a keyboard shortcut (e.g., in GNOME Settings → Keyboard → View and Customize Shortcuts → add custom shortcut with command `grunner`).
 
 - **Type** to search for applications. The list updates in real time with fuzzy matching.
-- **Press `Enter`** to launch the selected application.
+- **Press `Enter`** to launch the selected application, copy a calculator result, or execute a colon command result.
 - **Press `Esc`** to close the launcher.
 - Use the **power buttons** at the bottom to suspend, restart, power off, or log out.
 
@@ -101,20 +104,57 @@ app_dirs = [
 [calculator]
 # Enable inline calculator (evaluates expressions typed in the search bar).
 enabled = true
+
+[commands]
+# Define colon commands. The key is the command name (without the leading ':').
+# The value is a shell command that will be executed with 'sh -c'.
+# Use "$1" for the argument typed after the command.
+f  = "find ~ -iname \"*$1*\" 2>/dev/null | head -20"
+fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
+
+[obsidian]
+# Uncomment and fill in to enable Obsidian integration.
+# vault = "~/Documents/Obsidian/MyVault"
+# daily_notes_folder = "Daily"
+# new_notes_folder = "Inbox"
+# quick_note = "Quick.md"
 ```
 
 ---
 
-## Keybindings
+## Colon Commands
 
-| Key               | Action                                    |
-|-------------------|-------------------------------------------|
-| `Esc`             | Close the launcher                        |
-| `Enter` / `KP_Enter` | Launch selected app / copy calculator result |
-| `↑` / `↓`         | Navigate up/down in the result list       |
-| `Page Up`         | Jump 10 items up                          |
-| `Page Down`       | Jump 10 items down                        |
-| `Ctrl+C`          | (if nothing selected) – closes launcher   |
+When you type a colon (`:`) followed by a command name and an optional argument, `grunner` executes the associated shell command and displays its output lines as selectable items.
+
+- **`:f pattern`** – find files (default command, uses `find`)
+- **`:fg pattern`** – grep inside files (default command, uses `ripgrep`)
+- **`:ob ...`** – Obsidian actions (see below)
+- You can add your own commands in the `[commands]` section of the config.
+
+Selecting a result line that looks like `file:line:content` will open the file at that line in your `$EDITOR`. If the line is a plain file path, it opens with `xdg-open`. Otherwise, the line is copied to the clipboard.
+
+---
+
+## Obsidian Integration
+
+If you configure the `[obsidian]` section, two special colon commands become available:
+
+- **`:ob`** – shows action buttons (Open Vault, New Note, Daily Note, Quick Note) above the power bar.  
+  If you type `:ob something`, it searches for filenames inside your vault using `find`.
+- **`:obg pattern`** – searches the *content* of all notes in your vault using `ripgrep` and displays matching lines.
+
+### Obsidian Actions
+
+When you click one of the buttons (or select the corresponding item after a search):
+
+| Action       | Behaviour                                                                                                                                                     |
+|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Open Vault   | Opens your vault in Obsidian using the `obsidian://open` URI.                                                                                                 |
+| New Note     | Creates a new file in the folder specified by `new_notes_folder`. The filename includes a timestamp. If you typed text after `:ob`, that text becomes the note’s content. |
+| Daily Note   | Opens (or creates) today’s daily note in the `daily_notes_folder`. If you typed text, it is appended to the note.                                            |
+| Quick Note   | Opens (or creates) the file specified by `quick_note`. If you typed text, it is appended.                                                                    |
+
+All actions fall back to the `xdg-open` URI scheme, so Obsidian must be installed and able to handle `obsidian://` links.
 
 ---
 
@@ -125,7 +165,7 @@ If the calculator is enabled (`[calculator] enabled = true`), typing a mathemati
 - **Examples**: `2+2`, `sqrt(16)`, `3^3`, `(5+3)*2`
 - Pressing `Enter` on the calculator item copies the result to the clipboard (without the `= ` prefix).
 
-The calculator uses the [`meval`](https://crates.io/crates/meval) crate, which supports basic arithmetic, parentheses, and common functions.
+The calculator uses the [`evalexpr`](https://crates.io/crates/evalexpr) crate, which supports basic arithmetic, parentheses, and common functions. It automatically converts integers to floats so that division yields decimal results (e.g., `7/5` → `1.4`). If the full expression cannot be evaluated, it tries the longest valid prefix.
 
 ---
 
@@ -138,7 +178,20 @@ The bottom bar contains buttons for:
 - **Power Off**
 - **Log Out**
 
-Clicking any of them opens a confirmation dialog. Confirming executes the corresponding system command (`systemctl suspend`, `systemctl reboot`, `systemctl poweroff`, or `loginctl`/`gnome-session-quit` for logout).
+Clicking any of them opens a confirmation dialog. Confirming executes the corresponding system command (`systemctl suspend`, `systemctl reboot`, `systemctl poweroff`). Logout attempts several methods: `loginctl terminate-session`, `gnome-session-quit`, or `loginctl terminate-user`.
+
+---
+
+## Keybindings
+
+| Key               | Action                                    |
+|-------------------|-------------------------------------------|
+| `Esc`             | Close the launcher                        |
+| `Enter` / `KP_Enter` | Launch selected app / copy calculator result / activate command result |
+| `↑` / `↓`         | Navigate up/down in the result list       |
+| `Page Up`         | Jump 10 items up                          |
+| `Page Down`       | Jump 10 items down                        |
+| `Ctrl+C`          | (if nothing selected) – closes launcher   |
 
 ---
 
