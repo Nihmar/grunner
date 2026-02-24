@@ -15,6 +15,8 @@ use gtk4::{
 use launcher::DesktopApp;
 use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
+use once_cell::sync::Lazy;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 const APP_ID: &str = "org.nihmar.grunner";
@@ -88,9 +90,7 @@ impl AppItem {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 fn main() -> glib::ExitCode {
-    // Load (or create) config before anything else.
     let cfg = config::load();
-
     let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(move |app| {
         build_ui(app, &cfg);
@@ -128,6 +128,7 @@ fn build_ui(app: &Application, cfg: &config::Config) {
     window.connect_realize(|w| {
         w.remove_css_class("background");
     });
+    window.set_position(gtk4::WindowPosition::Center);
 
     let root = GtkBox::new(Orientation::Vertical, 0);
     root.add_css_class("launcher-box");
@@ -286,6 +287,7 @@ fn build_ui(app: &Application, cfg: &config::Config) {
 
     let factory = SignalListItemFactory::new();
 
+    // Nella connect_setup:
     factory.connect_setup(|_, list_item| {
         let list_item = list_item.downcast_ref::<ListItem>().unwrap();
 
@@ -319,38 +321,29 @@ fn build_ui(app: &Application, cfg: &config::Config) {
 
         hbox.append(&vbox);
         list_item.set_child(Some(&hbox));
+
+        // Memorizza i widget nel list_item (richiede unsafe)
+        unsafe {
+            list_item.set_data("image", image);
+            list_item.set_data("name_label", name_label);
+            list_item.set_data("desc_label", desc_label);
+        }
     });
 
+    // Nella connect_bind:
     factory.connect_bind(|_, list_item| {
         let list_item = list_item.downcast_ref::<ListItem>().unwrap();
         let item = match list_item.item().and_then(|o| o.downcast::<AppItem>().ok()) {
             Some(i) => i,
             None => return,
         };
-        let hbox = match list_item.child().and_then(|w| w.downcast::<GtkBox>().ok()) {
-            Some(b) => b,
-            None => return,
-        };
 
-        // Widget tree: hbox → [image, vbox → [name_label, desc_label]]
-        let image = hbox
-            .first_child()
-            .and_then(|w| w.downcast::<Image>().ok())
-            .unwrap();
-        let vbox = hbox
-            .last_child()
-            .and_then(|w| w.downcast::<GtkBox>().ok())
-            .unwrap();
-        let name_label = vbox
-            .first_child()
-            .and_then(|w| w.downcast::<Label>().ok())
-            .unwrap();
-        let desc_label = vbox
-            .last_child()
-            .and_then(|w| w.downcast::<Label>().ok())
-            .unwrap();
+        // Recupera i widget memorizzati (richiede unsafe)
+        let image = unsafe { list_item.get_data::<Image>("image") }.unwrap();
+        let name_label = unsafe { list_item.get_data::<Label>("name_label") }.unwrap();
+        let desc_label = unsafe { list_item.get_data::<Label>("desc_label") }.unwrap();
 
-        // Set icon
+        // Imposta icona e testi (come prima)
         let icon = item.icon();
         if icon.is_empty() {
             image.set_icon_name(Some("application-x-executable"));
@@ -373,12 +366,7 @@ fn build_ui(app: &Application, cfg: &config::Config) {
     });
 
     factory.connect_unbind(|_, list_item| {
-        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
-        if let Some(hbox) = list_item.child().and_then(|w| w.downcast::<GtkBox>().ok()) {
-            if let Some(image) = hbox.first_child().and_then(|w| w.downcast::<Image>().ok()) {
-                image.clear();
-            }
-        }
+        // Non serve più pulire manualmente, i widget vengono riciclati
     });
 
     // ── ListView ──────────────────────────────────────────────────────────────
@@ -401,46 +389,46 @@ fn build_ui(app: &Application, cfg: &config::Config) {
         let store = store.clone();
         let selection = selection.clone();
         let all_apps = Rc::clone(&all_apps);
+        let max_results = max_results;
 
         Rc::new(move |query: &str| {
             store.remove_all();
+
+            if query.is_empty() {
+                // Mostra tutte le app (già ordinate alfabeticamente)
+                let items: Vec<AppItem> = all_apps.iter().map(|app| AppItem::new(app)).collect();
+                store.extend_from_slice(&items);
+                if store.n_items() > 0 {
+                    selection.set_selected(0);
+                }
+                return;
+            }
 
             let matcher = SkimMatcherV2::default();
 
             let mut results: Vec<(i64, &DesktopApp)> = all_apps
                 .iter()
                 .filter_map(|app| {
-                    if query.is_empty() {
-                        Some((0i64, app))
+                    let name_score = matcher.fuzzy_match(&app.name, query).unwrap_or(i64::MIN);
+                    let desc_score = if !app.description.is_empty() {
+                        matcher
+                            .fuzzy_match(&app.description, query)
+                            .unwrap_or(i64::MIN)
+                            / 2
                     } else {
-                        let name_score = matcher.fuzzy_match(&app.name, query).unwrap_or(i64::MIN);
-                        let desc_score = if !app.description.is_empty() {
-                            matcher
-                                .fuzzy_match(&app.description, query)
-                                .unwrap_or(i64::MIN)
-                                / 2
-                        } else {
-                            i64::MIN
-                        };
-                        let score = name_score.max(desc_score);
-                        if score == i64::MIN {
-                            None
-                        } else {
-                            Some((score, app))
-                        }
+                        i64::MIN
+                    };
+                    let score = name_score.max(desc_score);
+                    if score == i64::MIN {
+                        None
+                    } else {
+                        Some((score, app))
                     }
                 })
                 .collect();
 
-            if query.is_empty() {
-                results.sort_by(|a, b| a.1.name.to_lowercase().cmp(&b.1.name.to_lowercase()));
-            } else {
-                results.sort_by(|a, b| b.0.cmp(&a.0));
-            }
-
-            if !query.is_empty() {
-                results.truncate(max_results);
-            }
+            results.sort_by(|a, b| b.0.cmp(&a.0));
+            results.truncate(max_results);
 
             let items: Vec<AppItem> = results.iter().map(|(_, app)| AppItem::new(app)).collect();
             store.extend_from_slice(&items);
@@ -569,7 +557,9 @@ fn build_ui(app: &Application, cfg: &config::Config) {
     populate("");
 }
 
-fn find_terminal() -> Option<String> {
+static TERMINAL: Lazy<Option<String>> = Lazy::new(find_terminal_impl);
+
+fn find_terminal_impl() -> Option<String> {
     let candidates = [
         "foot",
         "alacritty",
@@ -581,109 +571,172 @@ fn find_terminal() -> Option<String> {
         "konsole",
         "xterm",
     ];
-    candidates
-        .iter()
-        .find(|&&term| {
-            std::process::Command::new("which")
-                .arg(term)
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
-        })
-        .map(|s| s.to_string())
+    let path_var = std::env::var_os("PATH").unwrap_or_default();
+    let paths = std::env::split_paths(&path_var).collect::<Vec<_>>();
+
+    for candidate in candidates {
+        for dir in &paths {
+            let full = dir.join(candidate);
+            if full.is_file() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(metadata) = std::fs::metadata(&full) {
+                        if metadata.permissions().mode() & 0o111 != 0 {
+                            return Some(candidate.to_string());
+                        }
+                    }
+                }
+                #[cfg(not(unix))]
+                return Some(candidate.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn find_terminal() -> Option<String> {
+    TERMINAL.clone()
 }
 
 fn power_action(action: &str) {
     match action {
         "logout" => logout_action(),
         "suspend" => {
-            std::process::Command::new("systemctl")
+            if let Err(e) = std::process::Command::new("systemctl")
                 .arg("suspend")
                 .spawn()
-                .ok();
+            {
+                eprintln!("Failed to suspend: {}", e);
+            }
         }
         "reboot" => {
-            std::process::Command::new("systemctl")
+            if let Err(e) = std::process::Command::new("systemctl")
                 .arg("reboot")
                 .spawn()
-                .ok();
+            {
+                eprintln!("Failed to reboot: {}", e);
+            }
         }
         "poweroff" => {
-            std::process::Command::new("systemctl")
+            if let Err(e) = std::process::Command::new("systemctl")
                 .arg("poweroff")
                 .spawn()
-                .ok();
+            {
+                eprintln!("Failed to power off: {}", e);
+            }
         }
         _ => {}
     }
 }
 
 fn logout_action() {
-    // Try loginctl terminate-session with the real session ID from the environment
+    // 1. loginctl terminate-session
     if let Ok(session_id) = std::env::var("XDG_SESSION_ID") {
         if !session_id.is_empty() {
-            let ok = std::process::Command::new("loginctl")
+            let status = std::process::Command::new("loginctl")
                 .args(["terminate-session", &session_id])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            if ok {
+                .status();
+            if let Ok(status) = status {
+                if status.success() {
+                    return;
+                }
+            }
+        }
+    }
+
+    // 2. gnome-session-quit (se disponibile)
+    if let Some(path) = which("gnome-session-quit") {
+        let status = std::process::Command::new(path).arg("--logout").status();
+        if let Ok(status) = status {
+            if status.success() {
                 return;
             }
         }
     }
-    // Fallback: terminate all sessions for the current user
+
+    // 3. fallback: terminate-user
     let user = std::env::var("USER")
         .or_else(|_| std::env::var("LOGNAME"))
         .unwrap_or_default();
     if !user.is_empty() {
-        std::process::Command::new("loginctl")
+        let _ = std::process::Command::new("loginctl")
             .args(["terminate-user", &user])
-            .spawn()
-            .ok();
+            .spawn();
     }
 }
 
 fn open_settings() {
-    // Delegate entirely to the config module — it already knows the path and
-    // handles dir / file creation with the proper default content.
     let path = config::config_path();
 
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).ok();
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("Failed to create config dir: {}", e);
+        }
     }
     if !path.exists() {
-        // Trigger a fresh load so the file is written with documented defaults.
-        config::load();
+        config::load(); // scrive il file di default
     }
 
-    std::process::Command::new("xdg-open")
-        .arg(&path)
-        .spawn()
-        .ok();
+    if let Err(e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
+        eprintln!("Failed to open settings with xdg-open: {}", e);
+    }
+}
+
+// Helper: cerca un eseguibile nel PATH
+fn which(prog: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    let paths = std::env::split_paths(&path_var);
+    for dir in paths {
+        let full = dir.join(prog);
+        if full.is_file() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = std::fs::metadata(&full) {
+                    if metadata.permissions().mode() & 0o111 != 0 {
+                        return Some(full);
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            return Some(full);
+        }
+    }
+    None
 }
 
 fn launch_app(exec: &str, terminal: bool) {
     let clean = launcher::clean_exec(exec);
-    let cmd = if terminal {
-        match find_terminal() {
-            Some(term) => match term.as_str() {
-                "gnome-terminal" | "xfce4-terminal" | "konsole" => {
-                    format!("{} -- sh -c '{}'", term, clean)
+    if terminal {
+        if let Some(term) = find_terminal() {
+            let mut cmd = std::process::Command::new(&term);
+            match term.as_str() {
+                "gnome-terminal" | "xfce4-terminal" => {
+                    cmd.arg("--").arg("sh").arg("-c").arg(&clean);
                 }
-                _ => format!("{} -e sh -c '{}'", term, clean),
-            },
-            None => {
-                eprintln!("No terminal emulator found");
-                return;
+                "konsole" | "alacritty" | "foot" => {
+                    cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
+                }
+                "kitty" => {
+                    cmd.arg("--").arg("sh").arg("-c").arg(&clean);
+                }
+                _ => {
+                    cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
+                }
             }
+            if let Err(e) = cmd.spawn() {
+                eprintln!("Failed to launch terminal {}: {}", term, e);
+            }
+        } else {
+            eprintln!("No terminal emulator found");
         }
     } else {
-        clean
-    };
-    std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&cmd)
-        .spawn()
-        .ok();
+        // Lancia direttamente con sh -c per gestire correttamente virgolette e metacaratteri
+        let mut cmd = std::process::Command::new("sh");
+        cmd.arg("-c").arg(&clean);
+        if let Err(e) = cmd.spawn() {
+            eprintln!("Failed to launch {}: {}", clean, e);
+        }
+    }
 }

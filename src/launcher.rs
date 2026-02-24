@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,10 +13,10 @@ pub struct DesktopApp {
 
 /// Loads all apps from the given list of directories.
 /// Directories that do not exist are silently skipped.
-/// Duplicate app names (by display name) are deduplicated — first occurrence wins.
+/// Duplicate .desktop files (by full path) are avoided.
 pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     let mut apps = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();   // deduplica per percorso file
 
     for dir in dirs {
         if !dir.exists() {
@@ -29,8 +30,8 @@ pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
             if path.extension().and_then(|e| e.to_str()) != Some("desktop") {
                 continue;
             }
-            if let Some(app) = parse_desktop_file(&path) {
-                if seen.insert(app.name.clone()) {
+            if seen.insert(path.clone()) {
+                if let Some(app) = parse_desktop_file(&path) {
                     apps.push(app);
                 }
             }
@@ -109,24 +110,13 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     })
 }
 
-/// Cleans up an Exec= value by removing field codes like %f %F %u %U %d %D %n %N %i %c %k %v %m
+/// Cleans up an Exec= value by removing field codes like %f %F %u %U …
 pub fn clean_exec(exec: &str) -> String {
     exec.split_whitespace()
         .filter(|token| {
             !matches!(
                 *token,
-                "%f" | "%F"
-                    | "%u"
-                    | "%U"
-                    | "%d"
-                    | "%D"
-                    | "%n"
-                    | "%N"
-                    | "%i"
-                    | "%c"
-                    | "%k"
-                    | "%v"
-                    | "%m"
+                "%f" | "%F" | "%u" | "%U" | "%d" | "%D" | "%n" | "%N" | "%i" | "%c" | "%k" | "%v" | "%m"
             )
         })
         .collect::<Vec<_>>()
