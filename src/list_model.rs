@@ -9,7 +9,7 @@ use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
 
 use crate::app_item::AppItem;
 use crate::calc_item::CalcItem;
-use crate::calculator::eval_expression;
+use crate::calculator::{eval_expression, is_arithmetic_query}; // <-- modifica
 use crate::launcher::DesktopApp;
 
 #[derive(Clone)]
@@ -22,7 +22,11 @@ pub struct AppListModel {
 }
 
 impl AppListModel {
-    pub fn new(all_apps: Rc<Vec<DesktopApp>>, max_results: usize, calculator_enabled: bool) -> Self {
+    pub fn new(
+        all_apps: Rc<Vec<DesktopApp>>,
+        max_results: usize,
+        calculator_enabled: bool,
+    ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
         selection.set_autoselect(true);
@@ -40,15 +44,15 @@ impl AppListModel {
     pub fn populate(&self, query: &str) {
         self.store.remove_all();
 
-        // --- Calcolatrice (solo se abilitata) ---
-        if self.calculator_enabled && !query.is_empty() {
+        // --- Calcolatrice (solo se abilitata e query sembra aritmetica) ---
+        if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
             if let Some(result_str) = eval_expression(query) {
                 let calc_item = CalcItem::new(result_str);
                 self.store.append(&calc_item);
             }
         }
 
-        // --- App ---
+        // --- App (fuzzy search) ---
         if query.is_empty() {
             for app in self.all_apps.iter() {
                 self.store.append(&AppItem::new(app));
@@ -91,6 +95,7 @@ impl AppListModel {
     }
 
     pub fn create_factory() -> SignalListItemFactory {
+        // ... invariato (stesso codice di prima) ...
         let factory = SignalListItemFactory::new();
 
         factory.connect_setup(|_, list_item| {
