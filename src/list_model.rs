@@ -31,6 +31,8 @@ pub struct AppListModel {
     obsidian_action_mode: Rc<Cell<bool>>,
     // debounce timer for colon commands
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
+    // configurable debounce delay in milliseconds
+    command_debounce_ms: u32,
 }
 
 impl AppListModel {
@@ -40,6 +42,7 @@ impl AppListModel {
         calculator_enabled: bool,
         commands: HashMap<String, String>,
         obsidian_cfg: Option<ObsidianConfig>,
+        command_debounce_ms: u32,
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
@@ -57,6 +60,7 @@ impl AppListModel {
             obsidian_cfg,
             obsidian_action_mode: Rc::new(Cell::new(false)),
             command_debounce: Rc::new(RefCell::new(None)),
+            command_debounce_ms,
         }
     }
 
@@ -67,23 +71,26 @@ impl AppListModel {
         }
     }
 
-    // Schedule a closure to run after `delay_ms`; cancels any previously scheduled
-    fn schedule_command<F>(&self, delay_ms: u32, f: F)
+    // Schedule a closure to run after the configured debounce delay;
+    // cancels any previously scheduled command.
+    fn schedule_command<F>(&self, f: F)
     where
         F: FnOnce() + 'static,
     {
         self.cancel_debounce();
         let mut f_opt = Some(f);
-        let debounce_ref = self.command_debounce.clone(); // clone to use in the closure
-        let source_id =
-            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
+        let debounce_ref = self.command_debounce.clone();
+        let source_id = glib::timeout_add_local(
+            Duration::from_millis(self.command_debounce_ms.into()),
+            move || {
                 // Clear the stored SourceId *before* calling f, because the timer has already fired.
                 *debounce_ref.borrow_mut() = None;
                 if let Some(f) = f_opt.take() {
                     f();
                 }
                 glib::ControlFlow::Break
-            });
+            },
+        );
         *self.command_debounce.borrow_mut() = Some(source_id);
     }
 
@@ -141,7 +148,7 @@ impl AppListModel {
                             let vault_path = vault_path.to_string_lossy().to_string();
                             let arg = arg.to_string();
                             let model_clone = self.clone();
-                            self.schedule_command(300, move || {
+                            self.schedule_command(move || {
                                 model_clone.run_find_in_vault(PathBuf::from(vault_path), &arg);
                             });
                             return; // Do NOT clear the list yet
@@ -152,7 +159,7 @@ impl AppListModel {
                         let vault_path = vault_path.to_string_lossy().to_string();
                         let arg = arg.to_string();
                         let model_clone = self.clone();
-                        self.schedule_command(300, move || {
+                        self.schedule_command(move || {
                             model_clone.run_rg_in_vault(PathBuf::from(vault_path), &arg);
                         });
                         return; // Do NOT clear the list yet
@@ -167,7 +174,7 @@ impl AppListModel {
                 let arg = arg.to_string();
                 let cmd_name = cmd_name.to_string(); // clone to avoid lifetime issues
                 let model_clone = self.clone();
-                self.schedule_command(300, move || {
+                self.schedule_command(move || {
                     model_clone.run_command(&cmd_name, &template, &arg);
                 });
                 return; // Do NOT clear the list yet

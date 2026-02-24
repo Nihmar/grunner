@@ -39,6 +39,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         cfg.calculator,
         cfg.commands.clone(),
         obsidian_cfg,
+        cfg.command_debounce_ms,
     );
 
     let window = ApplicationWindow::builder()

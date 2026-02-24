@@ -7,6 +7,7 @@ pub const DEFAULT_WINDOW_WIDTH: i32 = 640;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 pub const DEFAULT_MAX_RESULTS: usize = 64;
 pub const DEFAULT_CALCULATOR: bool = true;
+pub const DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300; // <-- new
 
 pub fn default_app_dirs() -> Vec<String> {
     vec![
@@ -18,13 +19,13 @@ pub fn default_app_dirs() -> Vec<String> {
     ]
 }
 
-// ---------- Obsidian configuration (new) ----------
+// ---------- Obsidian configuration ----------
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ObsidianConfig {
-    pub vault: String,              // absolute or ~/path
-    pub daily_notes_folder: String, // relative to vault
-    pub new_notes_folder: String,   // relative to vault
-    pub quick_note: String,         // relative to vault
+    pub vault: String,
+    pub daily_notes_folder: String,
+    pub new_notes_folder: String,
+    pub quick_note: String,
 }
 
 // Main Config struct
@@ -36,7 +37,8 @@ pub struct Config {
     pub app_dirs: Vec<PathBuf>,
     pub calculator: bool,
     pub commands: HashMap<String, String>,
-    pub obsidian: Option<ObsidianConfig>, // <-- new
+    pub obsidian: Option<ObsidianConfig>,
+    pub command_debounce_ms: u32, // <-- new
 }
 
 impl Default for Config {
@@ -45,7 +47,7 @@ impl Default for Config {
         let mut commands = HashMap::new();
         commands.insert(
             "f".to_string(),
-            "find ~ -iname \"*$1*\" 2>/dev/null | head -20".to_string(), // <-- changed
+            "find ~ -iname \"*$1*\" 2>/dev/null | head -20".to_string(),
         );
         commands.insert(
             "fg".to_string(),
@@ -62,19 +64,20 @@ impl Default for Config {
                 .collect(),
             calculator: DEFAULT_CALCULATOR,
             commands,
-            obsidian: None, // default: not configured
+            obsidian: None,
+            command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
         }
     }
 }
 
-// TOML structure (mirrors the config file)
+// TOML structure
 #[derive(Deserialize, Serialize, Default)]
 struct TomlConfig {
     window: Option<WindowConfig>,
     search: Option<SearchConfig>,
     calculator: Option<CalculatorConfig>,
     commands: Option<HashMap<String, String>>,
-    obsidian: Option<ObsidianConfig>, // <-- new
+    obsidian: Option<ObsidianConfig>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -87,6 +90,7 @@ struct WindowConfig {
 struct SearchConfig {
     max_results: Option<usize>,
     app_dirs: Option<Vec<String>>,
+    command_debounce_ms: Option<u32>, // <-- new
 }
 
 #[derive(Deserialize, Serialize)]
@@ -107,7 +111,6 @@ pub fn config_path() -> PathBuf {
 pub fn load() -> Config {
     let path = config_path();
 
-    // Create default file if missing
     if !path.exists() {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).ok();
@@ -127,7 +130,7 @@ pub fn load() -> Config {
     apply_toml(&content)
 }
 
-// Apply TOML values to a Config (with fallback to defaults)
+// Apply TOML values
 fn apply_toml(content: &str) -> Config {
     let mut cfg = Config::default();
 
@@ -156,6 +159,9 @@ fn apply_toml(content: &str) -> Config {
             let home = std::env::var("HOME").unwrap_or_default();
             cfg.app_dirs = dirs.into_iter().map(|s| expand_home(&s, &home)).collect();
         }
+        if let Some(debounce) = search.command_debounce_ms {
+            cfg.command_debounce_ms = debounce; // <-- new
+        }
     }
 
     if let Some(calc) = toml_cfg.calculator {
@@ -168,7 +174,6 @@ fn apply_toml(content: &str) -> Config {
         cfg.commands = cmds;
     }
 
-    // New: Obsidian section
     if let Some(obs) = toml_cfg.obsidian {
         cfg.obsidian = Some(obs);
     }
@@ -176,7 +181,7 @@ fn apply_toml(content: &str) -> Config {
     cfg
 }
 
-// Expand leading `~` to home directory
+// Expand leading `~`
 pub fn expand_home(path: &str, home: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         PathBuf::from(home).join(rest)
@@ -187,7 +192,7 @@ pub fn expand_home(path: &str, home: &str) -> PathBuf {
     }
 }
 
-// Default TOML content (with comments)
+// Default TOML content (updated with new option)
 fn default_toml() -> String {
     let dirs = default_app_dirs()
         .iter()
@@ -207,6 +212,10 @@ height = {height}
 [search]
 # Maximum number of fuzzy-search results shown (only when a query is active).
 max_results = {max}
+
+# Delay in milliseconds before executing a colon command (e.g. :f, :ob) after you stop typing.
+# Lower values feel more responsive but may cause flickering if your command is very fast.
+command_debounce_ms = 300
 
 # Directories scanned for .desktop files.
 # Use ~ for the home directory. Directories that do not exist are skipped.
