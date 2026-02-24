@@ -7,7 +7,7 @@ use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
-use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
+use crate::obsidian_item::ObsidianActionItem;
 use glib::clone;
 use gtk4::gdk::Key;
 use gtk4::prelude::DisplayExt;

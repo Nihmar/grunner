@@ -3,6 +3,7 @@ use crate::calc_item::CalcItem;
 use crate::calculator::{eval_expression, is_arithmetic_query};
 use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
+use crate::config::expand_home;
 use crate::launcher::DesktopApp;
 use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
 use fuzzy_matcher::FuzzyMatcher;
