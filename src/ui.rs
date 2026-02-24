@@ -28,7 +28,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     );
 
     let all_apps: Rc<Vec<launcher::DesktopApp>> = Rc::new(launcher::load_apps(&cfg.app_dirs));
-    let model = AppListModel::new(all_apps, cfg.max_results);
+    let model = AppListModel::new(all_apps, cfg.max_results, cfg.calculator); // <-- MODIFICATO
 
     let window = ApplicationWindow::builder()
         .application(app)

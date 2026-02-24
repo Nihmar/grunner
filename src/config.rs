@@ -5,6 +5,7 @@ use std::path::PathBuf;
 pub const DEFAULT_WINDOW_WIDTH: i32 = 640;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 pub const DEFAULT_MAX_RESULTS: usize = 64;
+pub const DEFAULT_CALCULATOR: bool = true; // <-- NUOVO
 
 pub fn default_app_dirs() -> Vec<String> {
     vec![
@@ -23,6 +24,7 @@ pub struct Config {
     pub window_height: i32,
     pub max_results: usize,
     pub app_dirs: Vec<PathBuf>,
+    pub calculator: bool, // <-- NUOVO
 }
 
 impl Default for Config {
@@ -36,6 +38,7 @@ impl Default for Config {
                 .into_iter()
                 .map(|s| expand_home(&s, &home))
                 .collect(),
+            calculator: DEFAULT_CALCULATOR, // <-- NUOVO
         }
     }
 }
@@ -45,6 +48,7 @@ impl Default for Config {
 struct TomlConfig {
     window: Option<WindowConfig>,
     search: Option<SearchConfig>,
+    calculator: Option<CalculatorConfig>, // <-- NUOVO
 }
 
 #[derive(Deserialize, Serialize)]
@@ -57,6 +61,12 @@ struct WindowConfig {
 struct SearchConfig {
     max_results: Option<usize>,
     app_dirs: Option<Vec<String>>,
+}
+
+// <-- NUOVO
+#[derive(Deserialize, Serialize)]
+struct CalculatorConfig {
+    enabled: Option<bool>,
 }
 
 // Config file path
@@ -123,6 +133,13 @@ fn apply_toml(content: &str) -> Config {
         }
     }
 
+    // <-- NUOVO: Leggi la sezione calculator
+    if let Some(calc) = toml_cfg.calculator {
+        if let Some(enabled) = calc.enabled {
+            cfg.calculator = enabled;
+        }
+    }
+
     cfg
 }
 
@@ -163,6 +180,10 @@ max_results = {max}
 app_dirs = [
 {dirs}
 ]
+
+[calculator]
+# Enable inline calculator (evaluates expressions typed in the search bar).
+enabled = true
 "#,
         width = DEFAULT_WINDOW_WIDTH,
         height = DEFAULT_WINDOW_HEIGHT,

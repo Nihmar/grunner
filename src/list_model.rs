@@ -18,12 +18,12 @@ pub struct AppListModel {
     pub selection: SingleSelection,
     all_apps: Rc<Vec<DesktopApp>>,
     max_results: usize,
+    calculator_enabled: bool,
 }
 
 impl AppListModel {
-    pub fn new(all_apps: Rc<Vec<DesktopApp>>, max_results: usize) -> Self {
-        // Crea una ListStore che può contenere qualsiasi oggetto derivato da glib::Object
-        let store = gio::ListStore::new::<glib::Object>(); // <-- MODIFICATO
+    pub fn new(all_apps: Rc<Vec<DesktopApp>>, max_results: usize, calculator_enabled: bool) -> Self {
+        let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
         selection.set_autoselect(true);
         selection.set_can_unselect(false);
@@ -33,28 +33,27 @@ impl AppListModel {
             selection,
             all_apps,
             max_results,
+            calculator_enabled,
         }
     }
 
     pub fn populate(&self, query: &str) {
         self.store.remove_all();
 
-        // --- Calcolatrice: se l'espressione è valida, aggiungi una riga speciale ---
-        if !query.is_empty() {
+        // --- Calcolatrice (solo se abilitata) ---
+        if self.calculator_enabled && !query.is_empty() {
             if let Some(result_str) = eval_expression(query) {
                 let calc_item = CalcItem::new(result_str);
-                self.store.append(&calc_item);          // <-- NUOVO
+                self.store.append(&calc_item);
             }
         }
 
         // --- App ---
         if query.is_empty() {
-            // Mostra tutte le app in ordine alfabetico
             for app in self.all_apps.iter() {
-                self.store.append(&AppItem::new(app));  // <-- AppItem è un glib::Object
+                self.store.append(&AppItem::new(app));
             }
         } else {
-            // Filtro fuzzy
             let matcher = SkimMatcherV2::default();
             let mut results: Vec<(i64, &DesktopApp)> = self
                 .all_apps
@@ -86,7 +85,6 @@ impl AppListModel {
             }
         }
 
-        // Seleziona il primo elemento (che potrebbe essere la calcolatrice)
         if self.store.n_items() > 0 {
             self.selection.set_selected(0);
         }
@@ -137,7 +135,6 @@ impl AppListModel {
                 None => return,
             };
 
-            // Recupera i widget figli (creati nello setup)
             let hbox = list_item
                 .child()
                 .and_then(|c| c.downcast::<gtk4::Box>().ok())
@@ -159,9 +156,7 @@ impl AppListModel {
                 .and_then(|c| c.downcast::<gtk4::Label>().ok())
                 .expect("missing desc_label");
 
-            // --- Gestione in base al tipo di oggetto ---
             if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-                // Elemento applicazione
                 let icon = app_item.icon();
                 if icon.is_empty() {
                     image.set_icon_name(Some("application-x-executable"));
@@ -180,13 +175,11 @@ impl AppListModel {
                     desc_label.set_text(&desc);
                 }
             } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
-                // Elemento calcolatrice
-                image.set_icon_name(Some("accessories-calculator")); // icona predefinita
+                image.set_icon_name(Some("accessories-calculator"));
                 name_label.set_text(&calc_item.result());
                 desc_label.set_visible(false);
                 desc_label.set_text("");
             } else {
-                // Fallback (non dovrebbe accadere)
                 name_label.set_text("?");
                 desc_label.set_visible(false);
             }
