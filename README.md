@@ -1,6 +1,6 @@
 # grunner
 
-A rofi-like application launcher for GNOME, written in Rust using GTK4 and libadwaita.  
+A rofi‑like application launcher for GNOME, written in Rust using GTK4 and libadwaita.  
 Fast, fuzzy‑searching, with an inline calculator, custom colon commands, and integrated Obsidian vault actions.
 
 ---
@@ -13,7 +13,7 @@ Fast, fuzzy‑searching, with an inline calculator, custom colon commands, and i
 - ⚙️ **Settings button** – opens the configuration file in your default editor
 - ⌨️ **Keyboard navigation** (arrows, page up/down, Enter, Esc)
 - 🎨 **Adwaita‑style theming** – follows light/dark mode and the system accent colour
-- 🧩 **Highly configurable** – window size, max results, app directories, calculator toggle
+- 🧩 **Highly configurable** – window size, max results, app directories, calculator toggle, command debounce delay
 - **Colon commands** – define your own shell‑based commands (e.g., `:f pattern` to find files)
 - **Obsidian integration** – open vaults, create daily/quick notes, search filenames and content
 - **Smart file opening** – for command results like `file:line:content`, opens at the correct line in `$EDITOR`
@@ -79,6 +79,9 @@ You can also open it directly via the **Settings** button in the launcher.
 
 ### Example configuration
 
+Below is the default configuration with all available options.  
+Uncomment and adjust values as needed.
+
 ```toml
 # grunner configuration
 # All values are optional – missing keys fall back to built‑in defaults.
@@ -92,10 +95,15 @@ height = 480
 # Maximum number of fuzzy‑search results shown (only when a query is active).
 max_results = 64
 
+# Delay in milliseconds before executing a colon command (e.g. :f, :ob) after you stop typing.
+# Lower values feel more responsive but may cause flickering if your command is very fast.
+command_debounce_ms = 300
+
 # Directories scanned for .desktop files.
 # Use ~ for the home directory. Directories that do not exist are skipped.
 app_dirs = [
     "/usr/share/applications",
+    "/usr/local/share/applications",
     "~/.local/share/applications",
     "/var/lib/flatpak/exports/share/applications",
     "~/.local/share/flatpak/exports/share/applications",
@@ -112,7 +120,7 @@ enabled = true
 f  = "find ~ -iname \"*$1*\" 2>/dev/null | head -20"
 fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
 
-[obsidian]
+# [obsidian]
 # Uncomment and fill in to enable Obsidian integration.
 # vault = "~/Documents/Obsidian/MyVault"
 # daily_notes_folder = "Daily"
