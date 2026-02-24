@@ -5,6 +5,12 @@ Fast, fuzzy‑searching, with an inline calculator, custom colon commands, and i
 
 ---
 
+## DISCLAIMER
+
+This project is vibecoded using Deepseek and Claude (free version). That's all folks.
+
+---
+
 ## Features
 
 - 🔍 **Fuzzy search** through desktop applications (`.desktop` files)
