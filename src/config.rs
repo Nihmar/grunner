@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const DEFAULT_WINDOW_WIDTH: i32 = 640;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 pub const DEFAULT_MAX_RESULTS: usize = 64;
-pub const DEFAULT_CALCULATOR: bool = true; // <-- NUOVO
+pub const DEFAULT_CALCULATOR: bool = true;
 
 pub fn default_app_dirs() -> Vec<String> {
     vec![
@@ -18,15 +18,25 @@ pub fn default_app_dirs() -> Vec<String> {
     ]
 }
 
-// Config struct (public)
+// ---------- Obsidian configuration (new) ----------
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct ObsidianConfig {
+    pub vault: String,               // absolute or ~/path
+    pub daily_notes_folder: String,  // relative to vault
+    pub new_notes_folder: String,    // relative to vault
+    pub quick_note: String,          // relative to vault
+}
+
+// Main Config struct
 #[derive(Debug, Clone)]
 pub struct Config {
     pub window_width: i32,
     pub window_height: i32,
     pub max_results: usize,
     pub app_dirs: Vec<PathBuf>,
-    pub calculator: bool, // <-- NUOVO
+    pub calculator: bool,
     pub commands: HashMap<String, String>,
+    pub obsidian: Option<ObsidianConfig>,   // <-- new
 }
 
 impl Default for Config {
@@ -50,19 +60,21 @@ impl Default for Config {
                 .into_iter()
                 .map(|s| expand_home(&s, &home))
                 .collect(),
-            calculator: DEFAULT_CALCULATOR, // <-- NUOVO
+            calculator: DEFAULT_CALCULATOR,
             commands,
+            obsidian: None,   // default: not configured
         }
     }
 }
 
-// TOML structure
+// TOML structure (mirrors the config file)
 #[derive(Deserialize, Serialize, Default)]
 struct TomlConfig {
     window: Option<WindowConfig>,
     search: Option<SearchConfig>,
-    calculator: Option<CalculatorConfig>, // <-- NUOVO
+    calculator: Option<CalculatorConfig>,
     commands: Option<HashMap<String, String>>,
+    obsidian: Option<ObsidianConfig>,   // <-- new
 }
 
 #[derive(Deserialize, Serialize)]
@@ -77,7 +89,6 @@ struct SearchConfig {
     app_dirs: Option<Vec<String>>,
 }
 
-// <-- NUOVO
 #[derive(Deserialize, Serialize)]
 struct CalculatorConfig {
     enabled: Option<bool>,
@@ -92,7 +103,7 @@ pub fn config_path() -> PathBuf {
         .join("grunner.toml")
 }
 
-// Load config
+// Load configuration
 pub fn load() -> Config {
     let path = config_path();
 
@@ -147,7 +158,6 @@ fn apply_toml(content: &str) -> Config {
         }
     }
 
-    // <-- NUOVO: Leggi la sezione calculator
     if let Some(calc) = toml_cfg.calculator {
         if let Some(enabled) = calc.enabled {
             cfg.calculator = enabled;
@@ -158,11 +168,16 @@ fn apply_toml(content: &str) -> Config {
         cfg.commands = cmds;
     }
 
+    // New: Obsidian section
+    if let Some(obs) = toml_cfg.obsidian {
+        cfg.obsidian = Some(obs);
+    }
+
     cfg
 }
 
 // Expand leading `~` to home directory
-fn expand_home(path: &str, home: &str) -> PathBuf {
+pub fn expand_home(path: &str, home: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         PathBuf::from(home).join(rest)
     } else if path == "~" {
@@ -209,6 +224,13 @@ enabled = true
 # Use "$1" for the argument typed after the command.
 # f  = "find ~ -name \"$1\" 2>/dev/null | head -20"
 # fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
+
+# [obsidian]
+# Uncomment and fill in to enable Obsidian integration.
+# vault = "~/Documents/Obsidian/MyVault"
+# daily_notes_folder = "Daily"
+# new_notes_folder = "Inbox"
+# quick_note = "Quick.md"
 "#,
         width = DEFAULT_WINDOW_WIDTH,
         height = DEFAULT_WINDOW_HEIGHT,

@@ -1,23 +1,24 @@
-use std::rc::Rc;
-
-use glib::clone;
-use gtk4::gdk::Key;
-use gtk4::prelude::DisplayExt; // <-- added for clipboard()
-use gtk4::prelude::*; // includes WidgetExt, WindowExt, and also DisplayExt after we import it
-use gtk4::{
-    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, Image, Label, ListView,
-    Orientation, ScrolledWindow,
+use crate::actions::{
+    launch_app, open_file_or_line, open_settings, perform_obsidian_action, power_action,
 };
-use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
-use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
-
-use crate::actions::{launch_app, open_file_or_line, open_settings, power_action};
 use crate::app_item::AppItem;
 use crate::calc_item::CalcItem;
 use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
+use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
+use glib::clone;
+use gtk4::gdk::Key;
+use gtk4::prelude::DisplayExt;
+use gtk4::prelude::*;
+use gtk4::{
+    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, Image, Label, ListView,
+    Orientation, ScrolledWindow,
+};
+use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
+use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
+use std::rc::Rc; // <-- new
 
 pub fn build_ui(app: &Application, cfg: &Config) {
     // Load CSS
@@ -30,11 +31,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     );
 
     let all_apps: Rc<Vec<launcher::DesktopApp>> = Rc::new(launcher::load_apps(&cfg.app_dirs));
+    let obsidian_cfg = cfg.obsidian.clone(); // <-- new
+
     let model = AppListModel::new(
         all_apps,
         cfg.max_results,
         cfg.calculator,
         cfg.commands.clone(),
+        obsidian_cfg, // <-- pass it to the model
     );
 
     let window = ApplicationWindow::builder()
@@ -129,6 +133,13 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             clipboard.set_text(number);
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                             open_file_or_line(&cmd_item.line());
+                        } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
+                            // <-- new branch
+                            if let Some(cfg) = &model.obsidian_cfg {
+                                let action = obs_item.action();
+                                let arg = obs_item.arg();
+                                perform_obsidian_action(action, arg.as_deref(), cfg);
+                            }
                         }
                     }
                     window.close();
@@ -197,6 +208,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     window.close();
                 } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                     open_file_or_line(&cmd_item.line());
+                    window.close();
+                } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
+                    // <-- new branch
+                    if let Some(cfg) = &model.obsidian_cfg {
+                        let action = obs_item.action();
+                        let arg = obs_item.arg();
+                        perform_obsidian_action(action, arg.as_deref(), cfg);
+                    }
                     window.close();
                 }
             } else {

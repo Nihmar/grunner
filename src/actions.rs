@@ -1,12 +1,26 @@
-use std::path::PathBuf;
-
+use crate::config;
+use crate::config::ObsidianConfig;
+use crate::launcher;
+use crate::obsidian_item::ObsidianAction;
+use chrono::Local;
+use gtk4::prelude::DisplayExt;
 use once_cell::sync::Lazy;
 use regex::Regex; // <-- added for open_file_or_line
+use std::fs;
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 
-use crate::config;
-use crate::launcher;
-use gtk4::prelude::DisplayExt; // <-- added for clipboard()
+fn expand_home(path: &str, home: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        PathBuf::from(home).join(rest)
+    } else if path == "~" {
+        PathBuf::from(home)
+    } else {
+        PathBuf::from(path)
+    }
+}
 
 pub static TERMINAL: Lazy<Option<String>> = Lazy::new(find_terminal_impl);
 
@@ -219,5 +233,90 @@ pub fn open_file_or_line(line: &str) {
         let display = gtk4::gdk::Display::default().expect("cannot get display");
         let clipboard = display.clipboard();
         clipboard.set_text(line);
+    }
+}
+
+pub fn perform_obsidian_action(action: ObsidianAction, arg: Option<&str>, cfg: &ObsidianConfig) {
+    let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+    if !vault_path.exists() {
+        eprintln!("Vault path does not exist: {}", vault_path.display());
+        return;
+    }
+
+    match action {
+        ObsidianAction::OpenVault => {
+            let vault_name = vault_path.file_name().unwrap_or_default().to_string_lossy();
+            let uri = format!("obsidian://open?vault={}", urlencoding::encode(&vault_name));
+            open_uri(&uri);
+        }
+        ObsidianAction::NewNote => {
+            let folder = vault_path.join(&cfg.new_notes_folder);
+            if let Err(e) = fs::create_dir_all(&folder) {
+                eprintln!("Cannot create folder {}: {}", folder.display(), e);
+                return;
+            }
+            let now = Local::now();
+            let filename = format!("New Note {}.md", now.format("%Y-%m-%d %H-%M-%S"));
+            let path = folder.join(filename);
+            if let Err(e) = File::create(&path) {
+                eprintln!("Cannot create note {}: {}", path.display(), e);
+                return;
+            }
+            let uri = format!(
+                "obsidian://open?path={}",
+                urlencoding::encode(&path.to_string_lossy())
+            );
+            open_uri(&uri);
+        }
+        ObsidianAction::DailyNote => {
+            let folder = vault_path.join(&cfg.daily_notes_folder);
+            if let Err(e) = fs::create_dir_all(&folder) {
+                eprintln!("Cannot create folder {}: {}", folder.display(), e);
+                return;
+            }
+            let today = Local::now().format("%Y-%m-%d").to_string();
+            let path = folder.join(format!("{}.md", today));
+            if !path.exists() {
+                if let Err(e) = File::create(&path) {
+                    eprintln!("Cannot create daily note {}: {}", path.display(), e);
+                    return;
+                }
+            }
+            let uri = format!(
+                "obsidian://open?path={}",
+                urlencoding::encode(&path.to_string_lossy())
+            );
+            open_uri(&uri);
+        }
+        ObsidianAction::QuickNote => {
+            let path = vault_path.join(&cfg.quick_note);
+            if let Some(parent) = path.parent() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    eprintln!("Cannot create folder {}: {}", parent.display(), e);
+                    return;
+                }
+            }
+            if let Some(text) = arg {
+                if !text.is_empty() {
+                    let mut file = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&path)
+                        .expect("cannot open quick note");
+                    writeln!(file, "{}", text).ok();
+                }
+            }
+            let uri = format!(
+                "obsidian://open?path={}",
+                urlencoding::encode(&path.to_string_lossy())
+            );
+            open_uri(&uri);
+        }
+    }
+}
+
+fn open_uri(uri: &str) {
+    if let Err(e) = std::process::Command::new("xdg-open").arg(uri).spawn() {
+        eprintln!("Failed to open URI {}: {}", uri, e);
     }
 }

@@ -1,19 +1,20 @@
-use std::cell::Cell;
-use std::collections::HashMap;
-use std::rc::Rc;
-
+use crate::app_item::AppItem;
+use crate::calc_item::CalcItem;
+use crate::calculator::{eval_expression, is_arithmetic_query};
+use crate::cmd_item::CommandItem;
+use crate::config::ObsidianConfig;
+use crate::launcher::DesktopApp;
+use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use glib::object::Cast;
 use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
-
-use crate::app_item::AppItem;
-use crate::calc_item::CalcItem;
-use crate::calculator::{eval_expression, is_arithmetic_query};
-use crate::cmd_item::CommandItem;
-use crate::launcher::DesktopApp;
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::path::Path;
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct AppListModel {
@@ -23,7 +24,8 @@ pub struct AppListModel {
     max_results: usize,
     calculator_enabled: bool,
     commands: HashMap<String, String>,
-    task_gen: Rc<Cell<u64>>, // to cancel stale async tasks
+    task_gen: Rc<Cell<u64>>,
+    obsidian_cfg: Option<ObsidianConfig>,
 }
 
 impl AppListModel {
@@ -32,6 +34,7 @@ impl AppListModel {
         max_results: usize,
         calculator_enabled: bool,
         commands: HashMap<String, String>,
+        obsidian_cfg: Option<ObsidianConfig>,
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
@@ -46,6 +49,7 @@ impl AppListModel {
             calculator_enabled,
             commands,
             task_gen: Rc::new(Cell::new(0)),
+            obsidian_cfg,
         }
     }
 
@@ -57,15 +61,22 @@ impl AppListModel {
         // --- Colon command handling ---
         if query.starts_with(':') && !self.commands.is_empty() {
             let parts: Vec<&str> = query.splitn(2, ' ').collect();
-            let cmd_part = parts[0]; // e.g. ":f"
+            let cmd_part = parts[0]; // e.g. ":ob"
             let arg = parts.get(1).unwrap_or(&"").trim();
             let cmd_name = &cmd_part[1..]; // remove ':'
+
+            // Special handling for obsidian commands
+            if cmd_name == "ob" || cmd_name == "obg" {
+                self.handle_obsidian_command(cmd_name, arg);
+                return;
+            }
+
+            // existing command handling...
             if let Some(template) = self.commands.get(cmd_name) {
                 self.run_command(cmd_name, template, arg);
-                return; // No apps shown while command is running
-            } else {
-                // Unknown command – show nothing
                 return;
+            } else {
+                return; // unknown command – nothing
             }
         }
 
@@ -268,5 +279,163 @@ impl AppListModel {
         });
 
         factory
+    }
+
+    fn handle_obsidian_command(&self, cmd: &str, arg: &str) {
+        let obs_cfg = match &self.obsidian_cfg {
+            Some(c) => c.clone(),
+            None => {
+                // Show a message that Obsidian is not configured
+                let item = CommandItem::new("Obsidian not configured – edit config".to_string());
+                self.store.append(&item);
+                self.selection.set_selected(0);
+                return;
+            }
+        };
+
+        let vault_path = expand_home(&obs_cfg.vault, &std::env::var("HOME").unwrap_or_default());
+        if !vault_path.exists() {
+            let item = CommandItem::new(format!(
+                "Vault path does not exist: {}",
+                vault_path.display()
+            ));
+            self.store.append(&item);
+            self.selection.set_selected(0);
+            return;
+        }
+
+        match cmd {
+            "ob" => {
+                if arg.is_empty() {
+                    // Show action buttons as items
+                    self.store
+                        .append(&ObsidianActionItem::new(ObsidianAction::OpenVault, None));
+                    self.store
+                        .append(&ObsidianActionItem::new(ObsidianAction::NewNote, None));
+                    self.store
+                        .append(&ObsidianActionItem::new(ObsidianAction::DailyNote, None));
+                    self.store.append(&ObsidianActionItem::new(
+                        ObsidianAction::QuickNote,
+                        Some(arg.to_string()),
+                    ));
+                    if self.store.n_items() > 0 {
+                        self.selection.set_selected(0);
+                    }
+                } else {
+                    // Run find in vault
+                    self.run_find_in_vault(vault_path, arg);
+                }
+            }
+            "obg" => {
+                if arg.is_empty() {
+                    // Nothing to search – show empty list
+                    return;
+                } else {
+                    // Run ripgrep in vault
+                    self.run_rg_in_vault(vault_path, arg);
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+        let generation = self.task_gen.get();
+        let max_results = self.max_results;
+        let vault_path = vault_path.to_string_lossy().to_string();
+        let pattern = pattern.to_string();
+        let model_clone = self.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
+
+        std::thread::spawn(move || {
+            let output = std::process::Command::new("find")
+                .arg(&vault_path)
+                .arg("-type")
+                .arg("f")
+                .arg("-iname")
+                .arg(format!("*{}*", pattern))
+                .arg("-printf")
+                .arg("%P\\n") // relative path from vault
+                .output();
+
+            let lines = match output {
+                Ok(out) => String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .take(max_results)
+                    .map(|line| vault_path.clone() + "/" + line) // reconstruct full path
+                    .collect::<Vec<_>>(),
+                Err(_) => Vec::new(),
+            };
+            let _ = tx.send(lines);
+        });
+
+        glib::idle_add_local(move || match rx.try_recv() {
+            Ok(lines) => {
+                if model_clone.task_gen.get() == generation {
+                    model_clone.store.remove_all();
+                    for line in lines {
+                        let item = CommandItem::new(line);
+                        model_clone.store.append(&item);
+                    }
+                    if model_clone.store.n_items() > 0 {
+                        model_clone.selection.set_selected(0);
+                    }
+                }
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+        });
+    }
+
+    fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+        let generation = self.task_gen.get();
+        let max_results = self.max_results;
+        let vault_path = vault_path.to_string_lossy().to_string();
+        let pattern = pattern.to_string();
+        let model_clone = self.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
+
+        std::thread::spawn(move || {
+            let output = std::process::Command::new("rg")
+                .arg("--with-filename")
+                .arg("--line-number")
+                .arg("--no-heading")
+                .arg("--color")
+                .arg("never")
+                .arg(&pattern)
+                .arg(&vault_path)
+                .output();
+
+            let lines = match output {
+                Ok(out) => String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .take(max_results)
+                    .map(String::from)
+                    .collect::<Vec<_>>(),
+                Err(_) => Vec::new(),
+            };
+            let _ = tx.send(lines);
+        });
+
+        glib::idle_add_local(move || match rx.try_recv() {
+            Ok(lines) => {
+                if model_clone.task_gen.get() == generation {
+                    model_clone.store.remove_all();
+                    for line in lines {
+                        let item = CommandItem::new(line);
+                        model_clone.store.append(&item);
+                    }
+                    if model_clone.store.n_items() > 0 {
+                        model_clone.selection.set_selected(0);
+                    }
+                }
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+        });
     }
 }
