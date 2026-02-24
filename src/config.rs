@@ -21,10 +21,10 @@ pub fn default_app_dirs() -> Vec<String> {
 // ---------- Obsidian configuration (new) ----------
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ObsidianConfig {
-    pub vault: String,               // absolute or ~/path
-    pub daily_notes_folder: String,  // relative to vault
-    pub new_notes_folder: String,    // relative to vault
-    pub quick_note: String,          // relative to vault
+    pub vault: String,              // absolute or ~/path
+    pub daily_notes_folder: String, // relative to vault
+    pub new_notes_folder: String,   // relative to vault
+    pub quick_note: String,         // relative to vault
 }
 
 // Main Config struct
@@ -36,7 +36,7 @@ pub struct Config {
     pub app_dirs: Vec<PathBuf>,
     pub calculator: bool,
     pub commands: HashMap<String, String>,
-    pub obsidian: Option<ObsidianConfig>,   // <-- new
+    pub obsidian: Option<ObsidianConfig>, // <-- new
 }
 
 impl Default for Config {
@@ -45,7 +45,7 @@ impl Default for Config {
         let mut commands = HashMap::new();
         commands.insert(
             "f".to_string(),
-            "find ~ -name \"$1\" 2>/dev/null | head -20".to_string(),
+            "find ~ -iname \"*$1*\" 2>/dev/null | head -20".to_string(), // <-- changed
         );
         commands.insert(
             "fg".to_string(),
@@ -62,7 +62,7 @@ impl Default for Config {
                 .collect(),
             calculator: DEFAULT_CALCULATOR,
             commands,
-            obsidian: None,   // default: not configured
+            obsidian: None, // default: not configured
         }
     }
 }
@@ -74,7 +74,7 @@ struct TomlConfig {
     search: Option<SearchConfig>,
     calculator: Option<CalculatorConfig>,
     commands: Option<HashMap<String, String>>,
-    obsidian: Option<ObsidianConfig>,   // <-- new
+    obsidian: Option<ObsidianConfig>, // <-- new
 }
 
 #[derive(Deserialize, Serialize)]
@@ -222,7 +222,7 @@ enabled = true
 # Define colon commands. The key is the command name (without the leading ':').
 # The value is a shell command that will be executed with 'sh -c'.
 # Use "$1" for the argument typed after the command.
-# f  = "find ~ -name \"$1\" 2>/dev/null | head -20"
+# f  = "find ~ -iname \"*$1*\" 2>/dev/null | head -20"
 # fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
 
 # [obsidian]
