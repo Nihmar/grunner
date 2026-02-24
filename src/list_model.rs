@@ -1,16 +1,19 @@
 use std::rc::Rc;
 
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
-use gio::prelude::*;
-use gio::ListStore;
+use fuzzy_matcher::skim::SkimMatcherV2;
+use glib::object::Cast;
+use glib::prelude::*; // brings ObjectExt into scope
+use gtk4::gio;
+use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
 
 use crate::app_item::AppItem;
 use crate::launcher::DesktopApp;
 
+#[derive(Clone)]
 pub struct AppListModel {
-    pub store: ListStore,
+    pub store: gio::ListStore,
     pub selection: SingleSelection,
     all_apps: Rc<Vec<DesktopApp>>,
     max_results: usize,
@@ -18,7 +21,7 @@ pub struct AppListModel {
 
 impl AppListModel {
     pub fn new(all_apps: Rc<Vec<DesktopApp>>, max_results: usize) -> Self {
-        let store = ListStore::new::<AppItem>();
+        let store = gio::ListStore::new::<AppItem>();
         let selection = SingleSelection::new(Some(store.clone()));
         selection.set_autoselect(true);
         selection.set_can_unselect(false);
@@ -35,12 +38,7 @@ impl AppListModel {
         self.store.remove_all();
 
         if query.is_empty() {
-            // Show all apps (already sorted)
-            let items: Vec<AppItem> = self
-                .all_apps
-                .iter()
-                .map(|app| AppItem::new(app))
-                .collect();
+            let items: Vec<AppItem> = self.all_apps.iter().map(|app| AppItem::new(app)).collect();
             self.store.extend_from_slice(&items);
             if self.store.n_items() > 0 {
                 self.selection.set_selected(0);
@@ -74,10 +72,7 @@ impl AppListModel {
         results.sort_by(|a, b| b.0.cmp(&a.0));
         results.truncate(self.max_results);
 
-        let items: Vec<AppItem> = results
-            .iter()
-            .map(|(_, app)| AppItem::new(app))
-            .collect();
+        let items: Vec<AppItem> = results.iter().map(|(_, app)| AppItem::new(app)).collect();
         self.store.extend_from_slice(&items);
 
         if self.store.n_items() > 0 {
@@ -85,7 +80,6 @@ impl AppListModel {
         }
     }
 
-    /// Creates the factory that will be used by the ListView.
     pub fn create_factory() -> SignalListItemFactory {
         let factory = SignalListItemFactory::new();
 
@@ -137,6 +131,7 @@ impl AppListModel {
                 None => return,
             };
 
+            // get_data is available via glib::prelude::ObjectExt
             let image = unsafe { list_item.get_data::<gtk4::Image>("image") }.unwrap();
             let name_label = unsafe { list_item.get_data::<gtk4::Label>("name_label") }.unwrap();
             let desc_label = unsafe { list_item.get_data::<gtk4::Label>("desc_label") }.unwrap();

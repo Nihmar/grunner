@@ -1,5 +1,5 @@
-use glib::subclass::prelude::*;
 use glib::Object;
+use glib::subclass::prelude::*;
 use std::cell::RefCell;
 
 use crate::launcher::DesktopApp;

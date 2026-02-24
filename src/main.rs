@@ -5,6 +5,7 @@ mod launcher;
 mod list_model;
 mod ui;
 
+use gtk4::prelude::*;
 use libadwaita::Application;
 
 const APP_ID: &str = "org.nihmar.grunner";
