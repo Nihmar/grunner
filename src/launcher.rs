@@ -10,24 +10,14 @@ pub struct DesktopApp {
     pub terminal: bool,
 }
 
-pub fn load_apps() -> Vec<DesktopApp> {
+/// Loads all apps from the given list of directories.
+/// Directories that do not exist are silently skipped.
+/// Duplicate app names (by display name) are deduplicated — first occurrence wins.
+pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     let mut apps = Vec::new();
-
-    let home = std::env::var("HOME").unwrap_or_default();
-    let dirs: Vec<PathBuf> = vec![
-        PathBuf::from("/usr/share/applications"),
-        PathBuf::from("/usr/local/share/applications"),
-        PathBuf::from(format!("{}/.local/share/applications", home)),
-        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
-        PathBuf::from(format!(
-            "{}/.local/share/flatpak/exports/share/applications",
-            home
-        )),
-    ];
-
     let mut seen = std::collections::HashSet::new();
 
-    for dir in &dirs {
+    for dir in dirs {
         if !dir.exists() {
             continue;
         }

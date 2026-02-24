@@ -1,3 +1,4 @@
+mod config;
 mod launcher;
 
 use fuzzy_matcher::FuzzyMatcher;
@@ -17,9 +18,6 @@ use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance
 use std::rc::Rc;
 
 const APP_ID: &str = "org.nihmar.grunner";
-const WINDOW_WIDTH: i32 = 640;
-const WINDOW_HEIGHT: i32 = 480;
-const MAX_RESULTS: usize = 64;
 
 // ── AppItem GObject ───────────────────────────────────────────────────────────
 //
@@ -90,14 +88,17 @@ impl AppItem {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 fn main() -> glib::ExitCode {
+    // Load (or create) config before anything else.
+    let cfg = config::load();
+
     let app = Application::builder().application_id(APP_ID).build();
-    app.connect_activate(|app| {
-        build_ui(app);
+    app.connect_activate(move |app| {
+        build_ui(app, &cfg);
     });
     app.run()
 }
 
-fn build_ui(app: &Application) {
+fn build_ui(app: &Application, cfg: &config::Config) {
     if let Some(window) = app.windows().first() {
         window.present();
         return;
@@ -111,13 +112,14 @@ fn build_ui(app: &Application) {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    let all_apps: Rc<Vec<DesktopApp>> = Rc::new(launcher::load_apps());
+    let all_apps: Rc<Vec<DesktopApp>> = Rc::new(launcher::load_apps(&cfg.app_dirs));
+    let max_results = cfg.max_results;
 
     let window = ApplicationWindow::builder()
         .application(app)
         .title("grunner")
-        .default_width(WINDOW_WIDTH)
-        .default_height(WINDOW_HEIGHT)
+        .default_width(cfg.window_width)
+        .default_height(cfg.window_height)
         .decorated(false)
         .resizable(false)
         .build();
@@ -150,6 +152,41 @@ fn build_ui(app: &Application) {
         &gtk4::gdk::Display::default().expect("Cannot connect to display"),
     );
 
+    // ── Settings button (far left) ────────────────────────────────────────────
+    {
+        let btn = Button::new();
+        btn.add_css_class("power-button");
+
+        let btn_box = GtkBox::new(Orientation::Horizontal, 6);
+        btn_box.set_halign(Align::Center);
+
+        let settings_icon = ["preferences-system", "emblem-system", "settings-configure"]
+            .iter()
+            .find(|&&n| icon_theme.has_icon(n))
+            .copied()
+            .unwrap_or("preferences-system");
+        let image = Image::from_icon_name(settings_icon);
+        image.set_pixel_size(16);
+        btn_box.append(&image);
+        btn_box.append(&Label::new(Some("Settings")));
+        btn.set_child(Some(&btn_box));
+
+        btn.connect_clicked(clone!(
+            #[weak]
+            window,
+            move |_| {
+                open_settings();
+                window.close();
+            }
+        ));
+        power_bar.append(&btn);
+    }
+
+    // Spacer to push power buttons to the right
+    let spacer = GtkBox::new(Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+    power_bar.append(&spacer);
+
     for (label, icon_candidates, action) in [
         (
             "Suspend",
@@ -178,7 +215,6 @@ fn build_ui(app: &Application) {
     ] {
         let btn = Button::new();
         btn.add_css_class("power-button");
-        btn.set_hexpand(true);
 
         let btn_box = GtkBox::new(Orientation::Horizontal, 6);
         btn_box.set_halign(Align::Center);
@@ -403,7 +439,7 @@ fn build_ui(app: &Application) {
             }
 
             if !query.is_empty() {
-                results.truncate(MAX_RESULTS);
+                results.truncate(max_results);
             }
 
             let items: Vec<AppItem> = results.iter().map(|(_, app)| AppItem::new(app)).collect();
@@ -606,6 +642,25 @@ fn logout_action() {
             .spawn()
             .ok();
     }
+}
+
+fn open_settings() {
+    // Delegate entirely to the config module — it already knows the path and
+    // handles dir / file creation with the proper default content.
+    let path = config::config_path();
+
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).ok();
+    }
+    if !path.exists() {
+        // Trigger a fresh load so the file is written with documented defaults.
+        config::load();
+    }
+
+    std::process::Command::new("xdg-open")
+        .arg(&path)
+        .spawn()
+        .ok();
 }
 
 fn launch_app(exec: &str, terminal: bool) {
