@@ -7,7 +7,7 @@ use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
-use crate::obsidian_item::{ObsidianAction, ObsidianActionItem}; // <-- added ObsidianAction
+use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
 use glib::clone;
 use gtk4::gdk::Key;
 use gtk4::prelude::DisplayExt;
@@ -72,6 +72,17 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     obsidian_bar.set_margin_bottom(6);
     obsidian_bar.set_visible(false);
 
+    // Helper to extract argument after ":ob "
+    let extract_arg = |text: &str| -> String {
+        if text.starts_with(":ob ") {
+            text[4..].trim().to_string()
+        } else if text == ":ob" {
+            String::new()
+        } else {
+            String::new()
+        }
+    };
+
     let actions = [
         ("Open Vault", ObsidianAction::OpenVault),
         ("New Note", ObsidianAction::NewNote),
@@ -81,12 +92,22 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     for (label, action) in actions {
         let btn = Button::with_label(label);
-        btn.add_css_class("power-button"); // reuse existing style
+        btn.add_css_class("power-button");
         let model_clone = model.clone();
         let window_clone = window.clone();
+        let entry_clone = entry.clone();
+
         btn.connect_clicked(move |_| {
+            let current_text = entry_clone.text();
+            let arg = extract_arg(&current_text);
+            let arg_opt = if arg.is_empty() {
+                None
+            } else {
+                Some(arg.as_str())
+            };
+
             if let Some(cfg) = &model_clone.obsidian_cfg {
-                perform_obsidian_action(action, None, cfg);
+                perform_obsidian_action(action, arg_opt, cfg);
             }
             window_clone.close();
         });
@@ -108,7 +129,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     root.append(&entry);
     root.append(&scrolled);
-    root.append(&obsidian_bar); // <-- inserted between scrolled and power_bar
+    root.append(&obsidian_bar); // inserted between scrolled and power_bar
     root.append(&power_bar);
     window.set_content(Some(&root));
 

@@ -27,7 +27,7 @@ pub struct AppListModel {
     commands: HashMap<String, String>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
-    // NEW: flag to indicate that the Obsidian action buttons should be shown
+    // flag to indicate that the Obsidian action buttons should be shown
     obsidian_action_mode: Rc<Cell<bool>>,
 }
 
@@ -313,22 +313,23 @@ impl AppListModel {
 
         match cmd {
             "ob" => {
+                // Always show buttons for :ob
+                self.obsidian_action_mode.set(true);
                 if arg.is_empty() {
-                    // Show action buttons as a separate UI element, not in the list
+                    // Clear the list and deselect any item
                     self.store.remove_all();
-                    self.obsidian_action_mode.set(true);
                     self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
-                    return; // <-- important: do not proceed to normal app search
                 } else {
-                    self.obsidian_action_mode.set(false);
+                    // Run find search and populate the list
                     self.run_find_in_vault(vault_path, arg);
                 }
             }
             "obg" => {
+                // No buttons for :obg, just search
+                self.obsidian_action_mode.set(false);
                 if arg.is_empty() {
-                    return; // nothing to search
+                    return;
                 } else {
-                    self.obsidian_action_mode.set(false);
                     self.run_rg_in_vault(vault_path, arg);
                 }
             }
