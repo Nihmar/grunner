@@ -1,15 +1,20 @@
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use glib::MainContext; // <-- added for spawn_blocking
 use glib::object::Cast;
+use glib::spawn_future_local;
 use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
 
 use crate::app_item::AppItem;
 use crate::calc_item::CalcItem;
-use crate::calculator::{eval_expression, is_arithmetic_query}; // <-- modifica
+use crate::calculator::{eval_expression, is_arithmetic_query};
+use crate::cmd_item::CommandItem;
 use crate::launcher::DesktopApp;
 
 #[derive(Clone)]
@@ -19,6 +24,8 @@ pub struct AppListModel {
     all_apps: Rc<Vec<DesktopApp>>,
     max_results: usize,
     calculator_enabled: bool,
+    commands: HashMap<String, String>,
+    task_gen: Rc<Cell<u64>>, // to cancel stale async tasks
 }
 
 impl AppListModel {
@@ -26,6 +33,7 @@ impl AppListModel {
         all_apps: Rc<Vec<DesktopApp>>,
         max_results: usize,
         calculator_enabled: bool,
+        commands: HashMap<String, String>,
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
@@ -38,13 +46,32 @@ impl AppListModel {
             all_apps,
             max_results,
             calculator_enabled,
+            commands,
+            task_gen: Rc::new(Cell::new(0)),
         }
     }
 
     pub fn populate(&self, query: &str) {
+        // Increment generation to cancel previous async tasks
+        self.task_gen.set(self.task_gen.get() + 1);
         self.store.remove_all();
 
-        // --- Calcolatrice (solo se abilitata e query sembra aritmetica) ---
+        // --- Colon command handling ---
+        if query.starts_with(':') && !self.commands.is_empty() {
+            let parts: Vec<&str> = query.splitn(2, ' ').collect();
+            let cmd_part = parts[0]; // e.g. ":f"
+            let arg = parts.get(1).unwrap_or(&"").trim();
+            let cmd_name = &cmd_part[1..]; // remove ':'
+            if let Some(template) = self.commands.get(cmd_name) {
+                self.run_command(cmd_name, template, arg);
+                return; // No apps shown while command is running
+            } else {
+                // Unknown command – show nothing
+                return;
+            }
+        }
+
+        // --- Calculator (only if enabled and query looks arithmetic) ---
         if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
             if let Some(result_str) = eval_expression(query) {
                 let calc_item = CalcItem::new(result_str);
@@ -52,7 +79,7 @@ impl AppListModel {
             }
         }
 
-        // --- App (fuzzy search) ---
+        // --- Apps (fuzzy search) ---
         if query.is_empty() {
             for app in self.all_apps.iter() {
                 self.store.append(&AppItem::new(app));
@@ -94,8 +121,51 @@ impl AppListModel {
         }
     }
 
+    fn run_command(&self, cmd_name: &str, template: &str, argument: &str) {
+        let generation = self.task_gen.get();
+        let max_results = self.max_results;
+        let template = template.to_string();
+        let argument = argument.to_string();
+        let model_clone = self.clone();
+
+        spawn_future_local(async move {
+            // Get the default main context and spawn a blocking task
+            let ctx = MainContext::default(); // <-- obtain context
+            let output_result = ctx
+                .spawn_blocking(move || {
+                    std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(&template)
+                        .arg("--") // $0
+                        .arg(&argument) // $1
+                        .output()
+                })
+                .await;
+
+            let lines = match output_result {
+                Ok(Ok(output)) => String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .take(max_results)
+                    .map(String::from)
+                    .collect::<Vec<_>>(),
+                _ => Vec::new(),
+            };
+
+            // Only update if we are still the latest generation
+            if model_clone.task_gen.get() == generation {
+                model_clone.store.remove_all();
+                for line in lines {
+                    let item = CommandItem::new(line);
+                    model_clone.store.append(&item);
+                }
+                if model_clone.store.n_items() > 0 {
+                    model_clone.selection.set_selected(0);
+                }
+            }
+        });
+    }
+
     pub fn create_factory() -> SignalListItemFactory {
-        // ... invariato (stesso codice di prima) ...
         let factory = SignalListItemFactory::new();
 
         factory.connect_setup(|_, list_item| {
@@ -182,6 +252,11 @@ impl AppListModel {
             } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
                 image.set_icon_name(Some("accessories-calculator"));
                 name_label.set_text(&calc_item.result());
+                desc_label.set_visible(false);
+                desc_label.set_text("");
+            } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
+                image.set_icon_name(Some("system-search"));
+                name_label.set_text(&cmd_item.line());
                 desc_label.set_visible(false);
                 desc_label.set_text("");
             } else {

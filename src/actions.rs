@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 
 use once_cell::sync::Lazy;
+use regex::Regex; // <-- added for open_file_or_line
+use std::path::Path;
 
 use crate::config;
 use crate::launcher;
+use gtk4::prelude::DisplayExt; // <-- added for clipboard()
 
 pub static TERMINAL: Lazy<Option<String>> = Lazy::new(find_terminal_impl);
 
@@ -182,5 +185,39 @@ pub fn open_settings() {
 
     if let Err(e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
         eprintln!("Failed to open settings with xdg-open: {}", e);
+    }
+}
+
+/// Open a file (or a file at a specific line) from a command result line.
+pub fn open_file_or_line(line: &str) {
+    // Try to match "file:line:content"
+    let re = Regex::new(r"^(.+):(\d+):").unwrap();
+    if let Some(caps) = re.captures(line) {
+        let file = caps.get(1).unwrap().as_str();
+        let line_num = caps.get(2).unwrap().as_str();
+        if Path::new(file).exists() {
+            let editor = std::env::var("EDITOR").unwrap_or_else(|_| "xdg-open".to_string());
+            let mut cmd = std::process::Command::new(&editor);
+            if editor != "xdg-open" {
+                cmd.arg(format!("+{}", line_num));
+            }
+            cmd.arg(file);
+            if let Err(e) = cmd.spawn() {
+                eprintln!("Failed to open file at line: {}", e);
+            }
+            return;
+        }
+    }
+
+    // Otherwise treat the whole line as a file path
+    if Path::new(line).exists() {
+        if let Err(e) = std::process::Command::new("xdg-open").arg(line).spawn() {
+            eprintln!("Failed to open file: {}", e);
+        }
+    } else {
+        // Fallback: copy to clipboard
+        let display = gtk4::gdk::Display::default().expect("cannot get display");
+        let clipboard = display.clipboard();
+        clipboard.set_text(line);
     }
 }

@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use glib::clone;
 use gtk4::gdk::Key;
-use gtk4::prelude::*; // includes WidgetExt, WindowExt, etc.
+use gtk4::prelude::DisplayExt; // <-- added for clipboard()
+use gtk4::prelude::*; // includes WidgetExt, WindowExt, and also DisplayExt after we import it
 use gtk4::{
     Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, Image, Label, ListView,
     Orientation, ScrolledWindow,
@@ -10,9 +11,10 @@ use gtk4::{
 use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
 
-use crate::actions::{launch_app, open_settings, power_action};
+use crate::actions::{launch_app, open_file_or_line, open_settings, power_action};
 use crate::app_item::AppItem;
 use crate::calc_item::CalcItem;
+use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
@@ -28,7 +30,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     );
 
     let all_apps: Rc<Vec<launcher::DesktopApp>> = Rc::new(launcher::load_apps(&cfg.app_dirs));
-    let model = AppListModel::new(all_apps, cfg.max_results, cfg.calculator); // <-- MODIFICATO
+    let model = AppListModel::new(
+        all_apps,
+        cfg.max_results,
+        cfg.calculator,
+        cfg.commands.clone(),
+    );
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -120,6 +127,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                                 gtk4::gdk::Display::default().expect("cannot get display");
                             let clipboard = display.clipboard();
                             clipboard.set_text(number);
+                        } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
+                            open_file_or_line(&cmd_item.line());
                         }
                     }
                     window.close();
@@ -180,12 +189,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     launch_app(&app_item.exec(), app_item.terminal());
                     window.close();
                 } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
-                    // Copia il risultato negli appunti (senza il prefisso "= ")
                     let result = calc_item.result();
                     let number = result.strip_prefix("= ").unwrap_or(&result);
                     let display = gtk4::gdk::Display::default().expect("cannot get display");
                     let clipboard = display.clipboard();
                     clipboard.set_text(number);
+                    window.close();
+                } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
+                    open_file_or_line(&cmd_item.line());
                     window.close();
                 }
             } else {

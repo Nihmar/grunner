@@ -1,11 +1,12 @@
 mod actions;
 mod app_item;
+mod calc_item;
+mod calculator;
+mod cmd_item;
 mod config;
 mod launcher;
 mod list_model;
 mod ui;
-mod calc_item;
-mod calculator; 
 
 use gtk4::prelude::*;
 use libadwaita::Application;

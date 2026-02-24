@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 // Defaults
@@ -25,11 +26,22 @@ pub struct Config {
     pub max_results: usize,
     pub app_dirs: Vec<PathBuf>,
     pub calculator: bool, // <-- NUOVO
+    pub commands: HashMap<String, String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         let home = std::env::var("HOME").unwrap_or_default();
+        let mut commands = HashMap::new();
+        commands.insert(
+            "f".to_string(),
+            "find ~ -name \"$1\" 2>/dev/null | head -20".to_string(),
+        );
+        commands.insert(
+            "fg".to_string(),
+            "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
+                .to_string(),
+        );
         Self {
             window_width: DEFAULT_WINDOW_WIDTH,
             window_height: DEFAULT_WINDOW_HEIGHT,
@@ -39,6 +51,7 @@ impl Default for Config {
                 .map(|s| expand_home(&s, &home))
                 .collect(),
             calculator: DEFAULT_CALCULATOR, // <-- NUOVO
+            commands,
         }
     }
 }
@@ -49,6 +62,7 @@ struct TomlConfig {
     window: Option<WindowConfig>,
     search: Option<SearchConfig>,
     calculator: Option<CalculatorConfig>, // <-- NUOVO
+    commands: Option<HashMap<String, String>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -140,6 +154,10 @@ fn apply_toml(content: &str) -> Config {
         }
     }
 
+    if let Some(cmds) = toml_cfg.commands {
+        cfg.commands = cmds;
+    }
+
     cfg
 }
 
@@ -184,6 +202,13 @@ app_dirs = [
 [calculator]
 # Enable inline calculator (evaluates expressions typed in the search bar).
 enabled = true
+
+[commands]
+# Define colon commands. The key is the command name (without the leading ':').
+# The value is a shell command that will be executed with 'sh -c'.
+# Use "$1" for the argument typed after the command.
+# f  = "find ~ -name \"$1\" 2>/dev/null | head -20"
+# fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
 "#,
         width = DEFAULT_WINDOW_WIDTH,
         height = DEFAULT_WINDOW_HEIGHT,
