@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use glib::clone;
-use gtk4::WindowPosition; // import the enum
 use gtk4::gdk::Key;
 use gtk4::prelude::*; // includes WidgetExt, WindowExt, etc.
 use gtk4::{
@@ -43,7 +42,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     window.connect_realize(|w| {
         w.remove_css_class("background");
     });
-    window.set_position(WindowPosition::Center); // now works
 
     let root = GtkBox::new(Orientation::Vertical, 0);
     root.add_css_class("launcher-box");

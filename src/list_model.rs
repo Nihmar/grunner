@@ -116,12 +116,6 @@ impl AppListModel {
 
             hbox.append(&vbox);
             list_item.set_child(Some(&hbox));
-
-            unsafe {
-                list_item.set_data("image", image);
-                list_item.set_data("name_label", name_label);
-                list_item.set_data("desc_label", desc_label);
-            }
         });
 
         factory.connect_bind(|_, list_item| {
@@ -131,10 +125,30 @@ impl AppListModel {
                 None => return,
             };
 
-            // get_data is available via glib::prelude::ObjectExt
-            let image = unsafe { list_item.get_data::<gtk4::Image>("image") }.unwrap();
-            let name_label = unsafe { list_item.get_data::<gtk4::Label>("name_label") }.unwrap();
-            let desc_label = unsafe { list_item.get_data::<gtk4::Label>("desc_label") }.unwrap();
+            let hbox = list_item
+                .child()
+                .and_then(|c| c.downcast::<gtk4::Box>().ok())
+                .expect("missing hbox");
+
+            let image = hbox
+                .first_child()
+                .and_then(|c| c.downcast::<gtk4::Image>().ok())
+                .expect("missing image");
+
+            let vbox = image
+                .next_sibling()
+                .and_then(|c| c.downcast::<gtk4::Box>().ok())
+                .expect("missing vbox");
+
+            let name_label = vbox
+                .first_child()
+                .and_then(|c| c.downcast::<gtk4::Label>().ok())
+                .expect("missing name_label");
+
+            let desc_label = name_label
+                .next_sibling()
+                .and_then(|c| c.downcast::<gtk4::Label>().ok())
+                .expect("missing desc_label");
 
             let icon = item.icon();
             if icon.is_empty() {
