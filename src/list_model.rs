@@ -3,7 +3,6 @@ use std::rc::Rc;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use glib::object::Cast;
-use glib::prelude::*; // brings ObjectExt into scope
 use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
