@@ -11,7 +11,7 @@ use glib::object::Cast;
 use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -28,6 +28,8 @@ pub struct AppListModel {
     pub obsidian_cfg: Option<ObsidianConfig>,
     // flag to indicate that the Obsidian action buttons should be shown
     obsidian_action_mode: Rc<Cell<bool>>,
+    // debounce timer for colon commands
+    command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
 }
 
 impl AppListModel {
@@ -53,40 +55,124 @@ impl AppListModel {
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
             obsidian_action_mode: Rc::new(Cell::new(false)),
+            command_debounce: Rc::new(RefCell::new(None)),
         }
+    }
+
+    // Cancel any pending debounced command
+    fn cancel_debounce(&self) {
+        if let Some(source_id) = self.command_debounce.borrow_mut().take() {
+            source_id.remove();
+        }
+    }
+
+    // Schedule a closure to run after `delay_ms`; cancels any previously scheduled
+    fn schedule_command<F>(&self, delay_ms: u32, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.cancel_debounce();
+        let source_id = glib::timeout_add_local(delay_ms, move || {
+            f();
+            glib::ControlFlow::Break
+        });
+        *self.command_debounce.borrow_mut() = Some(source_id);
     }
 
     pub fn populate(&self, query: &str) {
         // Reset Obsidian action mode at the start of every population
         self.obsidian_action_mode.set(false);
 
-        // Increment generation to cancel previous async tasks
-        self.task_gen.set(self.task_gen.get() + 1);
-        self.store.remove_all();
+        // Cancel any pending command debounce (will be rescheduled if needed)
+        self.cancel_debounce();
 
         // --- Colon command handling ---
         if query.starts_with(':') && !self.commands.is_empty() {
             let parts: Vec<&str> = query.splitn(2, ' ').collect();
-            let cmd_part = parts[0]; // e.g. ":ob"
+            let cmd_part = parts[0];
             let arg = parts.get(1).unwrap_or(&"").trim();
-            let cmd_name = &cmd_part[1..]; // remove ':'
+            let cmd_name = &cmd_part[1..];
 
             // Special handling for obsidian commands
             if cmd_name == "ob" || cmd_name == "obg" {
-                self.handle_obsidian_command(cmd_name, arg);
-                return;
+                // Check if obsidian is configured
+                let obs_cfg = match &self.obsidian_cfg {
+                    Some(c) => c.clone(),
+                    None => {
+                        self.store.remove_all();
+                        let item = CommandItem::new("Obsidian not configured – edit config".to_string());
+                        self.store.append(&item);
+                        self.selection.set_selected(0);
+                        return;
+                    }
+                };
+                let vault_path = expand_home(&obs_cfg.vault, &std::env::var("HOME").unwrap_or_default());
+                if !vault_path.exists() {
+                    self.store.remove_all();
+                    let item = CommandItem::new(format!(
+                        "Vault path does not exist: {}",
+                        vault_path.display()
+                    ));
+                    self.store.append(&item);
+                    self.selection.set_selected(0);
+                    return;
+                }
+
+                match cmd_name {
+                    "ob" => {
+                        if arg.is_empty() {
+                            // Show buttons immediately, clear list
+                            self.obsidian_action_mode.set(true);
+                            self.store.remove_all();
+                            self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
+                            return;
+                        } else {
+                            // Schedule find search
+                            let vault_path = vault_path.to_string_lossy().to_string();
+                            let arg = arg.to_string();
+                            let model_clone = self.clone();
+                            self.schedule_command(300, move || {
+                                model_clone.run_find_in_vault(PathBuf::from(vault_path), &arg);
+                            });
+                            return; // Do NOT clear the list yet
+                        }
+                    }
+                    "obg" => {
+                        // Schedule rg search
+                        let vault_path = vault_path.to_string_lossy().to_string();
+                        let arg = arg.to_string();
+                        let model_clone = self.clone();
+                        self.schedule_command(300, move || {
+                            model_clone.run_rg_in_vault(PathBuf::from(vault_path), &arg);
+                        });
+                        return; // Do NOT clear the list yet
+                    }
+                    _ => unreachable!(),
+                }
             }
 
-            // existing command handling...
+            // Regular colon commands (from config)
             if let Some(template) = self.commands.get(cmd_name) {
-                self.run_command(cmd_name, template, arg);
-                return;
+                let template = template.clone();
+                let arg = arg.to_string();
+                let model_clone = self.clone();
+                self.schedule_command(300, move || {
+                    model_clone.run_command(cmd_name, &template, &arg);
+                });
+                return; // Do NOT clear the list yet
             } else {
-                return; // unknown command – nothing
+                // Unknown command: do nothing, keep the previous list
+                return;
             }
         }
 
-        // --- Calculator (only if enabled and query looks arithmetic) ---
+        // --- Non-colon query: clear and show apps/calculator ---
+        self.store.remove_all();
+
+        // Increment generation to cancel previous async tasks
+        self.task_gen.set(self.task_gen.get() + 1);
+
+        // Calculator (if enabled and query looks arithmetic)
         if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
             if let Some(result_str) = eval_expression(query) {
                 let calc_item = CalcItem::new(result_str);
@@ -94,7 +180,7 @@ impl AppListModel {
             }
         }
 
-        // --- Apps (fuzzy search) ---
+        // Apps (fuzzy search)
         if query.is_empty() {
             for app in self.all_apps.iter() {
                 self.store.append(&AppItem::new(app));
@@ -162,6 +248,106 @@ impl AppListModel {
                 Err(_) => Vec::new(),
             };
 
+            let _ = tx.send(lines);
+        });
+
+        glib::idle_add_local(move || match rx.try_recv() {
+            Ok(lines) => {
+                if model_clone.task_gen.get() == generation {
+                    model_clone.store.remove_all();
+                    for line in lines {
+                        let item = CommandItem::new(line);
+                        model_clone.store.append(&item);
+                    }
+                    if model_clone.store.n_items() > 0 {
+                        model_clone.selection.set_selected(0);
+                    }
+                }
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+        });
+    }
+
+    fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+        let generation = self.task_gen.get();
+        let max_results = self.max_results;
+        let vault_path = vault_path.to_string_lossy().to_string();
+        let pattern = pattern.to_string();
+        let model_clone = self.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
+
+        std::thread::spawn(move || {
+            let output = std::process::Command::new("find")
+                .arg(&vault_path)
+                .arg("-type")
+                .arg("f")
+                .arg("-iname")
+                .arg(format!("*{}*", pattern))
+                .arg("-printf")
+                .arg("%P\\n") // relative path from vault
+                .output();
+
+            let lines = match output {
+                Ok(out) => String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .take(max_results)
+                    .map(|line| vault_path.clone() + "/" + line) // reconstruct full path
+                    .collect::<Vec<_>>(),
+                Err(_) => Vec::new(),
+            };
+            let _ = tx.send(lines);
+        });
+
+        glib::idle_add_local(move || match rx.try_recv() {
+            Ok(lines) => {
+                if model_clone.task_gen.get() == generation {
+                    model_clone.store.remove_all();
+                    for line in lines {
+                        let item = CommandItem::new(line);
+                        model_clone.store.append(&item);
+                    }
+                    if model_clone.store.n_items() > 0 {
+                        model_clone.selection.set_selected(0);
+                    }
+                }
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+        });
+    }
+
+    fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+        let generation = self.task_gen.get();
+        let max_results = self.max_results;
+        let vault_path = vault_path.to_string_lossy().to_string();
+        let pattern = pattern.to_string();
+        let model_clone = self.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
+
+        std::thread::spawn(move || {
+            let output = std::process::Command::new("rg")
+                .arg("--with-filename")
+                .arg("--line-number")
+                .arg("--no-heading")
+                .arg("--color")
+                .arg("never")
+                .arg(&pattern)
+                .arg(&vault_path)
+                .output();
+
+            let lines = match output {
+                Ok(out) => String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .take(max_results)
+                    .map(String::from)
+                    .collect::<Vec<_>>(),
+                Err(_) => Vec::new(),
+            };
             let _ = tx.send(lines);
         });
 
@@ -285,155 +471,6 @@ impl AppListModel {
         });
 
         factory
-    }
-
-    fn handle_obsidian_command(&self, cmd: &str, arg: &str) {
-        let obs_cfg = match &self.obsidian_cfg {
-            Some(c) => c.clone(),
-            None => {
-                // Show a message that Obsidian is not configured
-                let item = CommandItem::new("Obsidian not configured – edit config".to_string());
-                self.store.append(&item);
-                self.selection.set_selected(0);
-                return;
-            }
-        };
-
-        let vault_path = expand_home(&obs_cfg.vault, &std::env::var("HOME").unwrap_or_default());
-        if !vault_path.exists() {
-            let item = CommandItem::new(format!(
-                "Vault path does not exist: {}",
-                vault_path.display()
-            ));
-            self.store.append(&item);
-            self.selection.set_selected(0);
-            return;
-        }
-
-        match cmd {
-            "ob" => {
-                // Always show buttons for :ob
-                self.obsidian_action_mode.set(true);
-                if arg.is_empty() {
-                    // Clear the list and deselect any item
-                    self.store.remove_all();
-                    self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
-                } else {
-                    // Run find search and populate the list
-                    self.run_find_in_vault(vault_path, arg);
-                }
-            }
-            "obg" => {
-                // No buttons for :obg, just search
-                self.obsidian_action_mode.set(false);
-                if arg.is_empty() {
-                    return;
-                } else {
-                    self.run_rg_in_vault(vault_path, arg);
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        let generation = self.task_gen.get();
-        let max_results = self.max_results;
-        let vault_path = vault_path.to_string_lossy().to_string();
-        let pattern = pattern.to_string();
-        let model_clone = self.clone();
-
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
-
-        std::thread::spawn(move || {
-            let output = std::process::Command::new("find")
-                .arg(&vault_path)
-                .arg("-type")
-                .arg("f")
-                .arg("-iname")
-                .arg(format!("*{}*", pattern))
-                .arg("-printf")
-                .arg("%P\\n") // relative path from vault
-                .output();
-
-            let lines = match output {
-                Ok(out) => String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .take(max_results)
-                    .map(|line| vault_path.clone() + "/" + line) // reconstruct full path
-                    .collect::<Vec<_>>(),
-                Err(_) => Vec::new(),
-            };
-            let _ = tx.send(lines);
-        });
-
-        glib::idle_add_local(move || match rx.try_recv() {
-            Ok(lines) => {
-                if model_clone.task_gen.get() == generation {
-                    model_clone.store.remove_all();
-                    for line in lines {
-                        let item = CommandItem::new(line);
-                        model_clone.store.append(&item);
-                    }
-                    if model_clone.store.n_items() > 0 {
-                        model_clone.selection.set_selected(0);
-                    }
-                }
-                glib::ControlFlow::Break
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-        });
-    }
-
-    fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        let generation = self.task_gen.get();
-        let max_results = self.max_results;
-        let vault_path = vault_path.to_string_lossy().to_string();
-        let pattern = pattern.to_string();
-        let model_clone = self.clone();
-
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
-
-        std::thread::spawn(move || {
-            let output = std::process::Command::new("rg")
-                .arg("--with-filename")
-                .arg("--line-number")
-                .arg("--no-heading")
-                .arg("--color")
-                .arg("never")
-                .arg(&pattern)
-                .arg(&vault_path)
-                .output();
-
-            let lines = match output {
-                Ok(out) => String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .take(max_results)
-                    .map(String::from)
-                    .collect::<Vec<_>>(),
-                Err(_) => Vec::new(),
-            };
-            let _ = tx.send(lines);
-        });
-
-        glib::idle_add_local(move || match rx.try_recv() {
-            Ok(lines) => {
-                if model_clone.task_gen.get() == generation {
-                    model_clone.store.remove_all();
-                    for line in lines {
-                        let item = CommandItem::new(line);
-                        model_clone.store.append(&item);
-                    }
-                    if model_clone.store.n_items() > 0 {
-                        model_clone.selection.set_selected(0);
-                    }
-                }
-                glib::ControlFlow::Break
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-        });
     }
 
     // Public getter for the Obsidian action mode flag
