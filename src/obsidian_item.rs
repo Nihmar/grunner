@@ -2,10 +2,9 @@ use glib::Object;
 use glib::subclass::prelude::*;
 use std::cell::RefCell;
 
-pub use ObsidianAction;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ObsidianAction {
+    #[default]
     OpenVault,
     NewNote,
     DailyNote,

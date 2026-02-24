@@ -13,7 +13,7 @@ use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -25,7 +25,7 @@ pub struct AppListModel {
     calculator_enabled: bool,
     commands: HashMap<String, String>,
     task_gen: Rc<Cell<u64>>,
-    obsidian_cfg: Option<ObsidianConfig>,
+    pub obsidian_cfg: Option<ObsidianConfig>,
 }
 
 impl AppListModel {
