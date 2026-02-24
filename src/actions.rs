@@ -5,7 +5,7 @@ use crate::obsidian_item::ObsidianAction;
 use chrono::Local;
 use gtk4::prelude::DisplayExt;
 use once_cell::sync::Lazy;
-use regex::Regex; // <-- added for open_file_or_line
+use regex::Regex;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -236,7 +236,7 @@ pub fn open_file_or_line(line: &str) {
     }
 }
 
-pub fn perform_obsidian_action(action: ObsidianAction, arg: Option<&str>, cfg: &ObsidianConfig) {
+pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
     if !vault_path.exists() {
         eprintln!("Vault path does not exist: {}", vault_path.display());
@@ -255,13 +255,27 @@ pub fn perform_obsidian_action(action: ObsidianAction, arg: Option<&str>, cfg: &
                 eprintln!("Cannot create folder {}: {}", folder.display(), e);
                 return;
             }
+            // Generate a filename with timestamp
             let now = Local::now();
             let filename = format!("New Note {}.md", now.format("%Y-%m-%d %H-%M-%S"));
             let path = folder.join(filename);
-            if let Err(e) = File::create(&path) {
-                eprintln!("Cannot create note {}: {}", path.display(), e);
-                return;
+
+            // Create the file and write text if provided
+            let mut file = match File::create(&path) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Cannot create note {}: {}", path.display(), e);
+                    return;
+                }
+            };
+            if let Some(t) = text {
+                if !t.is_empty() {
+                    if let Err(e) = writeln!(file, "{}", t) {
+                        eprintln!("Cannot write to note {}: {}", path.display(), e);
+                    }
+                }
             }
+
             let uri = format!(
                 "obsidian://open?path={}",
                 urlencoding::encode(&path.to_string_lossy())
@@ -282,6 +296,17 @@ pub fn perform_obsidian_action(action: ObsidianAction, arg: Option<&str>, cfg: &
                     return;
                 }
             }
+            // Append text if provided
+            if let Some(t) = text {
+                if !t.is_empty() {
+                    let mut file = fs::OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(&path)
+                        .expect("cannot open daily note");
+                    writeln!(file, "{}", t).ok();
+                }
+            }
             let uri = format!(
                 "obsidian://open?path={}",
                 urlencoding::encode(&path.to_string_lossy())
@@ -296,14 +321,15 @@ pub fn perform_obsidian_action(action: ObsidianAction, arg: Option<&str>, cfg: &
                     return;
                 }
             }
-            if let Some(text) = arg {
-                if !text.is_empty() {
+            // Always append text if provided
+            if let Some(t) = text {
+                if !t.is_empty() {
                     let mut file = fs::OpenOptions::new()
                         .create(true)
                         .append(true)
                         .open(&path)
                         .expect("cannot open quick note");
-                    writeln!(file, "{}", text).ok();
+                    writeln!(file, "{}", t).ok();
                 }
             }
             let uri = format!(
