@@ -52,7 +52,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .decorated(false)
         .resizable(false)
         .build();
-    window.set_css_classes(&["launcher-window"]);
+    window.set_css_classes(&[&"launcher-window"]);
     window.remove_css_class("background");
     window.connect_realize(|w| {
         w.remove_css_class("background");
@@ -124,6 +124,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     let list_view = ListView::new(Some(model.selection.clone()), Some(factory));
     list_view.set_single_click_activate(false);
     list_view.add_css_class("app-list");
+    list_view.set_can_focus(false);
 
     let scrolled = ScrolledWindow::builder()
         .vexpand(true)
