@@ -11,9 +11,9 @@ use crate::list_model::AppListModel;
 use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
 use crate::search_result_item::SearchResultItem;
 // New imports for clipboard and bookmarks
-use crate::clipboard_item::ClipboardItem;
 use crate::bookmark_item::BookmarkItem;
 use crate::clipboard_history::ClipboardHistory;
+use crate::clipboard_item::ClipboardItem;
 
 use glib::clone;
 use gtk4::gdk::Key;
@@ -25,8 +25,8 @@ use gtk4::{
 };
 use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub fn build_ui(app: &Application, cfg: &Config) {
     // Load CSS
@@ -76,7 +76,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .build();
     entry.add_css_class("search-entry");
 
-    // --- Obsidian action button bar (unchanged) ---
+    // --- Obsidian action button bar ---
     let obsidian_bar = GtkBox::new(Orientation::Horizontal, 8);
     obsidian_bar.set_halign(Align::Center);
     obsidian_bar.set_margin_top(6);
@@ -142,24 +142,32 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     root.append(&power_bar);
     window.set_content(Some(&root));
 
-    // Clipboard monitoring
-    let clipboard_history = Rc::new(RefCell::new(ClipboardHistory::load(Some(cfg.clipboard_history_size))));
+    // Clipboard monitoring — fixed closure capture
+    let clipboard_history = Rc::new(RefCell::new(ClipboardHistory::load(Some(
+        cfg.clipboard_history_size,
+    ))));
     let clipboard_history_clone = clipboard_history.clone();
 
-    let display = window.display();
-    display.connect_clipboard_changed(move |display| {
-        let clipboard = display.clipboard();
-        clipboard.read_text_async(
-            gtk4::gio::Cancellable::NONE,
-            move |result| {
+    let display = gtk4::gdk::Display::default().expect("Cannot connect to display");
+    let clipboard = display.clipboard();
+
+    clipboard.connect_changed(clone!(
+        #[strong]
+        clipboard_history_clone,
+        #[strong]
+        clipboard,
+        move |_| {
+            let clipboard_clone = clipboard.clone();
+            let history_clone = clipboard_history_clone.clone(); // clone for inner closure
+            clipboard_clone.read_text_async(gtk4::gio::Cancellable::NONE, move |result| {
                 if let Ok(Some(text)) = result {
-                    let mut hist = clipboard_history_clone.borrow_mut();
-                    hist.push(text);
+                    let mut hist = history_clone.borrow_mut();
+                    hist.push(text.to_string());
                     hist.save();
                 }
-            },
-        );
-    });
+            });
+        }
+    ));
 
     window.connect_show(clone!(
         #[weak]
@@ -208,7 +216,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     let pos = model.selection.selected();
                     if let Some(obj) = model.store.item(pos) {
                         if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-                            launch_app(&app_item.exec(), app_item.terminal(), &app_item.source_path());
+                            launch_app(
+                                &app_item.exec(),
+                                app_item.terminal(),
+                                &app_item.source_path(),
+                            );
                         } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
                             let result = calc_item.result();
                             let number = result.strip_prefix("= ").unwrap_or(&result);
@@ -240,12 +252,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             });
                         } else if let Some(clip_item) = obj.downcast_ref::<ClipboardItem>() {
                             let text = clip_item.text();
-                            let display = gtk4::gdk::Display::default().expect("cannot get display");
+                            let display =
+                                gtk4::gdk::Display::default().expect("cannot get display");
                             let clipboard = display.clipboard();
                             clipboard.set_text(&text);
                         } else if let Some(bm_item) = obj.downcast_ref::<BookmarkItem>() {
                             let url = bm_item.url();
-                            if let Err(e) = std::process::Command::new("xdg-open").arg(url).spawn() {
+                            if let Err(e) = std::process::Command::new("xdg-open").arg(url).spawn()
+                            {
                                 eprintln!("Failed to open URL: {}", e);
                             }
                         }
@@ -305,7 +319,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         move |_, pos| {
             if let Some(obj) = model.store.item(pos) {
                 if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-                    launch_app(&app_item.exec(), app_item.terminal(), &app_item.source_path());
+                    launch_app(
+                        &app_item.exec(),
+                        app_item.terminal(),
+                        &app_item.source_path(),
+                    );
                     window.close();
                 } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
                     let result = calc_item.result();
@@ -363,7 +381,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     model.populate("");
 }
 
-// build_power_bar – fully restored from original
+// build_power_bar – unchanged
 fn build_power_bar(window: &ApplicationWindow, entry: &Entry) -> GtkBox {
     let power_bar = GtkBox::new(Orientation::Horizontal, 8);
     power_bar.add_css_class("power-bar");

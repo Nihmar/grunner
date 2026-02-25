@@ -1,10 +1,10 @@
+use futures::stream::{FuturesUnordered, StreamExt};
 /// GNOME Shell Search Provider 2 integration.
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
-use futures::stream::{FuturesUnordered, StreamExt};
 use zbus::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -141,7 +141,7 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
         return None;
     }
 
-    let desktop_id = desktop_id?;  // now we require DesktopId
+    let desktop_id = desktop_id?; // now we require DesktopId
     if is_blacklisted(&desktop_id) {
         return None;
     }

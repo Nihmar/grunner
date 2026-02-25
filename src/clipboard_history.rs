@@ -51,10 +51,12 @@ impl ClipboardHistory {
         self.items.push_back(text);
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &String> {
+    pub fn iter(&self) -> std::collections::vec_deque::Iter<'_, String> {
         self.items.iter()
     }
 
+    // Dead code allowed – may be used in the future
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.items.len()
     }

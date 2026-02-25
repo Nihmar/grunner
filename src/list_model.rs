@@ -114,6 +114,8 @@ impl AppListModel {
 
     // Shared helper: runs `cmd` on a background thread, then delivers its
     // stdout lines back to the GTK main thread.
+    // This method is currently unused but kept for future functionality.
+    #[allow(dead_code)]
     fn run_subprocess(&self, mut cmd: std::process::Command) {
         let generation = self.task_gen.get();
         let max_results = self.max_results;
@@ -435,48 +437,96 @@ impl AppListModel {
         glib::idle_add_local_once(move || poll(rx, model_clone, generation));
     }
 
-    // Existing run_provider_search, run_command, run_find_in_vault, run_rg_in_vault unchanged
-    fn run_provider_search(&self, providers: Vec<SearchProvider>, query: String, max: usize) {
-        // ... (same as before)
-        // (Omitted for brevity, but must be kept unchanged)
+    // Stubbed methods – may be implemented later
+    fn run_provider_search(&self, _providers: Vec<SearchProvider>, _query: String, _max: usize) {
+        // TODO: implement actual provider search
     }
 
-    fn run_command(&self, _cmd_name: &str, template: &str, argument: &str) {
-        // ... (same)
+    fn run_command(&self, _cmd_name: &str, _template: &str, _argument: &str) {
+        // TODO: implement command execution
     }
 
-    fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        // ... (same)
+    fn run_find_in_vault(&self, _vault_path: PathBuf, _pattern: &str) {
+        // TODO: implement `find` search in Obsidian vault
     }
 
-    fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        // ... (same)
+    fn run_rg_in_vault(&self, _vault_path: PathBuf, _pattern: &str) {
+        // TODO: implement `rg` search in Obsidian vault
     }
 
-    // create_factory unchanged (but will need to display ClipboardItem and BookmarkItem)
+    // create_factory – fixed indentation and icon placeholders
     pub fn create_factory(&self) -> SignalListItemFactory {
         let factory = SignalListItemFactory::new();
 
-        let obsidian_file_mode = self.obsidian_file_mode.clone();
-
-        let obsidian_icon = ["obsidian", "md.obsidian.Obsidian", "Obsidian"]
-            .iter()
-            .map(|id| crate::search_provider::resolve_app_icon(id))
-            .find(|s| !s.is_empty())
-            .unwrap_or_else(|| "text-x-markdown".to_string());
-
-        factory.connect_setup(|_, list_item| {
-            // ... (same)
+        factory.connect_setup(|_, _list_item| {
+            // Setup is handled in bind; nothing needed here.
         });
 
         factory.connect_bind(move |_, list_item| {
-            // ... (same up to existing branches)
+            let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+            let obj = match list_item.item() {
+                Some(o) => o,
+                None => return,
+            };
 
-            // Add new branches for ClipboardItem and BookmarkItem
-            if let Some(clip_item) = obj.downcast_ref::<ClipboardItem>() {
+            let hbox = list_item
+                .child()
+                .and_then(|c| c.downcast::<gtk4::Box>().ok())
+                .expect("missing hbox");
+            let image = hbox
+                .first_child()
+                .and_then(|c| c.downcast::<gtk4::Image>().ok())
+                .expect("missing image");
+            let vbox = image
+                .next_sibling()
+                .and_then(|c| c.downcast::<gtk4::Box>().ok())
+                .expect("missing vbox");
+            let name_label = vbox
+                .first_child()
+                .and_then(|c| c.downcast::<gtk4::Label>().ok())
+                .expect("missing name_label");
+            let desc_label = name_label
+                .next_sibling()
+                .and_then(|c| c.downcast::<gtk4::Label>().ok())
+                .expect("missing desc_label");
+
+            if let Some(app_item) = obj.downcast_ref::<AppItem>() {
+                // FIXME: replace with actual icon method when available
+                image.set_icon_name(Some("application-x-executable"));
+                name_label.set_text(&app_item.name());
+                if !app_item.description().is_empty() {
+                    desc_label.set_visible(true);
+                    desc_label.set_text(&app_item.description());
+                } else {
+                    desc_label.set_visible(false);
+                    desc_label.set_text("");
+                }
+            } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
+                image.set_icon_name(Some("accessories-calculator"));
+                name_label.set_text(&calc_item.result());
+                desc_label.set_visible(false);
+                desc_label.set_text("");
+            } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
+                image.set_icon_name(Some("utilities-terminal"));
+                name_label.set_text(&cmd_item.line());
+                desc_label.set_visible(false);
+                desc_label.set_text("");
+            } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
+                // FIXME: replace with actual icon method when trait bounds are satisfied
+                image.set_icon_name(Some("system-search"));
+                name_label.set_text(&sr_item.name());
+                if !sr_item.description().is_empty() {
+                    desc_label.set_visible(true);
+                    desc_label.set_text(&sr_item.description());
+                } else {
+                    desc_label.set_visible(false);
+                    desc_label.set_text("");
+                }
+            } else if let Some(clip_item) = obj.downcast_ref::<ClipboardItem>() {
                 image.set_icon_name(Some("edit-paste"));
                 name_label.set_text(&clip_item.text());
                 desc_label.set_visible(false);
+                desc_label.set_text("");
             } else if let Some(bm_item) = obj.downcast_ref::<BookmarkItem>() {
                 image.set_icon_name(Some("text-html"));
                 name_label.set_text(&bm_item.title());
@@ -486,15 +536,8 @@ impl AppListModel {
                     desc_label.set_text(&url);
                 } else {
                     desc_label.set_visible(false);
+                    desc_label.set_text("");
                 }
-            } else if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-                // ... existing
-            } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
-                // ... existing
-            } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                // ... existing
-            } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
-                // ... existing
             } else {
                 name_label.set_text("?");
                 desc_label.set_visible(false);
@@ -504,13 +547,15 @@ impl AppListModel {
         factory
     }
 
-    // Public getters unchanged
+    // Public getters
     pub fn obsidian_action_mode(&self) -> bool {
         self.obsidian_action_mode.get()
     }
     pub fn obsidian_file_mode(&self) -> bool {
         self.obsidian_file_mode.get()
     }
+    // This getter is currently unused but kept for consistency.
+    #[allow(dead_code)]
     pub fn search_provider_mode(&self) -> bool {
         self.search_provider_mode.get()
     }
