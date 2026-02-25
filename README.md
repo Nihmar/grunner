@@ -38,18 +38,26 @@ Install them on your distribution:
 
 **Fedora**
 ```bash
-sudo dnf install rust gtk4-devel libadwaita-devel
+sudo dnf install rust gtk4-devel libadwaita-devel plocate
 ```
 
 **Ubuntu / Debian**
 ```bash
-sudo apt install rustc cargo libgtk-4-dev libadwaita-1-dev
+sudo apt install rustc cargo libgtk-4-dev libadwaita-1-dev plocate
 ```
 
 **Arch Linux**
 ```bash
-sudo pacman -S rust gtk4 libadwaita
+sudo pacman -S rust gtk4 libadwaita plocate
 ```
+
+After installation, enable the auto-update of `plocate`'s index:
+
+```bash
+sudo updatedb
+sudo systemctl enable --now plocate-updatedb.timer
+```
+
 
 ### Build from source
 
