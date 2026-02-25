@@ -31,7 +31,7 @@ pub struct AppListModel {
     pub obsidian_cfg: Option<ObsidianConfig>,
     obsidian_action_mode: Rc<Cell<bool>>,
     obsidian_file_mode: Rc<Cell<bool>>,
-    obsidian_grep_mode: Rc<Cell<bool>>, // new flag for :obg results
+    obsidian_grep_mode: Rc<Cell<bool>>,
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     command_debounce_ms: u32,
     fuzzy_matcher: Rc<SkimMatcherV2>,
@@ -150,7 +150,6 @@ impl AppListModel {
     }
 
     pub fn populate(&self, query: &str) {
-        // Reset all mode flags
         self.obsidian_action_mode.set(false);
         self.obsidian_file_mode.set(false);
         self.obsidian_grep_mode.set(false);
@@ -184,13 +183,11 @@ impl AppListModel {
                     return;
                 }
                 self.search_provider_mode.set(true);
-                // Increment generation to cancel previous async tasks
                 self.task_gen.set(self.task_gen.get() + 1);
                 let providers_clone: Vec<SearchProvider> = providers.to_vec();
                 let arg = arg.to_string();
                 let max = self.max_results;
                 let model_clone = self.clone();
-                // Use a shorter debounce for search providers (120 ms)
                 self.schedule_command_with_delay(120, move || {
                     model_clone.run_provider_search(providers_clone, arg, max);
                 });
@@ -232,7 +229,6 @@ impl AppListModel {
                             return;
                         } else {
                             self.obsidian_file_mode.set(true);
-                            // Increment generation to cancel previous async tasks
                             self.task_gen.set(self.task_gen.get() + 1);
                             let vault_path = vault_path.to_string_lossy().to_string();
                             let arg = arg.to_string();
@@ -244,9 +240,7 @@ impl AppListModel {
                         }
                     }
                     "obg" => {
-                        // Set grep mode so results get the Obsidian icon
                         self.obsidian_grep_mode.set(true);
-                        // Increment generation to cancel previous async tasks
                         self.task_gen.set(self.task_gen.get() + 1);
                         let vault_path = vault_path.to_string_lossy().to_string();
                         let arg = arg.to_string();
@@ -265,7 +259,6 @@ impl AppListModel {
                 .then(|| self.commands.get(cmd_name))
                 .flatten()
             {
-                // Increment generation to cancel previous async tasks
                 self.task_gen.set(self.task_gen.get() + 1);
                 let template = template.clone();
                 let arg = arg.to_string();
@@ -276,19 +269,14 @@ impl AppListModel {
                 });
                 return;
             } else {
-                // Unknown command: do nothing, keep the previous list
                 return;
             }
         }
 
         // --- Non-colon query: clear and show apps/calculator ---
         self.store.remove_all();
-
-        // Increment generation to cancel previous async tasks.
-        // (Colon commands also increment generation when they schedule a task.)
         self.task_gen.set(self.task_gen.get() + 1);
 
-        // Calculator
         if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
             if let Some(result_str) = eval_expression(query) {
                 let calc_item = CalcItem::new(result_str);
@@ -296,7 +284,6 @@ impl AppListModel {
             }
         }
 
-        // Apps (fuzzy search)
         if query.is_empty() {
             for app in self.all_apps.iter() {
                 self.store.append(&AppItem::new(app));
@@ -340,33 +327,27 @@ impl AppListModel {
         let model_clone = self.clone();
         let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
 
-        // --- 1. Schedule a delayed clear (avoids empty flash for fast providers) ---
         let clear_timeout = Rc::new(RefCell::new(None::<glib::SourceId>));
         let clear_model = self.clone();
         let clear_gen = generation;
         let clear_timeout_clone = clear_timeout.clone();
-        let timeout_id = glib::timeout_add_local(
-            Duration::from_millis(80), // tune this value as needed
-            move || {
-                if clear_model.task_gen.get() == clear_gen {
-                    clear_model.store.remove_all();
-                    clear_model
-                        .selection
-                        .set_selected(gtk4::INVALID_LIST_POSITION);
-                }
-                *clear_timeout_clone.borrow_mut() = None;
-                glib::ControlFlow::Break
-            },
-        );
+        let timeout_id = glib::timeout_add_local(Duration::from_millis(25), move || {
+            if clear_model.task_gen.get() == clear_gen {
+                clear_model.store.remove_all();
+                clear_model
+                    .selection
+                    .set_selected(gtk4::INVALID_LIST_POSITION);
+            }
+            *clear_timeout_clone.borrow_mut() = None;
+            glib::ControlFlow::Break
+        });
         *clear_timeout.borrow_mut() = Some(timeout_id);
 
-        // --- 2. Start the background search ---
         let (tx, rx) = std::sync::mpsc::channel::<Vec<search_provider::SearchResult>>();
         std::thread::spawn(move || {
             search_provider::run_search_streaming(&providers, &query, max, tx);
         });
 
-        // --- 3. Poll for results with first‑batch handling ---
         let first_batch = Rc::new(Cell::new(false));
         fn poll(
             rx: std::sync::mpsc::Receiver<Vec<search_provider::SearchResult>>,
@@ -385,12 +366,10 @@ impl AppListModel {
                         if model.task_gen.get() != generation {
                             return;
                         }
-                        // Cancel the clear timeout – results are here in time
                         if let Some(id) = clear_timeout.borrow_mut().take() {
                             id.remove();
                         }
 
-                        // Convert all results in this batch to Objects
                         let items: Vec<glib::Object> = results
                             .into_iter()
                             .map(|r| {
@@ -416,15 +395,12 @@ impl AppListModel {
                             })
                             .collect();
 
-                        // If this is the very first batch, replace any stale content
                         if !first_batch.get() {
-                            model.store.remove_all(); // clears old list (apps, etc.)
+                            model.store.remove_all();
                             first_batch.set(true);
                         }
-                        // Append the whole batch at once
                         model.store.splice(model.store.n_items(), 0, &items);
 
-                        // Set selection only if the list was previously empty
                         if model.store.n_items() > 0
                             && model.selection.selected() == gtk4::INVALID_LIST_POSITION
                         {
@@ -584,42 +560,71 @@ impl AppListModel {
                 desc_label.set_text("");
             } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                 let line = cmd_item.line();
-                if line.starts_with('/') && !line.contains(':') {
-                    // Plain file path (from :ob find)
-                    if obsidian_file_mode.get() {
-                        image.set_icon_name(Some(&obsidian_icon));
-                    } else {
-                        let (ctype, _) =
-                            gtk4::gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
-                        let icon = gtk4::gio::content_type_get_icon(&ctype);
-                        image.set_from_gicon(&icon);
-                    }
-                    let filename = std::path::Path::new(&line)
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or(&line);
-                    name_label.set_text(filename);
-                    if let Some(parent) = std::path::Path::new(&line)
-                        .parent()
-                        .and_then(|p| p.to_str())
-                    {
-                        desc_label.set_visible(true);
-                        desc_label.set_text(parent);
-                    } else {
-                        desc_label.set_visible(false);
-                        desc_label.set_text("");
-                    }
-                } else {
-                    // Grep output (contains ':') or other command output
-                    if obsidian_grep_mode.get() {
-                        image.set_icon_name(Some(&obsidian_icon));
-                    } else {
-                        image.set_icon_name(Some("system-search"));
-                    }
+
+                // Handle Obsidian grep mode first (special icon)
+                if obsidian_grep_mode.get() {
+                    image.set_icon_name(Some(&obsidian_icon));
                     name_label.set_text(&line);
                     desc_label.set_visible(false);
-                    desc_label.set_text("");
+                    return;
                 }
+
+                // Try to parse as file path (absolute)
+                if line.starts_with('/') {
+                    // Check if it's a plain file path (no colon) – from :f or :ob find
+                    if !line.contains(':') {
+                        // Plain file path
+                        if obsidian_file_mode.get() {
+                            image.set_icon_name(Some(&obsidian_icon));
+                        } else {
+                            let (ctype, _) =
+                                gtk4::gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
+                            let icon = gtk4::gio::content_type_get_icon(&ctype);
+                            image.set_from_gicon(&icon);
+                        }
+                        let filename = std::path::Path::new(&line)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(&line);
+                        name_label.set_text(filename);
+                        if let Some(parent) = std::path::Path::new(&line)
+                            .parent()
+                            .and_then(|p| p.to_str())
+                        {
+                            desc_label.set_visible(true);
+                            desc_label.set_text(parent);
+                        } else {
+                            desc_label.set_visible(false);
+                            desc_label.set_text("");
+                        }
+                        return;
+                    } else {
+                        // Line contains ':' – likely grep output from :fg or similar
+                        // Extract file path (part before first colon)
+                        if let Some((file_path, rest)) = line.split_once(':') {
+                            // Use content-type icon based on the file
+                            let (ctype, _) =
+                                gtk4::gio::content_type_guess(Some(file_path), None::<&[u8]>);
+                            let icon = gtk4::gio::content_type_get_icon(&ctype);
+                            image.set_from_gicon(&icon);
+
+                            // Display filename as name, and the rest (line:content) as description
+                            let filename = std::path::Path::new(file_path)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or(file_path);
+                            name_label.set_text(filename);
+                            desc_label.set_visible(true);
+                            desc_label.set_text(rest);
+                            return;
+                        }
+                    }
+                }
+
+                // Fallback for any other lines (e.g., relative paths, non-file output)
+                image.set_icon_name(Some("system-search"));
+                name_label.set_text(&line);
+                desc_label.set_visible(false);
             } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
                 let icon_file = sr_item.icon_file();
                 let icon_themed = sr_item.icon_themed();
