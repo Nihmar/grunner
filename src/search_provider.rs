@@ -78,6 +78,12 @@ pub struct SearchResult {
 // Provider discovery
 // ---------------------------------------------------------------------------
 
+fn is_blacklisted(desktop_id: &str) -> bool {
+    let blacklist = ["epiphany"];
+    let desktop_id_lower = desktop_id.to_lowercase();
+    blacklist.iter().any(|&b| desktop_id_lower.contains(b))
+}
+
 pub fn discover_providers() -> Vec<SearchProvider> {
     let home = std::env::var("HOME").unwrap_or_default();
     let dirs: Vec<PathBuf> = vec![
@@ -135,10 +141,15 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
         return None;
     }
 
+    let desktop_id = desktop_id?;  // now we require DesktopId
+    if is_blacklisted(&desktop_id) {
+        return None;
+    }
+
     Some(SearchProvider {
         bus_name: bus_name?,
         object_path: object_path?,
-        app_icon: resolve_app_icon(desktop_id.as_deref().unwrap_or_default()),
+        app_icon: resolve_app_icon(&desktop_id),
     })
 }
 

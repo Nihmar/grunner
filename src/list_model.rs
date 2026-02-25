@@ -84,16 +84,14 @@ impl AppListModel {
         self.cancel_debounce();
         let mut f_opt = Some(f);
         let debounce_ref = self.command_debounce.clone();
-        let source_id = glib::timeout_add_local(
-            Duration::from_millis(delay_ms.into()),
-            move || {
+        let source_id =
+            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
                 *debounce_ref.borrow_mut() = None;
                 if let Some(f) = f_opt.take() {
                     f();
                 }
                 glib::ControlFlow::Break
-            },
-        );
+            });
         *self.command_debounce.borrow_mut() = Some(source_id);
     }
 
@@ -133,7 +131,9 @@ impl AppListModel {
                         for line in lines {
                             model.store.append(&CommandItem::new(line));
                         }
-                        if model.store.n_items() > 0 {
+                        if model.store.n_items() > 0
+                            && model.selection.selected() == gtk4::INVALID_LIST_POSITION
+                        {
                             model.selection.set_selected(0);
                         }
                     }
