@@ -1,10 +1,10 @@
+use futures::stream::{FuturesUnordered, StreamExt};
 /// GNOME Shell Search Provider 2 integration.
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
-use futures::stream::{FuturesUnordered, StreamExt};
 use zbus::Connection;
 use zbus::zvariant::OwnedValue;
 
