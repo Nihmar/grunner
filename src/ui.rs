@@ -187,6 +187,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         obsidian_bar,
         #[weak]
         command_icon,
+        #[weak]
+        entry,
         move |e| {
             let text = e.text();
             model.populate(&text);
@@ -212,6 +214,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             } else {
                 command_icon.set_visible(false);
             }
+
+            entry.queue_draw();
         }
     ));
 

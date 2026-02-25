@@ -24,7 +24,7 @@
 
 /* ── Search Entry ── */
 .search-entry {
-    background-color: transparent;
+    background-color: var(--window-bg-color);
     color: var(--window-fg-color);
     border: none;
     border-radius: calc(var(--window-radius, 12px) - 4px);
@@ -41,7 +41,7 @@
 }
 
 .search-entry > text {
-    background-color: transparent;
+    background-color: var(--window-bg-color);
 }
 
 /* ── Result List ── */
