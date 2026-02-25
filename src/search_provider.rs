@@ -1,5 +1,6 @@
 /// GNOME Shell Search Provider 2 integration.
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::time::Duration;
 use zbus::Connection;
@@ -194,7 +195,7 @@ fn parse_icon_variant(val: &OwnedValue) -> Option<IconData> {
         }
     }
 
-    inner(val.as_ref())
+    inner(val.deref())
 }
 
 /// Extract the first icon name from a GThemedIcon payload.
@@ -300,8 +301,7 @@ pub fn run_search(
         return vec![];
     }
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
+    let rt: Result<tokio::runtime::Runtime, _> = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build();
 
@@ -361,7 +361,9 @@ async fn query_one(
 
     let ids: Vec<String> = timeout(timeout_dur, proxy.call("GetInitialResultSet", &(terms,)))
         .await
-        .map_err(|_| zbus::Error::Timeout)??;
+        .map_err(|_| {
+            zbus::Error::Failure("D-Bus call to GetInitialResultSet timed out".into())
+        })??;
 
     if ids.is_empty() {
         return Ok(vec![]);
@@ -372,7 +374,7 @@ async fn query_one(
     let metas: Vec<HashMap<String, OwnedValue>> =
         timeout(timeout_dur, proxy.call("GetResultMetas", &(ids_capped,)))
             .await
-            .map_err(|_| zbus::Error::Timeout)??;
+            .map_err(|_| zbus::Error::Failure("D-Bus call to GetResultMetas timed out".into()))??;
 
     let results = metas
         .into_iter()
@@ -420,8 +422,7 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
     let result_id = result_id.to_string();
     let terms = terms.to_vec();
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
+    let rt: Result<tokio::runtime::Runtime, _> = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build();
 
@@ -455,7 +456,7 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
 
         let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
         if let Err(e) = proxy
-            .call::<_, ()>(
+            .call::<_, _, ()>(
                 "ActivateResult",
                 &(result_id.as_str(), &terms_str, timestamp),
             )

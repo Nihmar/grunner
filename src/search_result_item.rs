@@ -1,10 +1,9 @@
 /// GObject wrapper around a GNOME Shell Search Provider result.
-use glib::prelude::*;
 use glib::subclass::prelude::*;
 
 mod imp {
-    use std::cell::RefCell;
     use super::*;
+    use std::cell::RefCell;
 
     #[derive(Default)]
     pub struct SearchResultItem {
@@ -65,13 +64,31 @@ impl SearchResultItem {
         obj
     }
 
-    pub fn id(&self)           -> String { self.imp().id.borrow().clone() }
-    pub fn name(&self)         -> String { self.imp().name.borrow().clone() }
-    pub fn description(&self)  -> String { self.imp().description.borrow().clone() }
-    pub fn icon_themed(&self)  -> String { self.imp().icon_themed.borrow().clone() }
-    pub fn icon_file(&self)    -> String { self.imp().icon_file.borrow().clone() }
-    pub fn app_icon_name(&self)-> String { self.imp().app_icon_name.borrow().clone() }
-    pub fn bus_name(&self)     -> String { self.imp().bus_name.borrow().clone() }
-    pub fn object_path(&self)  -> String { self.imp().object_path.borrow().clone() }
-    pub fn terms(&self)        -> Vec<String> { self.imp().terms.borrow().clone() }
+    pub fn id(&self) -> String {
+        self.imp().id.borrow().clone()
+    }
+    pub fn name(&self) -> String {
+        self.imp().name.borrow().clone()
+    }
+    pub fn description(&self) -> String {
+        self.imp().description.borrow().clone()
+    }
+    pub fn icon_themed(&self) -> String {
+        self.imp().icon_themed.borrow().clone()
+    }
+    pub fn icon_file(&self) -> String {
+        self.imp().icon_file.borrow().clone()
+    }
+    pub fn app_icon_name(&self) -> String {
+        self.imp().app_icon_name.borrow().clone()
+    }
+    pub fn bus_name(&self) -> String {
+        self.imp().bus_name.borrow().clone()
+    }
+    pub fn object_path(&self) -> String {
+        self.imp().object_path.borrow().clone()
+    }
+    pub fn terms(&self) -> Vec<String> {
+        self.imp().terms.borrow().clone()
+    }
 }

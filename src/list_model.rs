@@ -26,23 +26,15 @@ pub struct AppListModel {
     all_apps: Rc<Vec<DesktopApp>>,
     max_results: usize,
     calculator_enabled: bool,
-    // Wrapped in Rc to avoid deep-cloning on every AppListModel::clone()
     commands: Rc<HashMap<String, String>>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
-    // flag to indicate that the Obsidian action buttons should be shown
     obsidian_action_mode: Rc<Cell<bool>>,
-    // flag: user is in ":ob <query>" file-search mode (Enter should open in Obsidian)
     obsidian_file_mode: Rc<Cell<bool>>,
-    // debounce timer for colon commands
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
-    // configurable debounce delay in milliseconds
     command_debounce_ms: u32,
-    // Cached fuzzy matcher – expensive to construct, reused on every populate()
     fuzzy_matcher: Rc<SkimMatcherV2>,
-    // Lazily-discovered GNOME Shell search providers (populated on first :s use)
     search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
-    // Flag: Enter on a CommandItem should activate a search-provider result
     search_provider_mode: Rc<Cell<bool>>,
 }
 
@@ -79,15 +71,12 @@ impl AppListModel {
         }
     }
 
-    // Cancel any pending debounced command
     fn cancel_debounce(&self) {
         if let Some(source_id) = self.command_debounce.borrow_mut().take() {
-            let _ = source_id.remove(); // ignore error – source may already be gone
+            let _ = source_id.remove();
         }
     }
 
-    // Schedule a closure to run after the configured debounce delay;
-    // cancels any previously scheduled command.
     fn schedule_command<F>(&self, f: F)
     where
         F: FnOnce() + 'static,
@@ -98,7 +87,6 @@ impl AppListModel {
         let source_id = glib::timeout_add_local(
             Duration::from_millis(self.command_debounce_ms.into()),
             move || {
-                // Clear the stored SourceId *before* calling f, because the timer has already fired.
                 *debounce_ref.borrow_mut() = None;
                 if let Some(f) = f_opt.take() {
                     f();
@@ -109,11 +97,6 @@ impl AppListModel {
         *self.command_debounce.borrow_mut() = Some(source_id);
     }
 
-    // Shared helper: runs `cmd` on a background thread, then delivers its
-    // stdout lines back to the GTK main thread via std::sync::mpsc +
-    // glib::idle_add_local_once (avoids the glib::channel API that changed
-    // between glib versions).  Results are discarded if a newer task_gen has
-    // been issued.
     fn run_subprocess(&self, mut cmd: std::process::Command) {
         let generation = self.task_gen.get();
         let max_results = self.max_results;
@@ -135,14 +118,7 @@ impl AppListModel {
             let _ = tx.send(lines);
         });
 
-        // Poll the receiver from the main thread without ever blocking it.
-        // If the subprocess hasn't finished yet we reschedule and try again
-        // on the next idle tick.
-        fn poll(
-            rx: std::sync::mpsc::Receiver<Vec<String>>,
-            model: AppListModel,
-            generation: u64,
-        ) {
+        fn poll(rx: std::sync::mpsc::Receiver<Vec<String>>, model: AppListModel, generation: u64) {
             match rx.try_recv() {
                 Ok(lines) => {
                     if model.task_gen.get() == generation {
@@ -156,30 +132,24 @@ impl AppListModel {
                     }
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    // Not ready yet – yield to GTK and try again.
                     glib::idle_add_local_once(move || poll(rx, model, generation));
                 }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    // Sender dropped without sending (subprocess failed); nothing to do.
-                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
             }
         }
         glib::idle_add_local_once(move || poll(rx, model_clone, generation));
     }
 
     pub fn populate(&self, query: &str) {
-        // Reset mode flags at the start of every population
         self.obsidian_action_mode.set(false);
         self.obsidian_file_mode.set(false);
         self.search_provider_mode.set(false);
 
-        // Cancel any pending command debounce (will be rescheduled if needed)
         self.cancel_debounce();
 
         // --- Colon command handling ---
         if query.starts_with(':') {
             let parts: Vec<&str> = query.splitn(2, ' ').collect();
-            // splitn on a non-empty string always yields at least one element
             let cmd_part = parts.first().copied().unwrap_or(query);
             let arg = parts.get(1).unwrap_or(&"").trim();
             let cmd_name = &cmd_part[1..];
@@ -187,21 +157,18 @@ impl AppListModel {
             // :s <query> — GNOME Shell search providers
             if cmd_name == "s" {
                 if arg.is_empty() {
-                    // Nothing typed yet: clear list and wait
                     self.store.remove_all();
                     self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
                     return;
                 }
-                // Lazily discover providers on first use
                 let providers = self
                     .search_providers
                     .get_or_init(search_provider::discover_providers);
                 if providers.is_empty() {
                     self.store.remove_all();
-                    self.store
-                        .append(&crate::cmd_item::CommandItem::new(
-                            "No GNOME Shell search providers found".to_string(),
-                        ));
+                    self.store.append(&crate::cmd_item::CommandItem::new(
+                        "No GNOME Shell search providers found".to_string(),
+                    ));
                     self.selection.set_selected(0);
                     return;
                 }
@@ -218,10 +185,8 @@ impl AppListModel {
                 return;
             }
 
-            // Special handling for obsidian commands — always available, regardless
-            // of whether the user has any custom commands configured.
+            // Obsidian commands
             if cmd_name == "ob" || cmd_name == "obg" {
-                // Check if obsidian is configured
                 let obs_cfg = match &self.obsidian_cfg {
                     Some(c) => c.clone(),
                     None => {
@@ -249,13 +214,11 @@ impl AppListModel {
                 match cmd_name {
                     "ob" => {
                         if arg.is_empty() {
-                            // Show buttons immediately, clear list
                             self.obsidian_action_mode.set(true);
                             self.store.remove_all();
                             self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
                             return;
                         } else {
-                            // Schedule find search and mark file-search mode
                             self.obsidian_file_mode.set(true);
                             // Increment generation to cancel previous async tasks
                             self.task_gen.set(self.task_gen.get() + 1);
@@ -265,11 +228,10 @@ impl AppListModel {
                             self.schedule_command(move || {
                                 model_clone.run_find_in_vault(PathBuf::from(vault_path), &arg);
                             });
-                            return; // Do NOT clear the list yet
+                            return;
                         }
                     }
                     "obg" => {
-                        // Schedule rg search
                         // Increment generation to cancel previous async tasks
                         self.task_gen.set(self.task_gen.get() + 1);
                         let vault_path = vault_path.to_string_lossy().to_string();
@@ -278,13 +240,13 @@ impl AppListModel {
                         self.schedule_command(move || {
                             model_clone.run_rg_in_vault(PathBuf::from(vault_path), &arg);
                         });
-                        return; // Do NOT clear the list yet
+                        return;
                     }
                     _ => unreachable!(),
                 }
             }
 
-            // Regular colon commands (from config) — only if any are configured.
+            // Regular colon commands (from config)
             if let Some(template) = (!self.commands.is_empty())
                 .then(|| self.commands.get(cmd_name))
                 .flatten()
@@ -293,12 +255,12 @@ impl AppListModel {
                 self.task_gen.set(self.task_gen.get() + 1);
                 let template = template.clone();
                 let arg = arg.to_string();
-                let cmd_name = cmd_name.to_string(); // clone to avoid lifetime issues
+                let cmd_name = cmd_name.to_string();
                 let model_clone = self.clone();
                 self.schedule_command(move || {
                     model_clone.run_command(&cmd_name, &template, &arg);
                 });
-                return; // Do NOT clear the list yet
+                return;
             } else {
                 // Unknown command: do nothing, keep the previous list
                 return;
@@ -309,12 +271,10 @@ impl AppListModel {
         self.store.remove_all();
 
         // Increment generation to cancel previous async tasks.
-        // Note: colon commands do not increment the generation because they are
-        // already gated by the debounce timer; only direct app/calculator queries
-        // need generation-based cancellation.
+        // (Colon commands also increment generation when they schedule a task.)
         self.task_gen.set(self.task_gen.get() + 1);
 
-        // Calculator (if enabled and query looks arithmetic)
+        // Calculator
         if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
             if let Some(result_str) = eval_expression(query) {
                 let calc_item = CalcItem::new(result_str);
@@ -332,9 +292,6 @@ impl AppListModel {
                 .all_apps
                 .iter()
                 .filter_map(|app| {
-                    // Compute best score across name and description.
-                    // Using Option::max avoids the i64::MIN / 2 trap that
-                    // previously allowed unmatched descriptions to pass the filter.
                     let name_score = self.fuzzy_matcher.fuzzy_match(&app.name, query);
                     let desc_score = if !app.description.is_empty() {
                         self.fuzzy_matcher
@@ -351,7 +308,6 @@ impl AppListModel {
                 })
                 .collect();
 
-            // sort_unstable_by is faster than sort_by for plain comparisons
             results.sort_unstable_by(|a, b| b.0.cmp(&a.0));
             results.truncate(self.max_results);
 
@@ -426,16 +382,13 @@ impl AppListModel {
         self.run_subprocess(cmd);
     }
 
-    /// Replaced `find` with `plocate` for faster file name searches.
-    /// Filters results to those inside the vault using `awk`.
     fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        let mut cmd = std::process::Command::new("sh");
-        cmd.arg("-c")
-            .arg("plocate -i \"$1\" | awk -v prefix=\"$2\" 'index($0, prefix)==1' | head -n $3")
-            .arg("--") // $0
-            .arg(pattern) // $1
-            .arg(vault_path.to_string_lossy().as_ref()) // $2
-            .arg(self.max_results.to_string()); // $3
+        let mut cmd = std::process::Command::new("find");
+        cmd.arg(&vault_path)
+            .arg("-type")
+            .arg("f")
+            .arg("-iname")
+            .arg(format!("*{}*", pattern));
         self.run_subprocess(cmd);
     }
 
@@ -454,11 +407,8 @@ impl AppListModel {
     pub fn create_factory(&self) -> SignalListItemFactory {
         let factory = SignalListItemFactory::new();
 
-        // Capture the mode flag so connect_bind can check it without storing
-        // per-item state.
         let obsidian_file_mode = self.obsidian_file_mode.clone();
 
-        // Resolve the Obsidian icon once: try well-known desktop IDs in order.
         let obsidian_icon = ["obsidian", "md.obsidian.Obsidian", "Obsidian"]
             .iter()
             .map(|id| crate::search_provider::resolve_app_icon(id))
@@ -553,19 +503,15 @@ impl AppListModel {
                 desc_label.set_text("");
             } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                 let line = cmd_item.line();
-                // Plain absolute path (output of :f, :ob, find …)
                 if line.starts_with('/') && !line.contains(':') {
                     if obsidian_file_mode.get() {
-                        // :ob mode — show the Obsidian app icon for every result.
                         image.set_icon_name(Some(&obsidian_icon));
                     } else {
-                        // :f / generic — resolve MIME-type icon from the theme.
                         let (ctype, _) =
-                            gtk4::gio::content_type_guess(Some(line.as_str()), &[]);
+                            gtk4::gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
                         let icon = gtk4::gio::content_type_get_icon(&ctype);
                         image.set_from_gicon(&icon);
                     }
-                    // Filename as main label, parent dir as subtitle.
                     let filename = std::path::Path::new(&line)
                         .file_name()
                         .and_then(|n| n.to_str())
@@ -588,8 +534,6 @@ impl AppListModel {
                     desc_label.set_text("");
                 }
             } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
-                // Icon priority: result-specific file > result-specific themed >
-                //                app fallback > generic "system-search"
                 let icon_file = sr_item.icon_file();
                 let icon_themed = sr_item.icon_themed();
                 let app_icon = sr_item.app_icon_name();
@@ -620,21 +564,11 @@ impl AppListModel {
         factory
     }
 
-    // Public getter for the Obsidian action mode flag
     pub fn obsidian_action_mode(&self) -> bool {
         self.obsidian_action_mode.get()
     }
 
-    /// True when the user is in `:ob <query>` file-search mode.
-    /// The key handler should call `actions::open_obsidian_file_path` with the
-    /// selected `CommandItem`'s text when Enter is pressed and this returns `true`.
     pub fn obsidian_file_mode(&self) -> bool {
         self.obsidian_file_mode.get()
-    }
-
-    /// True when the user is in `:s <query>` search-provider mode.
-    /// Enter on a `SearchResultItem` should call `search_provider::activate_result`.
-    pub fn search_provider_mode(&self) -> bool {
-        self.search_provider_mode.get()
     }
 }

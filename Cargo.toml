@@ -20,3 +20,5 @@ evalexpr = "8.0"
 regex = "1.10"
 chrono = "0.4"
 urlencoding = "2.1"
+zbus = "5.14.0"
+tokio = { version = "1.49.0", features = ["rt", "time", "macros"] }
