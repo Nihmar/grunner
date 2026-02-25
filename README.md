@@ -69,7 +69,7 @@ sudo systemctl enable --now plocate-updatedb.timer
 ### Build from source
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Nihmar/grunner.git
 cd grunner
 cargo build --release
 ```
