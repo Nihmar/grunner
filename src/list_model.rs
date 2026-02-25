@@ -77,7 +77,7 @@ impl AppListModel {
         }
     }
 
-    fn schedule_command<F>(&self, f: F)
+    fn schedule_command_with_delay<F>(&self, delay_ms: u32, f: F)
     where
         F: FnOnce() + 'static,
     {
@@ -85,7 +85,7 @@ impl AppListModel {
         let mut f_opt = Some(f);
         let debounce_ref = self.command_debounce.clone();
         let source_id = glib::timeout_add_local(
-            Duration::from_millis(self.command_debounce_ms.into()),
+            Duration::from_millis(delay_ms.into()),
             move || {
                 *debounce_ref.borrow_mut() = None;
                 if let Some(f) = f_opt.take() {
@@ -95,6 +95,13 @@ impl AppListModel {
             },
         );
         *self.command_debounce.borrow_mut() = Some(source_id);
+    }
+
+    fn schedule_command<F>(&self, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.schedule_command_with_delay(self.command_debounce_ms, f);
     }
 
     fn run_subprocess(&self, mut cmd: std::process::Command) {
@@ -179,7 +186,8 @@ impl AppListModel {
                 let arg = arg.to_string();
                 let max = self.max_results;
                 let model_clone = self.clone();
-                self.schedule_command(move || {
+                // Use a shorter debounce for search providers (120 ms)
+                self.schedule_command_with_delay(120, move || {
                     model_clone.run_provider_search(providers_clone, arg, max);
                 });
                 return;
@@ -326,23 +334,33 @@ impl AppListModel {
         let model_clone = self.clone();
         let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
 
+        // Clear the store immediately so stale results don't linger.
+        self.store.remove_all();
+        self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
+
         let (tx, rx) = std::sync::mpsc::channel::<Vec<search_provider::SearchResult>>();
 
         std::thread::spawn(move || {
-            let results = search_provider::run_search(&providers, &query, max);
-            let _ = tx.send(results);
+            search_provider::run_search_streaming(&providers, &query, max, tx);
         });
 
+        // Poll the channel and append each provider's batch as it arrives.
         fn poll(
             rx: std::sync::mpsc::Receiver<Vec<search_provider::SearchResult>>,
             model: AppListModel,
             generation: u64,
             terms: Vec<String>,
         ) {
-            match rx.try_recv() {
-                Ok(results) => {
-                    if model.task_gen.get() == generation {
-                        model.store.remove_all();
+            if model.task_gen.get() != generation {
+                return; // search cancelled
+            }
+            // Drain all batches that are ready right now.
+            loop {
+                match rx.try_recv() {
+                    Ok(results) => {
+                        if model.task_gen.get() != generation {
+                            return;
+                        }
                         for r in results {
                             let (icon_themed, icon_file) = match r.icon {
                                 Some(search_provider::IconData::Themed(n)) => (n, String::new()),
@@ -366,11 +384,16 @@ impl AppListModel {
                             model.selection.set_selected(0);
                         }
                     }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                        // More providers may still respond — re-schedule.
+                        glib::idle_add_local_once(move || poll(rx, model, generation, terms));
+                        return;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        // All providers finished.
+                        return;
+                    }
                 }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    glib::idle_add_local_once(move || poll(rx, model, generation, terms));
-                }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
             }
         }
         glib::idle_add_local_once(move || poll(rx, model_clone, generation, terms));

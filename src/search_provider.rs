@@ -2,9 +2,42 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::time::Duration;
+use futures::stream::{FuturesUnordered, StreamExt};
 use zbus::Connection;
 use zbus::zvariant::OwnedValue;
+
+// ---------------------------------------------------------------------------
+// Cached tokio runtime & D-Bus session connection
+// ---------------------------------------------------------------------------
+
+/// A single multi-thread tokio runtime (1 worker) that lives for the process
+/// lifetime.  Keeping it alive means the zbus `Connection` (which spawns
+/// internal tasks on the runtime) never loses its executor.
+static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+/// Session-bus connection, created once and reused for every search.
+static DBUS_CONN: OnceLock<Connection> = OnceLock::new();
+
+fn get_runtime() -> &'static tokio::runtime::Runtime {
+    TOKIO_RT.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("[search] failed to build tokio runtime")
+    })
+}
+
+async fn get_or_init_conn() -> zbus::Result<Connection> {
+    if let Some(c) = DBUS_CONN.get() {
+        return Ok(c.clone());
+    }
+    let conn = Connection::session().await?;
+    Ok(DBUS_CONN.get_or_init(|| conn).clone())
+}
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -15,6 +48,8 @@ pub struct SearchProvider {
     pub bus_name: String,
     pub object_path: String,
     pub desktop_id: String,
+    /// Icon name resolved once from the .desktop file at discovery time.
+    pub app_icon: String,
 }
 
 /// Icon carried by a search result — two possible representations.
@@ -104,6 +139,7 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
     Some(SearchProvider {
         bus_name: bus_name?,
         object_path: object_path?,
+        app_icon: resolve_app_icon(desktop_id.as_deref().unwrap_or_default()),
         desktop_id: desktop_id.unwrap_or_default(),
     })
 }
@@ -291,63 +327,61 @@ fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
 // Querying
 // ---------------------------------------------------------------------------
 
-pub fn run_search(
+pub fn run_search_streaming(
     providers: &[SearchProvider],
     query: &str,
     max_per_provider: usize,
-) -> Vec<SearchResult> {
+    tx: std::sync::mpsc::Sender<Vec<SearchResult>>,
+) {
     let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
     if terms.is_empty() {
-        return vec![];
+        return;
     }
 
-    let rt: Result<tokio::runtime::Runtime, _> = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .enable_time()
-        .build();
-
-    match rt {
-        Ok(rt) => rt.block_on(query_all(providers, &terms, max_per_provider)),
-        Err(e) => {
-            eprintln!("[search] failed to build tokio runtime: {}", e);
-            vec![]
-        }
-    }
+    get_runtime().block_on(query_all_streaming(providers, &terms, max_per_provider, tx));
 }
 
-async fn query_all(
+async fn query_all_streaming(
     providers: &[SearchProvider],
     terms: &[String],
     max_per_provider: usize,
-) -> Vec<SearchResult> {
-    let Ok(conn) = Connection::session().await else {
-        eprintln!("[search] cannot connect to session bus");
-        return vec![];
+    tx: std::sync::mpsc::Sender<Vec<SearchResult>>,
+) {
+    let conn = match get_or_init_conn().await {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[search] cannot connect to session bus: {}", e);
+            return;
+        }
     };
 
     let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
 
-    // Query all providers concurrently instead of sequentially.
-    let futures: Vec<_> = providers
+    // Query all providers concurrently; stream results as each finishes.
+    let mut futs: FuturesUnordered<_> = providers
         .iter()
         .map(|provider| {
-            let app_icon = resolve_app_icon(&provider.desktop_id);
             let conn = conn.clone();
             let terms_str = terms_str.clone();
-            async move { query_one(&conn, provider, &terms_str, max_per_provider, &app_icon).await }
+            let bus_name = provider.bus_name.clone();
+            async move {
+                let result = query_one(&conn, provider, &terms_str, max_per_provider).await;
+                (bus_name, result)
+            }
         })
         .collect();
 
-    let outcomes = futures::future::join_all(futures).await;
-
-    let mut out = Vec::new();
-    for (provider, outcome) in providers.iter().zip(outcomes) {
+    while let Some((bus_name, outcome)) = futs.next().await {
         match outcome {
-            Ok(mut results) => out.append(&mut results),
-            Err(e) => eprintln!("[search] provider {} error: {}", provider.bus_name, e),
+            Ok(results) if !results.is_empty() => {
+                if tx.send(results).is_err() {
+                    break; // receiver dropped — search cancelled
+                }
+            }
+            Err(e) => eprintln!("[search] provider {} error: {}", bus_name, e),
+            _ => {}
         }
     }
-    out
 }
 
 async fn query_one(
@@ -355,7 +389,6 @@ async fn query_one(
     provider: &SearchProvider,
     terms: &[&str],
     max_results: usize,
-    app_icon: &str,
 ) -> zbus::Result<Vec<SearchResult>> {
     use tokio::time::timeout;
 
@@ -389,7 +422,7 @@ async fn query_one(
 
     let results = metas
         .into_iter()
-        .filter_map(|meta| build_result(meta, provider, app_icon))
+        .filter_map(|meta| build_result(meta, provider, &provider.app_icon))
         .collect();
 
     Ok(results)
@@ -433,21 +466,8 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
     let result_id = result_id.to_string();
     let terms = terms.to_vec();
 
-    let rt: Result<tokio::runtime::Runtime, _> = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .enable_time()
-        .build();
-
-    let rt = match rt {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("[search] runtime error: {}", e);
-            return;
-        }
-    };
-
-    rt.block_on(async move {
-        let Ok(conn) = Connection::session().await else {
+    get_runtime().block_on(async move {
+        let Ok(conn) = get_or_init_conn().await else {
             return;
         };
         let Ok(proxy) = zbus::Proxy::new(
