@@ -334,34 +334,57 @@ impl AppListModel {
         let model_clone = self.clone();
         let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
 
-        // Clear the store immediately so stale results don't linger.
-        self.store.remove_all();
-        self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
+        // --- 1. Schedule a delayed clear (avoids empty flash for fast providers) ---
+        let clear_timeout = Rc::new(RefCell::new(None::<glib::SourceId>));
+        let clear_model = self.clone();
+        let clear_gen = generation;
+        let clear_timeout_clone = clear_timeout.clone();
+        let timeout_id = glib::timeout_add_local(
+            Duration::from_millis(80), // tune this value as needed
+            move || {
+                if clear_model.task_gen.get() == clear_gen {
+                    clear_model.store.remove_all();
+                    clear_model
+                        .selection
+                        .set_selected(gtk4::INVALID_LIST_POSITION);
+                }
+                *clear_timeout_clone.borrow_mut() = None;
+                glib::ControlFlow::Break
+            },
+        );
+        *clear_timeout.borrow_mut() = Some(timeout_id);
 
+        // --- 2. Start the background search ---
         let (tx, rx) = std::sync::mpsc::channel::<Vec<search_provider::SearchResult>>();
-
         std::thread::spawn(move || {
             search_provider::run_search_streaming(&providers, &query, max, tx);
         });
 
-        // Poll the channel and append each provider's batch as it arrives.
+        // --- 3. Poll for results with first‑batch handling ---
+        let first_batch = Rc::new(Cell::new(false));
         fn poll(
             rx: std::sync::mpsc::Receiver<Vec<search_provider::SearchResult>>,
             model: AppListModel,
             generation: u64,
             terms: Vec<String>,
+            clear_timeout: Rc<RefCell<Option<glib::SourceId>>>,
+            first_batch: Rc<Cell<bool>>,
         ) {
             if model.task_gen.get() != generation {
-                return; // search cancelled
+                return;
             }
-            // Drain all batches that are ready right now.
             loop {
                 match rx.try_recv() {
                     Ok(results) => {
                         if model.task_gen.get() != generation {
                             return;
                         }
-                        // Convert all results in this batch to Object items at once
+                        // Cancel the clear timeout – results are here in time
+                        if let Some(id) = clear_timeout.borrow_mut().take() {
+                            id.remove();
+                        }
+
+                        // Convert all results in this batch to Objects
                         let items: Vec<glib::Object> = results
                             .into_iter()
                             .map(|r| {
@@ -387,10 +410,15 @@ impl AppListModel {
                             })
                             .collect();
 
-                        // Append the whole batch in one go
+                        // If this is the very first batch, replace any stale content
+                        if !first_batch.get() {
+                            model.store.remove_all(); // clears old list (apps, etc.)
+                            first_batch.set(true);
+                        }
+                        // Append the whole batch at once
                         model.store.splice(model.store.n_items(), 0, &items);
 
-                        // Set selection only if the store was previously empty
+                        // Set selection only if the list was previously empty
                         if model.store.n_items() > 0
                             && model.selection.selected() == gtk4::INVALID_LIST_POSITION
                         {
@@ -398,18 +426,28 @@ impl AppListModel {
                         }
                     }
                     Err(std::sync::mpsc::TryRecvError::Empty) => {
-                        // More providers may still respond — re-schedule.
-                        glib::idle_add_local_once(move || poll(rx, model, generation, terms));
+                        glib::idle_add_local_once(move || {
+                            poll(rx, model, generation, terms, clear_timeout, first_batch)
+                        });
                         return;
                     }
                     Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        // All providers finished.
                         return;
                     }
                 }
             }
         }
-        glib::idle_add_local_once(move || poll(rx, model_clone, generation, terms));
+
+        glib::idle_add_local_once(move || {
+            poll(
+                rx,
+                model_clone,
+                generation,
+                terms,
+                clear_timeout,
+                first_batch,
+            )
+        });
     }
 
     fn run_command(&self, _cmd_name: &str, template: &str, argument: &str) {
