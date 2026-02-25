@@ -7,6 +7,8 @@ mod config;
 mod launcher;
 mod list_model;
 mod obsidian_item;
+mod search_provider;
+mod search_result_item;
 mod ui;
 use gtk4::prelude::*;
 use libadwaita::Application;

@@ -267,7 +267,11 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             let path = folder.join(format!("{}.md", today));
             // create(true) + append(true) handles both "create if new" and "append if exists"
             // in a single open — no need for a separate File::create step.
-            let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let mut file = match fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
                 Ok(f) => f,
                 Err(e) => {
                     eprintln!("Cannot open daily note {}: {}", path.display(), e);
@@ -321,8 +325,10 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
         eprintln!("Vault path does not exist: {}", vault_path.display());
         return;
     }
-    let uri = format!("obsidian://open?path={}", urlencoding::encode(file_path));
-    println!("uri: {}", uri);
+    let uri = format!(
+        "obsidian://open?path={}",
+        urlencoding::encode(file_path)
+    );
     open_uri(&uri);
 }
 

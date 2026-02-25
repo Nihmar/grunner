@@ -9,6 +9,7 @@ use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
 use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
+use crate::search_result_item::SearchResultItem;
 use glib::clone;
 use gtk4::gdk::Key;
 use gtk4::prelude::DisplayExt;
@@ -119,7 +120,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     let power_bar = build_power_bar(&window, &entry);
 
-    let factory = AppListModel::create_factory();
+    let factory = model.create_factory();
     let list_view = ListView::new(Some(model.selection.clone()), Some(factory));
     list_view.set_single_click_activate(false);
     list_view.add_css_class("app-list");
@@ -181,12 +182,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 }
                 Key::Return | Key::KP_Enter => {
                     let pos = model.selection.selected();
-                    eprintln!(
-                        "[debug] Return pressed  pos={}  file_mode={}  n_items={}",
-                        model.selection.selected(),
-                        model.obsidian_file_mode(),
-                        model.store.n_items()
-                    );
                     if let Some(obj) = model.store.item(pos) {
                         if let Some(app_item) = obj.downcast_ref::<AppItem>() {
                             launch_app(&app_item.exec(), app_item.terminal());
@@ -198,12 +193,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             let clipboard = display.clipboard();
                             clipboard.set_text(number);
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                            eprintln!(
-                                "[debug] Enter on CommandItem: {:?}  obsidian_file_mode={}  cfg={}",
-                                cmd_item.line(),
-                                model.obsidian_file_mode(),
-                                model.obsidian_cfg.is_some()
-                            );
+                            // In :ob file-search mode open the file directly in Obsidian;
+                            // otherwise fall back to the generic file/line opener.
                             if model.obsidian_file_mode() {
                                 if let Some(cfg) = &model.obsidian_cfg {
                                     open_obsidian_file_path(&cmd_item.line(), cfg);
@@ -217,6 +208,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                                 let arg = obs_item.arg();
                                 perform_obsidian_action(action, arg.as_deref(), cfg);
                             }
+                        } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
+                            let bus = sr_item.bus_name();
+                            let path = sr_item.object_path();
+                            let id = sr_item.id();
+                            let terms = sr_item.terms();
+                            std::thread::spawn(move || {
+                                crate::search_provider::activate_result(&bus, &path, &id, &terms);
+                            });
                         }
                     }
                     window.close();
@@ -299,6 +298,15 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                         let arg = obs_item.arg();
                         perform_obsidian_action(action, arg.as_deref(), cfg);
                     }
+                    window.close();
+                } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
+                    let bus = sr_item.bus_name();
+                    let path = sr_item.object_path();
+                    let id = sr_item.id();
+                    let terms = sr_item.terms();
+                    std::thread::spawn(move || {
+                        crate::search_provider::activate_result(&bus, &path, &id, &terms);
+                    });
                     window.close();
                 }
             } else {

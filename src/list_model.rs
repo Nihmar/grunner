@@ -5,6 +5,8 @@ use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
 use crate::config::expand_home;
 use crate::launcher::DesktopApp;
+use crate::search_provider::{self, SearchProvider};
+use crate::search_result_item::SearchResultItem;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use glib::object::Cast;
@@ -38,6 +40,10 @@ pub struct AppListModel {
     command_debounce_ms: u32,
     // Cached fuzzy matcher – expensive to construct, reused on every populate()
     fuzzy_matcher: Rc<SkimMatcherV2>,
+    // Lazily-discovered GNOME Shell search providers (populated on first :s use)
+    search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
+    // Flag: Enter on a CommandItem should activate a search-provider result
+    search_provider_mode: Rc<Cell<bool>>,
 }
 
 impl AppListModel {
@@ -68,6 +74,8 @@ impl AppListModel {
             command_debounce: Rc::new(RefCell::new(None)),
             command_debounce_ms,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
+            search_providers: Rc::new(std::cell::OnceCell::new()),
+            search_provider_mode: Rc::new(Cell::new(false)),
         }
     }
 
@@ -130,7 +138,11 @@ impl AppListModel {
         // Poll the receiver from the main thread without ever blocking it.
         // If the subprocess hasn't finished yet we reschedule and try again
         // on the next idle tick.
-        fn poll(rx: std::sync::mpsc::Receiver<Vec<String>>, model: AppListModel, generation: u64) {
+        fn poll(
+            rx: std::sync::mpsc::Receiver<Vec<String>>,
+            model: AppListModel,
+            generation: u64,
+        ) {
             match rx.try_recv() {
                 Ok(lines) => {
                     if model.task_gen.get() == generation {
@@ -156,9 +168,10 @@ impl AppListModel {
     }
 
     pub fn populate(&self, query: &str) {
-        // Reset Obsidian action mode at the start of every population
+        // Reset mode flags at the start of every population
         self.obsidian_action_mode.set(false);
         self.obsidian_file_mode.set(false);
+        self.search_provider_mode.set(false);
 
         // Cancel any pending command debounce (will be rescheduled if needed)
         self.cancel_debounce();
@@ -170,6 +183,38 @@ impl AppListModel {
             let cmd_part = parts.first().copied().unwrap_or(query);
             let arg = parts.get(1).unwrap_or(&"").trim();
             let cmd_name = &cmd_part[1..];
+
+            // :s <query> — GNOME Shell search providers
+            if cmd_name == "s" {
+                if arg.is_empty() {
+                    // Nothing typed yet: clear list and wait
+                    self.store.remove_all();
+                    self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
+                    return;
+                }
+                // Lazily discover providers on first use
+                let providers = self
+                    .search_providers
+                    .get_or_init(search_provider::discover_providers);
+                if providers.is_empty() {
+                    self.store.remove_all();
+                    self.store
+                        .append(&crate::cmd_item::CommandItem::new(
+                            "No GNOME Shell search providers found".to_string(),
+                        ));
+                    self.selection.set_selected(0);
+                    return;
+                }
+                self.search_provider_mode.set(true);
+                let providers_clone: Vec<SearchProvider> = providers.to_vec();
+                let arg = arg.to_string();
+                let max = self.max_results;
+                let model_clone = self.clone();
+                self.schedule_command(move || {
+                    model_clone.run_provider_search(providers_clone, arg, max);
+                });
+                return;
+            }
 
             // Special handling for obsidian commands — always available, regardless
             // of whether the user has any custom commands configured.
@@ -312,6 +357,61 @@ impl AppListModel {
         }
     }
 
+    fn run_provider_search(&self, providers: Vec<SearchProvider>, query: String, max: usize) {
+        let generation = self.task_gen.get();
+        let model_clone = self.clone();
+        let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<search_provider::SearchResult>>();
+
+        std::thread::spawn(move || {
+            let results = search_provider::run_search(&providers, &query, max);
+            let _ = tx.send(results);
+        });
+
+        fn poll(
+            rx: std::sync::mpsc::Receiver<Vec<search_provider::SearchResult>>,
+            model: AppListModel,
+            generation: u64,
+            terms: Vec<String>,
+        ) {
+            match rx.try_recv() {
+                Ok(results) => {
+                    if model.task_gen.get() == generation {
+                        model.store.remove_all();
+                        for r in results {
+                            let (icon_themed, icon_file) = match r.icon {
+                                Some(search_provider::IconData::Themed(n)) => (n, String::new()),
+                                Some(search_provider::IconData::File(p))   => (String::new(), p),
+                                None => (String::new(), String::new()),
+                            };
+                            let item = SearchResultItem::new(
+                                r.id,
+                                r.name,
+                                r.description,
+                                icon_themed,
+                                icon_file,
+                                r.app_icon,
+                                r.bus_name,
+                                r.object_path,
+                                terms.clone(),
+                            );
+                            model.store.append(&item);
+                        }
+                        if model.store.n_items() > 0 {
+                            model.selection.set_selected(0);
+                        }
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    glib::idle_add_local_once(move || poll(rx, model, generation, terms));
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
+            }
+        }
+        glib::idle_add_local_once(move || poll(rx, model_clone, generation, terms));
+    }
+
     fn run_command(&self, _cmd_name: &str, template: &str, argument: &str) {
         let mut cmd = std::process::Command::new("sh");
         cmd.arg("-c").arg(template).arg("--").arg(argument);
@@ -342,8 +442,19 @@ impl AppListModel {
         self.run_subprocess(cmd);
     }
 
-    pub fn create_factory() -> SignalListItemFactory {
+    pub fn create_factory(&self) -> SignalListItemFactory {
         let factory = SignalListItemFactory::new();
+
+        // Capture the mode flag so connect_bind can check it without storing
+        // per-item state.
+        let obsidian_file_mode = self.obsidian_file_mode.clone();
+
+        // Resolve the Obsidian icon once: try well-known desktop IDs in order.
+        let obsidian_icon = ["obsidian", "md.obsidian.Obsidian", "Obsidian"]
+            .iter()
+            .map(|id| crate::search_provider::resolve_app_icon(id))
+            .find(|s| !s.is_empty())
+            .unwrap_or_else(|| "text-x-markdown".to_string());
 
         factory.connect_setup(|_, list_item| {
             let list_item = list_item.downcast_ref::<ListItem>().unwrap();
@@ -380,7 +491,7 @@ impl AppListModel {
             list_item.set_child(Some(&hbox));
         });
 
-        factory.connect_bind(|_, list_item| {
+        factory.connect_bind(move |_, list_item| {
             let list_item = list_item.downcast_ref::<ListItem>().unwrap();
             let obj = match list_item.item() {
                 Some(o) => o,
@@ -432,10 +543,65 @@ impl AppListModel {
                 desc_label.set_visible(false);
                 desc_label.set_text("");
             } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                image.set_icon_name(Some("system-search"));
-                name_label.set_text(&cmd_item.line());
-                desc_label.set_visible(false);
-                desc_label.set_text("");
+                let line = cmd_item.line();
+                // Plain absolute path (output of :f, :ob, find …)
+                if line.starts_with('/') && !line.contains(':') {
+                    if obsidian_file_mode.get() {
+                        // :ob mode — show the Obsidian app icon for every result.
+                        image.set_icon_name(Some(&obsidian_icon));
+                    } else {
+                        // :f / generic — resolve MIME-type icon from the theme.
+                        let (ctype, _) =
+                            gtk4::gio::content_type_guess(Some(line.as_str()), &[]);
+                        let icon = gtk4::gio::content_type_get_icon(&ctype);
+                        image.set_from_gicon(&icon);
+                    }
+                    // Filename as main label, parent dir as subtitle.
+                    let filename = std::path::Path::new(&line)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(&line);
+                    name_label.set_text(filename);
+                    if let Some(parent) = std::path::Path::new(&line)
+                        .parent()
+                        .and_then(|p| p.to_str())
+                    {
+                        desc_label.set_visible(true);
+                        desc_label.set_text(parent);
+                    } else {
+                        desc_label.set_visible(false);
+                        desc_label.set_text("");
+                    }
+                } else {
+                    image.set_icon_name(Some("system-search"));
+                    name_label.set_text(&line);
+                    desc_label.set_visible(false);
+                    desc_label.set_text("");
+                }
+            } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
+                // Icon priority: result-specific file > result-specific themed >
+                //                app fallback > generic "system-search"
+                let icon_file = sr_item.icon_file();
+                let icon_themed = sr_item.icon_themed();
+                let app_icon = sr_item.app_icon_name();
+                if !icon_file.is_empty() {
+                    image.set_from_file(Some(&icon_file));
+                } else if !icon_themed.is_empty() {
+                    image.set_icon_name(Some(&icon_themed));
+                } else if !app_icon.is_empty() {
+                    image.set_icon_name(Some(&app_icon));
+                } else {
+                    image.set_icon_name(Some("system-search"));
+                }
+                name_label.set_text(&sr_item.name());
+                let desc = sr_item.description();
+                if desc.is_empty() {
+                    desc_label.set_visible(false);
+                    desc_label.set_text("");
+                } else {
+                    desc_label.set_visible(true);
+                    desc_label.set_text(&desc);
+                }
             } else {
                 name_label.set_text("?");
                 desc_label.set_visible(false);
@@ -455,5 +621,11 @@ impl AppListModel {
     /// selected `CommandItem`'s text when Enter is pressed and this returns `true`.
     pub fn obsidian_file_mode(&self) -> bool {
         self.obsidian_file_mode.get()
+    }
+
+    /// True when the user is in `:s <query>` search-provider mode.
+    /// Enter on a `SearchResultItem` should call `search_provider::activate_result`.
+    pub fn search_provider_mode(&self) -> bool {
+        self.search_provider_mode.get()
     }
 }
