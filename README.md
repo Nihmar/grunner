@@ -1,38 +1,32 @@
 # grunner
 
-A rofi‑like application launcher for GNOME, written in Rust using GTK4 and libadwaita.  
-Fast, fuzzy‑searching, with an inline calculator, custom colon commands, and integrated Obsidian vault actions.
+A fast, keyboard-driven application launcher for GNOME and other Linux desktops, written in Rust. Inspired by Rofi, grunner is built on GTK4 and libadwaita, and follows your system's light/dark theme and accent color automatically.
 
----
-
-## DISCLAIMER
-
-This project is vibecoded using Deepseek and Claude (free version). That's all folks.
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ---
 
 ## Features
 
-- 🔍 **Fuzzy search** through desktop applications (`.desktop` files)
-- 🧮 **Inline calculator** – evaluate expressions while typing (e.g., `2+2`, `16^(1/4)`)
-- ⚡ **System actions**: Suspend, Restart, Power Off, Log Out (with confirmation)
-- ⚙️ **Settings button** – opens the configuration file in your default editor
-- ⌨️ **Keyboard navigation** (arrows, page up/down, Enter, Esc)
-- 🎨 **Adwaita‑style theming** – follows light/dark mode and the system accent colour
-- 🧩 **Highly configurable** – window size, max results, app directories, calculator toggle, command debounce delay
-- **Colon commands** – define your own shell‑based commands (e.g., `:f pattern` to find files)
-- **Obsidian integration** – open vaults, create daily/quick notes, search filenames and content
-- **Smart file opening** – for command results like `file:line:content`, opens at the correct line in `$EDITOR`
+- **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
+- **Inline calculator** — evaluate arithmetic expressions directly in the search bar; press Enter to copy the result to the clipboard
+- **Colon commands** — extensible command system for file search, full-text grep, GNOME Shell search providers, and Obsidian integration
+- **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
+- **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, Calculator, GNOME Calendar, etc.) via `:s`
+- **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
+- **Settings shortcut** — opens your config file with `xdg-open` for quick editing
+- **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
+- **Configurable** — a single TOML file controls window size, search directories, result limits, calculator toggle, custom commands, debounce timing, and Obsidian paths
 
 ---
 
-## Installation
+## Dependencies
 
-### Dependencies
+### Build dependencies
 
 - **Rust** (edition 2024)
-- **GTK4** (>= 0.10)
-- **libadwaita** (>= 0.8 with `v1_6` feature)
+- **GTK4** (≥ 0.10)
+- **libadwaita** (≥ 0.8 with `v1_6` feature)
 
 Install them on your distribution:
 
@@ -51,55 +45,170 @@ sudo apt install rustc cargo libgtk-4-dev libadwaita-1-dev plocate
 sudo pacman -S rust gtk4 libadwaita plocate
 ```
 
-After installation, enable the auto-update of `plocate`'s index:
+After installing `plocate`, enable its index auto-update so that `:f` searches stay current:
 
 ```bash
 sudo updatedb
 sudo systemctl enable --now plocate-updatedb.timer
 ```
 
+### Optional runtime tools
+
+| Tool | Used by | Notes |
+|---|---|---|
+| `plocate` | `:f` file search | Index must be populated via `updatedb` |
+| `rg` (ripgrep) | `:fg` full-text grep, `:obg` vault grep | |
+| Terminal emulator | Apps with `Terminal=true` | Auto-detected in order: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm` |
+| `obsidian` | `:ob` / `:obg` commands | Must be launchable via `xdg-open obsidian://…` |
+| `systemctl` / `loginctl` | Power bar (suspend, reboot, poweroff, logout) | Standard on systemd-based distros |
+
+---
+
+## Installation
 
 ### Build from source
 
 ```bash
-rm -rf grunner
-git clone https://github.com/Nihmar/grunner.git
+git clone <repo-url>
 cd grunner
-./build.sh
+cargo build --release
 ```
 
-The `build.sh` script compiles the project in release mode and copies the binary to `~/.local/bin/grunner`.  
-Make sure `~/.local/bin` is in your `PATH` (add `export PATH="$HOME/.local/bin:$PATH"` to your shell configuration).
+The compiled binary will be at `target/release/grunner`.
+
+### Install to `~/.local/bin`
+
+A convenience script is included:
+
+```bash
+bash build.sh
+```
+
+This runs `cargo build --release` and copies the binary to `~/.local/bin/grunner`. Make sure `~/.local/bin` is on your `$PATH`.
+
+### Bind to a keyboard shortcut
+
+In GNOME Settings → Keyboard → Custom Shortcuts, add:
+
+| Name | Command | Suggested shortcut |
+|---|---|---|
+| grunner | `/home/<user>/.local/bin/grunner/grunner` | `Super+Space` or `Alt+F2` |
 
 ---
 
 ## Usage
 
-Run `grunner` from a terminal or bind it to a keyboard shortcut (e.g., in GNOME Settings → Keyboard → View and Customize Shortcuts → add custom shortcut with command `grunner`).
+Launch `grunner`. The window appears with a search bar focused and ready for input.
 
-- **Type** to search for applications. The list updates in real time with fuzzy matching.
-- **Press `Enter`** to launch the selected application, copy a calculator result, or execute a colon command result.
-- **Press `Esc`** to close the launcher.
-- Use the **power buttons** at the bottom to suspend, restart, power off, or log out.
+### Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| Type anything | Filter applications (fuzzy search) |
+| `Enter` | Launch selected app / activate selected result |
+| `↑` / `↓` | Move selection up / down |
+| `Page Up` / `Page Down` | Jump 10 items up / down |
+| `Escape` | Close the launcher |
+
+---
+
+## Search modes
+
+### Default — application search
+
+Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row.
+
+### Calculator mode
+
+Enabled via `calculator.enabled = true` in your config. When the search query consists entirely of arithmetic characters (`0–9 . + - * / % ^ ( )`), grunner evaluates the expression live and shows the result as the first item. Press `Enter` to copy the numeric result to the clipboard.
+
+```
+7/3         →   = 2.333333
+(12 + 8)*5  →   = 100
+```
+
+Integer literals are automatically promoted to floats so that `7/2` yields `3.5`, not `3`. Partial expressions are evaluated as you type.
+
+### Colon commands
+
+Type `:` followed by a command name and an optional argument:
+
+```
+:<command> [argument]
+```
+
+#### `:f <pattern>` — file search
+
+Searches your home directory using `plocate` (case-insensitive). Results are displayed with the filename as the title and the parent directory as the subtitle. Press `Enter` to open the file with `xdg-open` or, for text files, with `$EDITOR` at the matched line.
+
+```
+:f invoice 2024
+```
+
+#### `:fg <pattern>` — full-text grep
+
+Searches file contents recursively under `~` using `ripgrep`. Results are displayed in `file:line:content` format with the filename as the title. Press `Enter` to open the file at the matching line in `$EDITOR`.
+
+```
+:fg TODO fixme
+```
+
+#### `:s <query>` — GNOME Shell search providers
+
+Queries all installed and enabled GNOME Shell search providers in parallel (e.g., GNOME Files, GNOME Calendar, GNOME Contacts). Results from all providers are merged and displayed with the provider's icon. Press `Enter` to activate the result through the provider's D-Bus interface.
+
+```
+:s meeting notes
+```
+
+#### `:ob [text]` — Obsidian actions
+
+Requires `[obsidian]` to be configured (see [Configuration](#configuration)). Displays an action bar with four buttons:
+
+| Button | Action |
+|---|---|
+| **Open Vault** | Opens the configured vault in Obsidian |
+| **New Note** | Creates a new timestamped note in `new_notes_folder`, optionally pre-filled with `[text]`, then opens it |
+| **Daily Note** | Opens (or creates) today's daily note in `daily_notes_folder`, optionally appending `[text]` |
+| **Quick Note** | Appends `[text]` to the configured `quick_note` file, then opens it |
+
+```
+:ob pick up milk
+```
+
+Selecting a result from the list opens that vault file directly in Obsidian.
+
+#### `:obg <pattern>` — Obsidian vault grep
+
+Searches the content of all Markdown files in your vault using `rg`. Results show the matching line. Press `Enter` to open the file at that line in Obsidian.
+
+```
+:obg project alpha
+```
+
+#### Custom commands
+
+You can define your own colon commands in the config file. Each command receives the argument after the command name as `$1` in a shell invocation. Output lines are shown in the results list; selecting a line attempts to open it as a file or copy it to the clipboard.
+
+```toml
+[commands]
+gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
+```
+
+Usage: `:gh neovim`
 
 ---
 
 ## Configuration
 
-The configuration file is located at:  
-`~/.config/grunner/grunner.toml`
+grunner stores its configuration at `~/.config/grunner/grunner.toml`. The file is created automatically with defaults on first run. You can open it from within grunner by clicking the **Settings** button in the bottom-left of the window.
 
-If it does not exist, a default one is created when you first run `grunner`.  
-You can also open it directly via the **Settings** button in the launcher.
+All keys are optional; missing keys fall back to built-in defaults.
 
-### Example configuration
-
-Below is the default configuration with all available options.  
-Uncomment and adjust values as needed.
+### Full example
 
 ```toml
 # grunner configuration
-# All values are optional – missing keys fall back to built‑in defaults.
 
 [window]
 # Width and height of the launcher window in pixels.
@@ -107,15 +216,15 @@ width  = 640
 height = 480
 
 [search]
-# Maximum number of fuzzy‑search results shown (only when a query is active).
+# Maximum number of results shown when a query is active.
 max_results = 64
 
-# Delay in milliseconds before executing a colon command (e.g. :f, :ob) after you stop typing.
-# Lower values feel more responsive but may cause flickering if your command is very fast.
+# Delay in milliseconds before executing a colon command after you stop typing.
+# Lower values feel more responsive; higher values reduce flicker for slow commands.
 command_debounce_ms = 300
 
 # Directories scanned for .desktop files.
-# Use ~ for the home directory. Directories that do not exist are skipped.
+# Use ~ for the home directory. Non-existent directories are silently skipped.
 app_dirs = [
     "/usr/share/applications",
     "/usr/local/share/applications",
@@ -125,125 +234,70 @@ app_dirs = [
 ]
 
 [calculator]
-# Enable inline calculator (evaluates expressions typed in the search bar).
+# Enable inline expression evaluation.
 enabled = false
 
 [commands]
-# Define colon commands. The key is the command name (without the leading ':').
-# The value is a shell command that will be executed with 'sh -c'.
-# Use "$1" for the argument typed after the command.
-f  = "find ~ -iname \"*$1*\" 2>/dev/null | head -20"
-fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
+# Built-in defaults (shown here for reference; override freely).
+f  = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
+fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
 
-# [obsidian]
-# Uncomment and fill in to enable Obsidian integration.
-# vault = "~/Documents/Obsidian/MyVault"
-# daily_notes_folder = "Daily"
-# new_notes_folder = "Inbox"
-# quick_note = "Quick.md"
+[obsidian]
+# Absolute or ~ path to the root of your Obsidian vault.
+vault = "~/Documents/Obsidian/MyVault"
+# Subfolder inside the vault where daily notes are stored.
+daily_notes_folder = "Daily"
+# Subfolder inside the vault where new notes are created.
+new_notes_folder = "Inbox"
+# Path to the quick-note file, relative to the vault root.
+quick_note = "Quick.md"
 ```
 
----
+### Configuration reference
 
-## Colon Commands
-
-When you type a colon (`:`) followed by a command name and an optional argument, `grunner` executes the associated shell command and displays its output lines as selectable items.
-
-- **`:f pattern`** – find files (default command, uses `find`)
-- **`:fg pattern`** – grep inside files (default command, uses `ripgrep`)
-- **`:ob ...`** – Obsidian actions (see below)
-- You can add your own commands in the `[commands]` section of the config.
-
-Selecting a result line that looks like `file:line:content` will open the file at that line in your `$EDITOR`. If the line is a plain file path, it opens with `xdg-open`. Otherwise, the line is copied to the clipboard.
-
----
-
-## Obsidian Integration
-
-If you configure the `[obsidian]` section, two special colon commands become available:
-
-- **`:ob`** – shows action buttons (Open Vault, New Note, Daily Note, Quick Note) above the power bar.  
-  If you type `:ob something`, it searches for filenames inside your vault using `find`.
-- **`:obg pattern`** – searches the *content* of all notes in your vault using `ripgrep` and displays matching lines.
-
-### Obsidian Actions
-
-When you click one of the buttons (or select the corresponding item after a search):
-
-| Action       | Behaviour                                                                                                                                                     |
-|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Open Vault   | Opens your vault in Obsidian using the `obsidian://open` URI.                                                                                                 |
-| New Note     | Creates a new file in the folder specified by `new_notes_folder`. The filename includes a timestamp. If you typed text after `:ob`, that text becomes the note’s content. |
-| Daily Note   | Opens (or creates) today’s daily note in the `daily_notes_folder`. If you typed text, it is appended to the note.                                            |
-| Quick Note   | Opens (or creates) the file specified by `quick_note`. If you typed text, it is appended.                                                                    |
-
-All actions fall back to the `xdg-open` URI scheme, so Obsidian must be installed and able to handle `obsidian://` links.
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `window.width` | integer | `640` | Window width in pixels |
+| `window.height` | integer | `480` | Window height in pixels |
+| `search.max_results` | integer | `64` | Maximum results displayed |
+| `search.command_debounce_ms` | integer | `300` | Debounce delay for colon commands (ms) |
+| `search.app_dirs` | array of strings | (see above) | Directories to scan for `.desktop` files |
+| `calculator.enabled` | boolean | `false` | Enable inline calculator |
+| `commands.<name>` | string | (see above) | Shell command for a custom colon command |
+| `obsidian.vault` | string | — | Path to Obsidian vault root |
+| `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |
+| `obsidian.new_notes_folder` | string | — | New notes subfolder |
+| `obsidian.quick_note` | string | — | Quick-note file path (relative to vault) |
 
 ---
 
-## Calculator
+## Architecture overview
 
-If the calculator is enabled (`[calculator] enabled = false`), typing a mathematical expression shows a result item at the top of the list.
-
-- **Examples**: `2+2`, `16^(1/4)`, `3^3`, `(5+3)*2`
-- **NOT WORKING**: Pressing `Enter` on the calculator item copies the result to the clipboard (without the `= ` prefix).
-
-The calculator uses the [`evalexpr`](https://crates.io/crates/evalexpr) crate, which supports basic arithmetic, parentheses, and common functions. It automatically converts integers to floats so that division yields decimal results (e.g., `7/5` → `1.4`). If the full expression cannot be evaluated, it tries the longest valid prefix.
-
----
-
-## Power Actions
-
-The bottom bar contains buttons for:
-
-- **Suspend**
-- **Restart**
-- **Power Off**
-- **Log Out**
-
-Clicking any of them opens a confirmation dialog. Confirming executes the corresponding system command (`systemctl suspend`, `systemctl reboot`, `systemctl poweroff`). Logout attempts several methods: `loginctl terminate-session`, `gnome-session-quit`, or `loginctl terminate-user`.
+| File | Purpose |
+|---|---|
+| `main.rs` | Entry point; loads config, creates the GTK application, and calls `build_ui` |
+| `ui.rs` | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
+| `list_model.rs` | Central search model; dispatches queries to the correct mode and populates the `ListStore` |
+| `launcher.rs` | Scans `.desktop` files, parses them, and deduplicates entries |
+| `calculator.rs` | Arithmetic expression evaluator (wraps `evalexpr`); handles integer-to-float promotion |
+| `search_provider.rs` | D-Bus client for GNOME Shell search providers (discovery + query + activation) |
+| `actions.rs` | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs |
+| `config.rs` | TOML config loading with defaults and `~` expansion |
+| `app_item.rs` | GObject wrapper for application entries |
+| `calc_item.rs` | GObject wrapper for calculator results |
+| `cmd_item.rs` | GObject wrapper for command output lines |
+| `obsidian_item.rs` | GObject wrapper for Obsidian action entries |
+| `search_result_item.rs` | GObject wrapper for GNOME Shell search provider results |
+| `style.css` | libadwaita CSS using `var(--accent-color)` and `var(--window-bg-color)` |
 
 ---
 
-## Keybindings
+## Theming
 
-| Key               | Action                                    |
-|-------------------|-------------------------------------------|
-| `Esc`             | Close the launcher                        |
-| `Enter` / `KP_Enter` | Launch selected app / copy calculator result / activate command result |
-| `↑` / `↓`         | Navigate up/down in the result list       |
-| `Page Up`         | Jump 10 items up                          |
-| `Page Down`       | Jump 10 items down                        |
-| `Ctrl+C`          | (if nothing selected) – closes launcher   |
+Styles are defined in `style.css` and embedded in the binary at compile time. grunner uses libadwaita 1.6+ CSS custom properties, so it automatically inherits the system light/dark preference and accent color without any extra configuration. To apply custom styles, modify `src/style.css` and recompile.
 
 ---
 
 ## License
 
-MIT License
-
-Copyright (c) 2026 Nihmar
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
----
-
-## Contributing
-
-Issues and pull requests are welcome! Feel free to open a discussion for new features or improvements.
+This project is licensed under the [MIT License](LICENSE).
