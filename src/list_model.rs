@@ -390,7 +390,7 @@ impl AppListModel {
                         for r in results {
                             let (icon_themed, icon_file) = match r.icon {
                                 Some(search_provider::IconData::Themed(n)) => (n, String::new()),
-                                Some(search_provider::IconData::File(p))   => (String::new(), p),
+                                Some(search_provider::IconData::File(p)) => (String::new(), p),
                                 None => (String::new(), String::new()),
                             };
                             let item = SearchResultItem::new(
@@ -426,15 +426,16 @@ impl AppListModel {
         self.run_subprocess(cmd);
     }
 
+    /// Replaced `find` with `plocate` for faster file name searches.
+    /// Filters results to those inside the vault using `awk`.
     fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        // No -printf: let find output absolute paths directly, avoiding
-        // fragile manual path reconstruction (e.g. double slashes, empty lines).
-        let mut cmd = std::process::Command::new("find");
-        cmd.arg(&vault_path)
-            .arg("-type")
-            .arg("f")
-            .arg("-iname")
-            .arg(format!("*{}*", pattern));
+        let mut cmd = std::process::Command::new("sh");
+        cmd.arg("-c")
+            .arg("plocate -i \"$1\" | awk -v prefix=\"$2\" 'index($0, prefix)==1' | head -n $3")
+            .arg("--") // $0
+            .arg(pattern) // $1
+            .arg(vault_path.to_string_lossy().as_ref()) // $2
+            .arg(self.max_results.to_string()); // $3
         self.run_subprocess(cmd);
     }
 

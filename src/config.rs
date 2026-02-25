@@ -7,7 +7,7 @@ pub const DEFAULT_WINDOW_WIDTH: i32 = 640;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 pub const DEFAULT_MAX_RESULTS: usize = 64;
 pub const DEFAULT_CALCULATOR: bool = true;
-pub const DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300; // <-- new
+pub const DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300;
 
 pub fn default_app_dirs() -> Vec<String> {
     vec![
@@ -47,7 +47,7 @@ impl Default for Config {
         let mut commands = HashMap::new();
         commands.insert(
             "f".to_string(),
-            "find ~ -iname \"*$1*\" 2>/dev/null | head -20".to_string(),
+            "plocate -i \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string(),
         );
         commands.insert(
             "fg".to_string(),
@@ -90,7 +90,7 @@ struct WindowConfig {
 struct SearchConfig {
     max_results: Option<usize>,
     app_dirs: Option<Vec<String>>,
-    command_debounce_ms: Option<u32>, // <-- new
+    command_debounce_ms: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -160,7 +160,7 @@ fn apply_toml(content: &str) -> Config {
             cfg.app_dirs = dirs.into_iter().map(|s| expand_home(&s, &home)).collect();
         }
         if let Some(debounce) = search.command_debounce_ms {
-            cfg.command_debounce_ms = debounce; // <-- new
+            cfg.command_debounce_ms = debounce;
         }
     }
 
@@ -231,7 +231,7 @@ enabled = true
 # Define colon commands. The key is the command name (without the leading ':').
 # The value is a shell command that will be executed with 'sh -c'.
 # Use "$1" for the argument typed after the command.
-# f  = "find ~ -iname \"*$1*\" 2>/dev/null | head -20"
+# f  = "plocate -i \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
 # fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
 
 # [obsidian]
