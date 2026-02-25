@@ -242,11 +242,20 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             let clipboard = display.clipboard();
                             clipboard.set_text(number);
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                            // In :ob file-search mode open the file directly in Obsidian;
-                            // otherwise fall back to the generic file/line opener.
-                            if model.obsidian_file_mode() {
+                            // In :ob file‑search or :obg grep mode open directly in Obsidian
+                            if model.obsidian_file_mode() || model.obsidian_grep_mode() {
                                 if let Some(cfg) = &model.obsidian_cfg {
-                                    open_obsidian_file_path(&cmd_item.line(), cfg);
+                                    let line = cmd_item.line();
+                                    if model.obsidian_grep_mode() {
+                                        // Extract file path from grep output (before first colon)
+                                        if let Some((file_path, _)) = line.split_once(':') {
+                                            open_obsidian_file_path(file_path, cfg);
+                                        } else {
+                                            open_obsidian_file_path(&line, cfg);
+                                        }
+                                    } else {
+                                        open_obsidian_file_path(&line, cfg);
+                                    }
                                 }
                             } else {
                                 open_file_or_line(&cmd_item.line());
@@ -332,10 +341,19 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     clipboard.set_text(number);
                     window.close();
                 } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                    // Same mode-check as the keyboard handler above.
-                    if model.obsidian_file_mode() {
+                    // Same mode‑check as the keyboard handler above
+                    if model.obsidian_file_mode() || model.obsidian_grep_mode() {
                         if let Some(cfg) = &model.obsidian_cfg {
-                            open_obsidian_file_path(&cmd_item.line(), cfg);
+                            let line = cmd_item.line();
+                            if model.obsidian_grep_mode() {
+                                if let Some((file_path, _)) = line.split_once(':') {
+                                    open_obsidian_file_path(file_path, cfg);
+                                } else {
+                                    open_obsidian_file_path(&line, cfg);
+                                }
+                            } else {
+                                open_obsidian_file_path(&line, cfg);
+                            }
                         }
                     } else {
                         open_file_or_line(&cmd_item.line());

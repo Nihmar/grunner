@@ -656,6 +656,10 @@ impl AppListModel {
         factory
     }
 
+    pub fn obsidian_grep_mode(&self) -> bool {
+        self.obsidian_grep_mode.get()
+    }
+
     pub fn obsidian_action_mode(&self) -> bool {
         self.obsidian_action_mode.get()
     }
