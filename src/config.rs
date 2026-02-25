@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const DEFAULT_WINDOW_WIDTH: i32 = 640;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 pub const DEFAULT_MAX_RESULTS: usize = 64;
-pub const DEFAULT_CALCULATOR: bool = true;
+pub const DEFAULT_CALCULATOR: bool = false;
 pub const DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300;
 
 pub fn default_app_dirs() -> Vec<String> {
@@ -225,7 +225,7 @@ app_dirs = [
 
 [calculator]
 # Enable inline calculator (evaluates expressions typed in the search bar).
-enabled = true
+enabled = false
 
 [commands]
 # Define colon commands. The key is the command name (without the leading ':').

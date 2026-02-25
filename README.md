@@ -126,7 +126,7 @@ app_dirs = [
 
 [calculator]
 # Enable inline calculator (evaluates expressions typed in the search bar).
-enabled = true
+enabled = false
 
 [commands]
 # Define colon commands. The key is the command name (without the leading ':').
@@ -183,7 +183,7 @@ All actions fall back to the `xdg-open` URI scheme, so Obsidian must be installe
 
 ## Calculator
 
-If the calculator is enabled (`[calculator] enabled = true`), typing a mathematical expression shows a result item at the top of the list.
+If the calculator is enabled (`[calculator] enabled = false`), typing a mathematical expression shows a result item at the top of the list.
 
 - **Examples**: `2+2`, `16^(1/4)`, `3^3`, `(5+3)*2`
 - **NOT WORKING**: Pressing `Enter` on the calculator item copies the result to the clipboard (without the `= ` prefix).
