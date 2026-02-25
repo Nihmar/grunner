@@ -54,7 +54,8 @@ sudo pacman -S rust gtk4 libadwaita
 ### Build from source
 
 ```bash
-git clone https://github.com/yourusername/grunner.git
+rm -rf grunner
+git clone https://github.com/Nihmar/grunner.git
 cd grunner
 ./build.sh
 ```

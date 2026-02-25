@@ -144,6 +144,8 @@ impl AppListModel {
                             self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
                             return;
                         } else {
+                            // 👇 Keep buttons visible while searching
+                            self.obsidian_action_mode.set(true);
                             // Schedule find search
                             let vault_path = vault_path.to_string_lossy().to_string();
                             let arg = arg.to_string();
@@ -155,6 +157,8 @@ impl AppListModel {
                         }
                     }
                     "obg" => {
+                        // 👇 Keep buttons visible while searching
+                        self.obsidian_action_mode.set(true);
                         // Schedule rg search
                         let vault_path = vault_path.to_string_lossy().to_string();
                         let arg = arg.to_string();
