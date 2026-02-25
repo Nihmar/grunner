@@ -206,6 +206,8 @@ impl AppListModel {
                     return;
                 }
                 self.search_provider_mode.set(true);
+                // Increment generation to cancel previous async tasks
+                self.task_gen.set(self.task_gen.get() + 1);
                 let providers_clone: Vec<SearchProvider> = providers.to_vec();
                 let arg = arg.to_string();
                 let max = self.max_results;
@@ -255,6 +257,8 @@ impl AppListModel {
                         } else {
                             // Schedule find search and mark file-search mode
                             self.obsidian_file_mode.set(true);
+                            // Increment generation to cancel previous async tasks
+                            self.task_gen.set(self.task_gen.get() + 1);
                             let vault_path = vault_path.to_string_lossy().to_string();
                             let arg = arg.to_string();
                             let model_clone = self.clone();
@@ -266,6 +270,8 @@ impl AppListModel {
                     }
                     "obg" => {
                         // Schedule rg search
+                        // Increment generation to cancel previous async tasks
+                        self.task_gen.set(self.task_gen.get() + 1);
                         let vault_path = vault_path.to_string_lossy().to_string();
                         let arg = arg.to_string();
                         let model_clone = self.clone();
@@ -283,6 +289,8 @@ impl AppListModel {
                 .then(|| self.commands.get(cmd_name))
                 .flatten()
             {
+                // Increment generation to cancel previous async tasks
+                self.task_gen.set(self.task_gen.get() + 1);
                 let template = template.clone();
                 let arg = arg.to_string();
                 let cmd_name = cmd_name.to_string(); // clone to avoid lifetime issues

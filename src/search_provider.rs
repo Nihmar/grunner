@@ -1,8 +1,9 @@
 /// GNOME Shell Search Provider 2 integration.
 use std::collections::HashMap;
 use std::path::PathBuf;
-use zbus::zvariant::OwnedValue;
+use std::time::Duration;
 use zbus::Connection;
+use zbus::zvariant::OwnedValue;
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -204,13 +205,11 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
 
     fn first_name_from_array(v: &Value<'_>) -> Option<String> {
         match v {
-            Value::Array(a) => a
-                .iter()
-                .find_map(|item| match item {
-                    Value::Str(s) if !s.as_str().is_empty() => Some(s.as_str().to_string()),
-                    Value::Value(inner) => first_name_from_array(inner),
-                    _ => None,
-                }),
+            Value::Array(a) => a.iter().find_map(|item| match item {
+                Value::Str(s) if !s.as_str().is_empty() => Some(s.as_str().to_string()),
+                Value::Value(inner) => first_name_from_array(inner),
+                _ => None,
+            }),
             Value::Value(inner) => first_name_from_array(inner),
             Value::Str(s) if !s.as_str().is_empty() => Some(s.as_str().to_string()),
             _ => None,
@@ -334,10 +333,7 @@ async fn query_all(
 
         match query_one(&conn, provider, &terms_str, max_per_provider, &app_icon).await {
             Ok(mut results) => out.append(&mut results),
-            Err(e) => eprintln!(
-                "[search] provider {} error: {}",
-                provider.bus_name, e
-            ),
+            Err(e) => eprintln!("[search] provider {} error: {}", provider.bus_name, e),
         }
     }
     out
@@ -350,6 +346,8 @@ async fn query_one(
     max_results: usize,
     app_icon: &str,
 ) -> zbus::Result<Vec<SearchResult>> {
+    use tokio::time::timeout;
+
     let proxy = zbus::Proxy::new(
         conn,
         provider.bus_name.as_str(),
@@ -358,10 +356,12 @@ async fn query_one(
     )
     .await?;
 
-    let ids: Vec<String> = proxy
-        .call("GetInitialResultSet", &(terms,))
+    // Timeout after 3 seconds for each D-Bus call
+    let timeout_dur = Duration::from_secs(3);
+
+    let ids: Vec<String> = timeout(timeout_dur, proxy.call("GetInitialResultSet", &(terms,)))
         .await
-        .unwrap_or_default();
+        .map_err(|_| zbus::Error::Timeout)??;
 
     if ids.is_empty() {
         return Ok(vec![]);
@@ -369,10 +369,10 @@ async fn query_one(
 
     let ids_capped: Vec<&str> = ids.iter().take(max_results).map(String::as_str).collect();
 
-    let metas: Vec<HashMap<String, OwnedValue>> = proxy
-        .call("GetResultMetas", &(ids_capped,))
-        .await
-        .unwrap_or_default();
+    let metas: Vec<HashMap<String, OwnedValue>> =
+        timeout(timeout_dur, proxy.call("GetResultMetas", &(ids_capped,)))
+            .await
+            .map_err(|_| zbus::Error::Timeout)??;
 
     let results = metas
         .into_iter()
@@ -414,12 +414,7 @@ fn take_str(meta: &mut HashMap<String, OwnedValue>, key: &str) -> Option<String>
 // Activation
 // ---------------------------------------------------------------------------
 
-pub fn activate_result(
-    bus_name: &str,
-    object_path: &str,
-    result_id: &str,
-    terms: &[String],
-) {
+pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms: &[String]) {
     let bus_name = bus_name.to_string();
     let object_path = object_path.to_string();
     let result_id = result_id.to_string();
@@ -460,7 +455,10 @@ pub fn activate_result(
 
         let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
         if let Err(e) = proxy
-            .call::<_, ()>("ActivateResult", &(result_id.as_str(), &terms_str, timestamp))
+            .call::<_, ()>(
+                "ActivateResult",
+                &(result_id.as_str(), &terms_str, timestamp),
+            )
             .await
         {
             eprintln!("[search] ActivateResult error: {}", e);
