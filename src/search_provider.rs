@@ -302,6 +302,7 @@ pub fn run_search(
     }
 
     let rt: Result<tokio::runtime::Runtime, _> = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
         .enable_time()
         .build();
 
@@ -423,6 +424,7 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
     let terms = terms.to_vec();
 
     let rt: Result<tokio::runtime::Runtime, _> = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
         .enable_time()
         .build();
 
