@@ -30,6 +30,8 @@ pub struct AppListModel {
     pub obsidian_cfg: Option<ObsidianConfig>,
     // flag to indicate that the Obsidian action buttons should be shown
     obsidian_action_mode: Rc<Cell<bool>>,
+    // flag: user is in ":ob <query>" file-search mode (Enter should open in Obsidian)
+    obsidian_file_mode: Rc<Cell<bool>>,
     // debounce timer for colon commands
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     // configurable debounce delay in milliseconds
@@ -62,6 +64,7 @@ impl AppListModel {
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
             obsidian_action_mode: Rc::new(Cell::new(false)),
+            obsidian_file_mode: Rc::new(Cell::new(false)),
             command_debounce: Rc::new(RefCell::new(None)),
             command_debounce_ms,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
@@ -99,8 +102,10 @@ impl AppListModel {
     }
 
     // Shared helper: runs `cmd` on a background thread, then delivers its
-    // stdout lines to the GTK main thread via an mpsc channel polled from
-    // idle_add_local. Results are discarded if a newer task_gen has been issued.
+    // stdout lines back to the GTK main thread via std::sync::mpsc +
+    // glib::idle_add_local_once (avoids the glib::channel API that changed
+    // between glib versions).  Results are discarded if a newer task_gen has
+    // been issued.
     fn run_subprocess(&self, mut cmd: std::process::Command) {
         let generation = self.task_gen.get();
         let max_results = self.max_results;
@@ -122,8 +127,11 @@ impl AppListModel {
             let _ = tx.send(lines);
         });
 
-        glib::idle_add_local(move || match rx.try_recv() {
-            Ok(lines) => {
+        // Schedule a one-shot idle callback on the main thread to pick up the
+        // result.  The thread will be done or nearly done by the time the idle
+        // fires, so the recv() is effectively instant.
+        glib::idle_add_local_once(move || {
+            if let Ok(lines) = rx.recv() {
                 if model_clone.task_gen.get() == generation {
                     model_clone.store.remove_all();
                     for line in lines {
@@ -133,29 +141,28 @@ impl AppListModel {
                         model_clone.selection.set_selected(0);
                     }
                 }
-                glib::ControlFlow::Break
             }
-            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
         });
     }
 
     pub fn populate(&self, query: &str) {
         // Reset Obsidian action mode at the start of every population
         self.obsidian_action_mode.set(false);
+        self.obsidian_file_mode.set(false);
 
         // Cancel any pending command debounce (will be rescheduled if needed)
         self.cancel_debounce();
 
         // --- Colon command handling ---
-        if query.starts_with(':') && !self.commands.is_empty() {
+        if query.starts_with(':') {
             let parts: Vec<&str> = query.splitn(2, ' ').collect();
             // splitn on a non-empty string always yields at least one element
             let cmd_part = parts.first().copied().unwrap_or(query);
             let arg = parts.get(1).unwrap_or(&"").trim();
             let cmd_name = &cmd_part[1..];
 
-            // Special handling for obsidian commands
+            // Special handling for obsidian commands — always available, regardless
+            // of whether the user has any custom commands configured.
             if cmd_name == "ob" || cmd_name == "obg" {
                 // Check if obsidian is configured
                 let obs_cfg = match &self.obsidian_cfg {
@@ -191,9 +198,8 @@ impl AppListModel {
                             self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
                             return;
                         } else {
-                            // 👇 Keep buttons visible while searching
-                            self.obsidian_action_mode.set(true);
-                            // Schedule find search
+                            // Schedule find search and mark file-search mode
+                            self.obsidian_file_mode.set(true);
                             let vault_path = vault_path.to_string_lossy().to_string();
                             let arg = arg.to_string();
                             let model_clone = self.clone();
@@ -204,8 +210,6 @@ impl AppListModel {
                         }
                     }
                     "obg" => {
-                        // 👇 Keep buttons visible while searching
-                        self.obsidian_action_mode.set(true);
                         // Schedule rg search
                         let vault_path = vault_path.to_string_lossy().to_string();
                         let arg = arg.to_string();
@@ -219,8 +223,11 @@ impl AppListModel {
                 }
             }
 
-            // Regular colon commands (from config)
-            if let Some(template) = self.commands.get(cmd_name) {
+            // Regular colon commands (from config) — only if any are configured.
+            if let Some(template) = (!self.commands.is_empty())
+                .then(|| self.commands.get(cmd_name))
+                .flatten()
+            {
                 let template = template.clone();
                 let arg = arg.to_string();
                 let cmd_name = cmd_name.to_string(); // clone to avoid lifetime issues
@@ -431,5 +438,12 @@ impl AppListModel {
     // Public getter for the Obsidian action mode flag
     pub fn obsidian_action_mode(&self) -> bool {
         self.obsidian_action_mode.get()
+    }
+
+    /// True when the user is in `:ob <query>` file-search mode.
+    /// The key handler should call `actions::open_obsidian_file_path` with the
+    /// selected `CommandItem`'s text when Enter is pressed and this returns `true`.
+    pub fn obsidian_file_mode(&self) -> bool {
+        self.obsidian_file_mode.get()
     }
 }

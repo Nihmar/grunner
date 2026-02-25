@@ -22,6 +22,35 @@ fn expand_home(path: &str, home: &str) -> PathBuf {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Shared PATH-search helper
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if `path` is a regular file with at least one executable bit set.
+/// On non-Unix platforms every regular file is considered executable.
+fn is_executable(path: &std::path::Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path)
+            .map(|m| m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    true
+}
+
+/// Returns the first directory in `$PATH` that contains an executable named `prog`.
+fn which(prog: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    std::env::split_paths(&path_var)
+        .map(|dir| dir.join(prog))
+        .find(|p| is_executable(p))
+}
+
 pub static TERMINAL: Lazy<Option<String>> = Lazy::new(find_terminal_impl);
 
 fn find_terminal_impl() -> Option<String> {
@@ -36,55 +65,14 @@ fn find_terminal_impl() -> Option<String> {
         "konsole",
         "xterm",
     ];
-    let path_var = std::env::var_os("PATH").unwrap_or_default();
-    let paths = std::env::split_paths(&path_var).collect::<Vec<_>>();
-
-    for candidate in candidates {
-        for dir in &paths {
-            let full = dir.join(candidate);
-            if full.is_file() {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(metadata) = std::fs::metadata(&full) {
-                        if metadata.permissions().mode() & 0o111 != 0 {
-                            return Some(candidate.to_string());
-                        }
-                    }
-                }
-                #[cfg(not(unix))]
-                return Some(candidate.to_string());
-            }
-        }
-    }
-    None
+    candidates
+        .iter()
+        .find(|&&c| which(c).is_some())
+        .map(|&c| c.to_string())
 }
 
 fn find_terminal() -> Option<String> {
     TERMINAL.clone()
-}
-
-/// Helper: find an executable in PATH
-fn which(prog: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    let paths = std::env::split_paths(&path_var);
-    for dir in paths {
-        let full = dir.join(prog);
-        if full.is_file() {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if let Ok(metadata) = std::fs::metadata(&full) {
-                    if metadata.permissions().mode() & 0o111 != 0 {
-                        return Some(full);
-                    }
-                }
-            }
-            #[cfg(not(unix))]
-            return Some(full);
-        }
-    }
-    None
 }
 
 pub fn launch_app(exec: &str, terminal: bool) {
@@ -122,32 +110,17 @@ pub fn launch_app(exec: &str, terminal: bool) {
 }
 
 pub fn power_action(action: &str) {
+    let run_systemctl = |subcmd: &str| {
+        if let Err(e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
+            eprintln!("Failed to run systemctl {}: {}", subcmd, e);
+        }
+    };
+
     match action {
         "logout" => logout_action(),
-        "suspend" => {
-            if let Err(e) = std::process::Command::new("systemctl")
-                .arg("suspend")
-                .spawn()
-            {
-                eprintln!("Failed to suspend: {}", e);
-            }
-        }
-        "reboot" => {
-            if let Err(e) = std::process::Command::new("systemctl")
-                .arg("reboot")
-                .spawn()
-            {
-                eprintln!("Failed to reboot: {}", e);
-            }
-        }
-        "poweroff" => {
-            if let Err(e) = std::process::Command::new("systemctl")
-                .arg("poweroff")
-                .spawn()
-            {
-                eprintln!("Failed to power off: {}", e);
-            }
-        }
+        "suspend" => run_systemctl("suspend"),
+        "reboot" => run_systemctl("reboot"),
+        "poweroff" => run_systemctl("poweroff"),
         _ => {}
     }
 }
@@ -203,9 +176,11 @@ pub fn open_settings() {
 }
 
 /// Open a file (or a file at a specific line) from a command result line.
+static FILE_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+):(\d+):").unwrap());
+
 pub fn open_file_or_line(line: &str) {
     // Try to match "file:line:content"
-    let re = Regex::new(r"^(.+):(\d+):").unwrap();
+    let re = &*FILE_LINE_RE;
     if let Some(caps) = re.captures(line) {
         let file = caps.get(1).unwrap().as_str();
         let line_num = caps.get(2).unwrap().as_str();
@@ -290,20 +265,17 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             }
             let today = Local::now().format("%Y-%m-%d").to_string();
             let path = folder.join(format!("{}.md", today));
-            if !path.exists() {
-                if let Err(e) = File::create(&path) {
-                    eprintln!("Cannot create daily note {}: {}", path.display(), e);
+            // create(true) + append(true) handles both "create if new" and "append if exists"
+            // in a single open — no need for a separate File::create step.
+            let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Cannot open daily note {}: {}", path.display(), e);
                     return;
                 }
-            }
-            // Append text if provided
+            };
             if let Some(t) = text {
                 if !t.is_empty() {
-                    let mut file = fs::OpenOptions::new()
-                        .write(true)
-                        .append(true)
-                        .open(&path)
-                        .expect("cannot open daily note");
                     writeln!(file, "{}", t).ok();
                 }
             }
@@ -339,6 +311,19 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             open_uri(&uri);
         }
     }
+}
+
+/// Open a specific vault file in Obsidian by its absolute path.
+/// Used when the user presses Enter on a search result in `:Ob` file-search mode.
+pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
+    let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+    if !vault_path.exists() {
+        eprintln!("Vault path does not exist: {}", vault_path.display());
+        return;
+    }
+    let uri = format!("obsidian://open?path={}", urlencoding::encode(file_path));
+    println!("uri: {}", uri);
+    open_uri(&uri);
 }
 
 fn open_uri(uri: &str) {

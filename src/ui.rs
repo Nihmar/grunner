@@ -1,5 +1,6 @@
 use crate::actions::{
-    launch_app, open_file_or_line, open_settings, perform_obsidian_action, power_action,
+    launch_app, open_file_or_line, open_obsidian_file_path, open_settings, perform_obsidian_action,
+    power_action,
 };
 use crate::app_item::AppItem;
 use crate::calc_item::CalcItem;
@@ -180,6 +181,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 }
                 Key::Return | Key::KP_Enter => {
                     let pos = model.selection.selected();
+                    eprintln!(
+                        "[debug] Return pressed  pos={}  file_mode={}  n_items={}",
+                        model.selection.selected(),
+                        model.obsidian_file_mode(),
+                        model.store.n_items()
+                    );
                     if let Some(obj) = model.store.item(pos) {
                         if let Some(app_item) = obj.downcast_ref::<AppItem>() {
                             launch_app(&app_item.exec(), app_item.terminal());
@@ -191,7 +198,19 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             let clipboard = display.clipboard();
                             clipboard.set_text(number);
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                            open_file_or_line(&cmd_item.line());
+                            eprintln!(
+                                "[debug] Enter on CommandItem: {:?}  obsidian_file_mode={}  cfg={}",
+                                cmd_item.line(),
+                                model.obsidian_file_mode(),
+                                model.obsidian_cfg.is_some()
+                            );
+                            if model.obsidian_file_mode() {
+                                if let Some(cfg) = &model.obsidian_cfg {
+                                    open_obsidian_file_path(&cmd_item.line(), cfg);
+                                }
+                            } else {
+                                open_file_or_line(&cmd_item.line());
+                            }
                         } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
                             if let Some(cfg) = &model.obsidian_cfg {
                                 let action = obs_item.action();
@@ -265,7 +284,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     clipboard.set_text(number);
                     window.close();
                 } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                    open_file_or_line(&cmd_item.line());
+                    // Same mode-check as the keyboard handler above.
+                    if model.obsidian_file_mode() {
+                        if let Some(cfg) = &model.obsidian_cfg {
+                            open_obsidian_file_path(&cmd_item.line(), cfg);
+                        }
+                    } else {
+                        open_file_or_line(&cmd_item.line());
+                    }
                     window.close();
                 } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
                     if let Some(cfg) = &model.obsidian_cfg {
