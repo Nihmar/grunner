@@ -361,26 +361,39 @@ impl AppListModel {
                         if model.task_gen.get() != generation {
                             return;
                         }
-                        for r in results {
-                            let (icon_themed, icon_file) = match r.icon {
-                                Some(search_provider::IconData::Themed(n)) => (n, String::new()),
-                                Some(search_provider::IconData::File(p)) => (String::new(), p),
-                                None => (String::new(), String::new()),
-                            };
-                            let item = SearchResultItem::new(
-                                r.id,
-                                r.name,
-                                r.description,
-                                icon_themed,
-                                icon_file,
-                                r.app_icon,
-                                r.bus_name,
-                                r.object_path,
-                                terms.clone(),
-                            );
-                            model.store.append(&item);
-                        }
-                        if model.store.n_items() > 0 {
+                        // Convert all results in this batch to Object items at once
+                        let items: Vec<glib::Object> = results
+                            .into_iter()
+                            .map(|r| {
+                                let (icon_themed, icon_file) = match r.icon {
+                                    Some(search_provider::IconData::Themed(n)) => {
+                                        (n, String::new())
+                                    }
+                                    Some(search_provider::IconData::File(p)) => (String::new(), p),
+                                    None => (String::new(), String::new()),
+                                };
+                                SearchResultItem::new(
+                                    r.id,
+                                    r.name,
+                                    r.description,
+                                    icon_themed,
+                                    icon_file,
+                                    r.app_icon,
+                                    r.bus_name,
+                                    r.object_path,
+                                    terms.clone(),
+                                )
+                                .upcast::<glib::Object>()
+                            })
+                            .collect();
+
+                        // Append the whole batch in one go
+                        model.store.splice(model.store.n_items(), 0, &items);
+
+                        // Set selection only if the store was previously empty
+                        if model.store.n_items() > 0
+                            && model.selection.selected() == gtk4::INVALID_LIST_POSITION
+                        {
                             model.selection.set_selected(0);
                         }
                     }
