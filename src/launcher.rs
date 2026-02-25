@@ -9,6 +9,7 @@ pub struct DesktopApp {
     pub description: String,
     pub icon: String,
     pub terminal: bool,
+    pub source_path: PathBuf,
 }
 
 /// Loads all apps from the given list of directories.
@@ -16,7 +17,7 @@ pub struct DesktopApp {
 /// Duplicate .desktop files (by full path) are avoided.
 pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     let mut apps = Vec::new();
-    let mut seen = HashSet::new();   // deduplica per percorso file
+    let mut seen = HashSet::new(); // deduplica per percorso file
 
     for dir in dirs {
         if !dir.exists() {
@@ -107,6 +108,7 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
         description,
         icon,
         terminal,
+        source_path: path.to_path_buf(),
     })
 }
 
@@ -116,7 +118,18 @@ pub fn clean_exec(exec: &str) -> String {
         .filter(|token| {
             !matches!(
                 *token,
-                "%f" | "%F" | "%u" | "%U" | "%d" | "%D" | "%n" | "%N" | "%i" | "%c" | "%k" | "%v" | "%m"
+                "%f" | "%F"
+                    | "%u"
+                    | "%U"
+                    | "%d"
+                    | "%D"
+                    | "%n"
+                    | "%N"
+                    | "%i"
+                    | "%c"
+                    | "%k"
+                    | "%v"
+                    | "%m"
             )
         })
         .collect::<Vec<_>>()

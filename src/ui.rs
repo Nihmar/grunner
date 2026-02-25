@@ -10,6 +10,11 @@ use crate::launcher;
 use crate::list_model::AppListModel;
 use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
 use crate::search_result_item::SearchResultItem;
+// New imports for clipboard and bookmarks
+use crate::clipboard_item::ClipboardItem;
+use crate::bookmark_item::BookmarkItem;
+use crate::clipboard_history::ClipboardHistory;
+
 use glib::clone;
 use gtk4::gdk::Key;
 use gtk4::prelude::DisplayExt;
@@ -21,6 +26,7 @@ use gtk4::{
 use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 pub fn build_ui(app: &Application, cfg: &Config) {
     // Load CSS
@@ -42,6 +48,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         cfg.commands.clone(),
         obsidian_cfg,
         cfg.command_debounce_ms,
+        cfg.clipboard_history_size,
+        cfg.enable_browser_bookmarks,
     );
 
     let window = ApplicationWindow::builder()
@@ -68,14 +76,13 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .build();
     entry.add_css_class("search-entry");
 
-    // --- Obsidian action button bar (initially hidden) ---
+    // --- Obsidian action button bar (unchanged) ---
     let obsidian_bar = GtkBox::new(Orientation::Horizontal, 8);
     obsidian_bar.set_halign(Align::Center);
     obsidian_bar.set_margin_top(6);
     obsidian_bar.set_margin_bottom(6);
     obsidian_bar.set_visible(false);
 
-    // Helper to extract argument after ":ob "
     let extract_arg = |text: &str| -> String {
         if text.starts_with(":ob ") {
             text[4..].trim().to_string()
@@ -116,7 +123,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         });
         obsidian_bar.append(&btn);
     }
-    // --------------------------------------------------------
 
     let power_bar = build_power_bar(&window, &entry);
 
@@ -132,9 +138,28 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     root.append(&entry);
     root.append(&scrolled);
-    root.append(&obsidian_bar); // inserted between scrolled and power_bar
+    root.append(&obsidian_bar);
     root.append(&power_bar);
     window.set_content(Some(&root));
+
+    // Clipboard monitoring
+    let clipboard_history = Rc::new(RefCell::new(ClipboardHistory::load(Some(cfg.clipboard_history_size))));
+    let clipboard_history_clone = clipboard_history.clone();
+
+    let display = window.display();
+    display.connect_clipboard_changed(move |display| {
+        let clipboard = display.clipboard();
+        clipboard.read_text_async(
+            gtk4::gio::Cancellable::NONE,
+            move |result| {
+                if let Ok(Some(text)) = result {
+                    let mut hist = clipboard_history_clone.borrow_mut();
+                    hist.push(text);
+                    hist.save();
+                }
+            },
+        );
+    });
 
     window.connect_show(clone!(
         #[weak]
@@ -146,7 +171,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         move |_| {
             entry.set_text("");
             model.populate("");
-            obsidian_bar.set_visible(false); // hide bar on window show
+            obsidian_bar.set_visible(false);
             entry.grab_focus();
         }
     ));
@@ -158,10 +183,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         obsidian_bar,
         move |e| {
             model.populate(&e.text());
-            // Show the Obsidian button bar in both bare :ob mode (action buttons)
-            // and :ob <arg> mode (file search), so the user can still click actions
-            // after typing a filename argument.
-            obsidian_bar.set_visible(model.obsidian_action_mode() || model.obsidian_file_mode());
+            obsidian_bar.set_visible(model.obsidian_action_mode());
         }
     ));
 
@@ -186,7 +208,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     let pos = model.selection.selected();
                     if let Some(obj) = model.store.item(pos) {
                         if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-                            launch_app(&app_item.exec(), app_item.terminal());
+                            launch_app(&app_item.exec(), app_item.terminal(), &app_item.source_path());
                         } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
                             let result = calc_item.result();
                             let number = result.strip_prefix("= ").unwrap_or(&result);
@@ -195,8 +217,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             let clipboard = display.clipboard();
                             clipboard.set_text(number);
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                            // In :ob file-search mode open the file directly in Obsidian;
-                            // otherwise fall back to the generic file/line opener.
                             if model.obsidian_file_mode() {
                                 if let Some(cfg) = &model.obsidian_cfg {
                                     open_obsidian_file_path(&cmd_item.line(), cfg);
@@ -218,6 +238,16 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             std::thread::spawn(move || {
                                 crate::search_provider::activate_result(&bus, &path, &id, &terms);
                             });
+                        } else if let Some(clip_item) = obj.downcast_ref::<ClipboardItem>() {
+                            let text = clip_item.text();
+                            let display = gtk4::gdk::Display::default().expect("cannot get display");
+                            let clipboard = display.clipboard();
+                            clipboard.set_text(&text);
+                        } else if let Some(bm_item) = obj.downcast_ref::<BookmarkItem>() {
+                            let url = bm_item.url();
+                            if let Err(e) = std::process::Command::new("xdg-open").arg(url).spawn() {
+                                eprintln!("Failed to open URL: {}", e);
+                            }
                         }
                     }
                     window.close();
@@ -275,7 +305,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         move |_, pos| {
             if let Some(obj) = model.store.item(pos) {
                 if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-                    launch_app(&app_item.exec(), app_item.terminal());
+                    launch_app(&app_item.exec(), app_item.terminal(), &app_item.source_path());
                     window.close();
                 } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
                     let result = calc_item.result();
@@ -285,7 +315,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     clipboard.set_text(number);
                     window.close();
                 } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                    // Same mode-check as the keyboard handler above.
                     if model.obsidian_file_mode() {
                         if let Some(cfg) = &model.obsidian_cfg {
                             open_obsidian_file_path(&cmd_item.line(), cfg);
@@ -310,6 +339,18 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                         crate::search_provider::activate_result(&bus, &path, &id, &terms);
                     });
                     window.close();
+                } else if let Some(clip_item) = obj.downcast_ref::<ClipboardItem>() {
+                    let text = clip_item.text();
+                    let display = gtk4::gdk::Display::default().expect("cannot get display");
+                    let clipboard = display.clipboard();
+                    clipboard.set_text(&text);
+                    window.close();
+                } else if let Some(bm_item) = obj.downcast_ref::<BookmarkItem>() {
+                    let url = bm_item.url();
+                    if let Err(e) = std::process::Command::new("xdg-open").arg(url).spawn() {
+                        eprintln!("Failed to open URL: {}", e);
+                    }
+                    window.close();
                 }
             } else {
                 window.close();
@@ -322,7 +363,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     model.populate("");
 }
 
-// build_power_bar remains unchanged
+// build_power_bar – fully restored from original
 fn build_power_bar(window: &ApplicationWindow, entry: &Entry) -> GtkBox {
     let power_bar = GtkBox::new(Orientation::Horizontal, 8);
     power_bar.add_css_class("power-bar");

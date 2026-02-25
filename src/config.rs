@@ -8,6 +8,8 @@ pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 pub const DEFAULT_MAX_RESULTS: usize = 64;
 pub const DEFAULT_CALCULATOR: bool = true;
 pub const DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300;
+pub const DEFAULT_CLIPBOARD_HISTORY_SIZE: usize = 20;
+pub const DEFAULT_ENABLE_BROWSER_BOOKMARKS: bool = true;
 
 pub fn default_app_dirs() -> Vec<String> {
     vec![
@@ -19,7 +21,7 @@ pub fn default_app_dirs() -> Vec<String> {
     ]
 }
 
-// ---------- Obsidian configuration ----------
+// Obsidian configuration
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ObsidianConfig {
     pub vault: String,
@@ -38,7 +40,10 @@ pub struct Config {
     pub calculator: bool,
     pub commands: HashMap<String, String>,
     pub obsidian: Option<ObsidianConfig>,
-    pub command_debounce_ms: u32, // <-- new
+    pub command_debounce_ms: u32,
+    // New fields
+    pub clipboard_history_size: usize,
+    pub enable_browser_bookmarks: bool,
 }
 
 impl Default for Config {
@@ -47,7 +52,7 @@ impl Default for Config {
         let mut commands = HashMap::new();
         commands.insert(
             "f".to_string(),
-            "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string(),
+            "find ~ -iname \"*$1*\" 2>/dev/null | head -20".to_string(),
         );
         commands.insert(
             "fg".to_string(),
@@ -66,6 +71,8 @@ impl Default for Config {
             commands,
             obsidian: None,
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
+            clipboard_history_size: DEFAULT_CLIPBOARD_HISTORY_SIZE,
+            enable_browser_bookmarks: DEFAULT_ENABLE_BROWSER_BOOKMARKS,
         }
     }
 }
@@ -91,6 +98,9 @@ struct SearchConfig {
     max_results: Option<usize>,
     app_dirs: Option<Vec<String>>,
     command_debounce_ms: Option<u32>,
+    // New options
+    clipboard_history_size: Option<usize>,
+    enable_browser_bookmarks: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -162,6 +172,13 @@ fn apply_toml(content: &str) -> Config {
         if let Some(debounce) = search.command_debounce_ms {
             cfg.command_debounce_ms = debounce;
         }
+        // New options
+        if let Some(size) = search.clipboard_history_size {
+            cfg.clipboard_history_size = size;
+        }
+        if let Some(enable) = search.enable_browser_bookmarks {
+            cfg.enable_browser_bookmarks = enable;
+        }
     }
 
     if let Some(calc) = toml_cfg.calculator {
@@ -192,7 +209,7 @@ pub fn expand_home(path: &str, home: &str) -> PathBuf {
     }
 }
 
-// Default TOML content (updated with new option)
+// Default TOML content (updated with new options)
 fn default_toml() -> String {
     let dirs = default_app_dirs()
         .iter()
@@ -214,8 +231,13 @@ height = {height}
 max_results = {max}
 
 # Delay in milliseconds before executing a colon command (e.g. :f, :ob) after you stop typing.
-# Lower values feel more responsive but may cause flickering if your command is very fast.
 command_debounce_ms = 300
+
+# Number of clipboard items to remember (0 = disabled)
+clipboard_history_size = 20
+
+# Enable browser bookmarks search with :b
+enable_browser_bookmarks = true
 
 # Directories scanned for .desktop files.
 # Use ~ for the home directory. Directories that do not exist are skipped.
@@ -231,7 +253,7 @@ enabled = true
 # Define colon commands. The key is the command name (without the leading ':').
 # The value is a shell command that will be executed with 'sh -c'.
 # Use "$1" for the argument typed after the command.
-# f  = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
+# f  = "find ~ -iname \"*$1*\" 2>/dev/null | head -20"
 # fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
 
 # [obsidian]

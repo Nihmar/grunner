@@ -12,6 +12,9 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
+// New import for launch history
+use crate::history::LaunchHistory;
+
 fn expand_home(path: &str, home: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         PathBuf::from(home).join(rest)
@@ -75,7 +78,10 @@ fn find_terminal() -> Option<String> {
     TERMINAL.clone()
 }
 
-pub fn launch_app(exec: &str, terminal: bool) {
+// ---------------------------------------------------------------------------
+// App launching with history tracking
+// ---------------------------------------------------------------------------
+pub fn launch_app(exec: &str, terminal: bool, source_path: &str) {
     let clean = launcher::clean_exec(exec);
     if terminal {
         if let Some(term) = find_terminal() {
@@ -107,8 +113,16 @@ pub fn launch_app(exec: &str, terminal: bool) {
             eprintln!("Failed to launch {}: {}", clean, e);
         }
     }
+
+    // Record launch in history
+    let mut history = LaunchHistory::load();
+    history.record_launch(source_path);
+    history.save();
 }
 
+// ---------------------------------------------------------------------------
+// Power actions (unchanged)
+// ---------------------------------------------------------------------------
 pub fn power_action(action: &str) {
     let run_systemctl = |subcmd: &str| {
         if let Err(e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
@@ -158,6 +172,9 @@ fn logout_action() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Settings (unchanged)
+// ---------------------------------------------------------------------------
 pub fn open_settings() {
     let path = config::config_path();
 
@@ -175,7 +192,9 @@ pub fn open_settings() {
     }
 }
 
-/// Open a file (or a file at a specific line) from a command result line.
+// ---------------------------------------------------------------------------
+// File/line opener (unchanged)
+// ---------------------------------------------------------------------------
 static FILE_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+):(\d+):").unwrap());
 
 pub fn open_file_or_line(line: &str) {
@@ -211,6 +230,9 @@ pub fn open_file_or_line(line: &str) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Obsidian actions (unchanged)
+// ---------------------------------------------------------------------------
 pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
     if !vault_path.exists() {
@@ -230,12 +252,10 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                 eprintln!("Cannot create folder {}: {}", folder.display(), e);
                 return;
             }
-            // Generate a filename with timestamp
             let now = Local::now();
             let filename = format!("New Note {}.md", now.format("%Y-%m-%d %H-%M-%S"));
             let path = folder.join(filename);
 
-            // Create the file and write text if provided
             let mut file = match File::create(&path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -265,8 +285,6 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             }
             let today = Local::now().format("%Y-%m-%d").to_string();
             let path = folder.join(format!("{}.md", today));
-            // create(true) + append(true) handles both "create if new" and "append if exists"
-            // in a single open — no need for a separate File::create step.
             let mut file = match fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -297,7 +315,6 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                     return;
                 }
             }
-            // Always append text if provided
             if let Some(t) = text {
                 if !t.is_empty() {
                     let mut file = fs::OpenOptions::new()
@@ -317,8 +334,6 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
     }
 }
 
-/// Open a specific vault file in Obsidian by its absolute path.
-/// Used when the user presses Enter on a search result in `:Ob` file-search mode.
 pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
     if !vault_path.exists() {

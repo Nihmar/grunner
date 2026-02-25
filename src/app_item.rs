@@ -14,6 +14,7 @@ mod imp {
         pub icon: String,
         pub exec: String,
         pub terminal: bool,
+        pub source_path: String,
     }
 
     #[derive(Default)]
@@ -43,6 +44,7 @@ impl AppItem {
             icon: app.icon.clone(),
             exec: app.exec.clone(),
             terminal: app.terminal,
+            source_path: app.source_path.display().to_string(),
         };
         obj
     }
@@ -61,5 +63,8 @@ impl AppItem {
     }
     pub fn terminal(&self) -> bool {
         self.imp().data.borrow().terminal
+    }
+    pub fn source_path(&self) -> String {
+        self.imp().data.borrow().source_path.clone()
     }
 }

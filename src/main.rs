@@ -12,6 +12,11 @@ mod search_result_item;
 mod ui;
 use gtk4::prelude::*;
 use libadwaita::Application;
+mod bookmark_item;
+mod bookmarks;
+mod clipboard_history;
+mod clipboard_item;
+mod history;
 
 const APP_ID: &str = "org.nihmar.grunner";
 
