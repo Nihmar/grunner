@@ -24,7 +24,8 @@ pub struct AppListModel {
     all_apps: Rc<Vec<DesktopApp>>,
     max_results: usize,
     calculator_enabled: bool,
-    commands: HashMap<String, String>,
+    // Wrapped in Rc to avoid deep-cloning on every AppListModel::clone()
+    commands: Rc<HashMap<String, String>>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
     // flag to indicate that the Obsidian action buttons should be shown
@@ -33,6 +34,8 @@ pub struct AppListModel {
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     // configurable debounce delay in milliseconds
     command_debounce_ms: u32,
+    // Cached fuzzy matcher – expensive to construct, reused on every populate()
+    fuzzy_matcher: Rc<SkimMatcherV2>,
 }
 
 impl AppListModel {
@@ -55,12 +58,13 @@ impl AppListModel {
             all_apps,
             max_results,
             calculator_enabled,
-            commands,
+            commands: Rc::new(commands),
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
             obsidian_action_mode: Rc::new(Cell::new(false)),
             command_debounce: Rc::new(RefCell::new(None)),
             command_debounce_ms,
+            fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
         }
     }
 
@@ -94,6 +98,48 @@ impl AppListModel {
         *self.command_debounce.borrow_mut() = Some(source_id);
     }
 
+    // Shared helper: runs `cmd` on a background thread, then delivers its
+    // stdout lines to the GTK main thread via an mpsc channel polled from
+    // idle_add_local. Results are discarded if a newer task_gen has been issued.
+    fn run_subprocess(&self, mut cmd: std::process::Command) {
+        let generation = self.task_gen.get();
+        let max_results = self.max_results;
+        let model_clone = self.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
+
+        std::thread::spawn(move || {
+            let lines = cmd
+                .output()
+                .map(|out| {
+                    String::from_utf8_lossy(&out.stdout)
+                        .lines()
+                        .take(max_results)
+                        .map(String::from)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let _ = tx.send(lines);
+        });
+
+        glib::idle_add_local(move || match rx.try_recv() {
+            Ok(lines) => {
+                if model_clone.task_gen.get() == generation {
+                    model_clone.store.remove_all();
+                    for line in lines {
+                        model_clone.store.append(&CommandItem::new(line));
+                    }
+                    if model_clone.store.n_items() > 0 {
+                        model_clone.selection.set_selected(0);
+                    }
+                }
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+        });
+    }
+
     pub fn populate(&self, query: &str) {
         // Reset Obsidian action mode at the start of every population
         self.obsidian_action_mode.set(false);
@@ -104,7 +150,8 @@ impl AppListModel {
         // --- Colon command handling ---
         if query.starts_with(':') && !self.commands.is_empty() {
             let parts: Vec<&str> = query.splitn(2, ' ').collect();
-            let cmd_part = parts[0];
+            // splitn on a non-empty string always yields at least one element
+            let cmd_part = parts.first().copied().unwrap_or(query);
             let arg = parts.get(1).unwrap_or(&"").trim();
             let cmd_name = &cmd_part[1..];
 
@@ -191,7 +238,10 @@ impl AppListModel {
         // --- Non-colon query: clear and show apps/calculator ---
         self.store.remove_all();
 
-        // Increment generation to cancel previous async tasks
+        // Increment generation to cancel previous async tasks.
+        // Note: colon commands do not increment the generation because they are
+        // already gated by the debounce timer; only direct app/calculator queries
+        // need generation-based cancellation.
         self.task_gen.set(self.task_gen.get() + 1);
 
         // Calculator (if enabled and query looks arithmetic)
@@ -208,30 +258,31 @@ impl AppListModel {
                 self.store.append(&AppItem::new(app));
             }
         } else {
-            let matcher = SkimMatcherV2::default();
             let mut results: Vec<(i64, &DesktopApp)> = self
                 .all_apps
                 .iter()
                 .filter_map(|app| {
-                    let name_score = matcher.fuzzy_match(&app.name, query).unwrap_or(i64::MIN);
+                    // Compute best score across name and description.
+                    // Using Option::max avoids the i64::MIN / 2 trap that
+                    // previously allowed unmatched descriptions to pass the filter.
+                    let name_score = self.fuzzy_matcher.fuzzy_match(&app.name, query);
                     let desc_score = if !app.description.is_empty() {
-                        matcher
+                        self.fuzzy_matcher
                             .fuzzy_match(&app.description, query)
-                            .unwrap_or(i64::MIN)
-                            / 2
+                            .map(|s| s / 2)
                     } else {
-                        i64::MIN
-                    };
-                    let score = name_score.max(desc_score);
-                    if score == i64::MIN {
                         None
-                    } else {
-                        Some((score, app))
-                    }
+                    };
+                    let score = match (name_score, desc_score) {
+                        (None, None) => return None,
+                        (a, b) => a.unwrap_or(i64::MIN).max(b.unwrap_or(i64::MIN)),
+                    };
+                    Some((score, app))
                 })
                 .collect();
 
-            results.sort_by(|a, b| b.0.cmp(&a.0));
+            // sort_unstable_by is faster than sort_by for plain comparisons
+            results.sort_unstable_by(|a, b| b.0.cmp(&a.0));
             results.truncate(self.max_results);
 
             for (_, app) in results {
@@ -245,151 +296,33 @@ impl AppListModel {
     }
 
     fn run_command(&self, _cmd_name: &str, template: &str, argument: &str) {
-        let generation = self.task_gen.get();
-        let max_results = self.max_results;
-        let template = template.to_string();
-        let argument = argument.to_string();
-        let model_clone = self.clone();
-
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
-
-        std::thread::spawn(move || {
-            let output = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(&template)
-                .arg("--")
-                .arg(&argument)
-                .output();
-
-            let lines = match output {
-                Ok(out) => String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .take(max_results)
-                    .map(String::from)
-                    .collect::<Vec<_>>(),
-                Err(_) => Vec::new(),
-            };
-
-            let _ = tx.send(lines);
-        });
-
-        glib::idle_add_local(move || match rx.try_recv() {
-            Ok(lines) => {
-                if model_clone.task_gen.get() == generation {
-                    model_clone.store.remove_all();
-                    for line in lines {
-                        let item = CommandItem::new(line);
-                        model_clone.store.append(&item);
-                    }
-                    if model_clone.store.n_items() > 0 {
-                        model_clone.selection.set_selected(0);
-                    }
-                }
-                glib::ControlFlow::Break
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-        });
+        let mut cmd = std::process::Command::new("sh");
+        cmd.arg("-c").arg(template).arg("--").arg(argument);
+        self.run_subprocess(cmd);
     }
 
     fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        let generation = self.task_gen.get();
-        let max_results = self.max_results;
-        let vault_path = vault_path.to_string_lossy().to_string();
-        let pattern = pattern.to_string();
-        let model_clone = self.clone();
-
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
-
-        std::thread::spawn(move || {
-            let output = std::process::Command::new("find")
-                .arg(&vault_path)
-                .arg("-type")
-                .arg("f")
-                .arg("-iname")
-                .arg(format!("*{}*", pattern))
-                .arg("-printf")
-                .arg("%P\\n") // relative path from vault
-                .output();
-
-            let lines = match output {
-                Ok(out) => String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .take(max_results)
-                    .map(|line| vault_path.clone() + "/" + line) // reconstruct full path
-                    .collect::<Vec<_>>(),
-                Err(_) => Vec::new(),
-            };
-            let _ = tx.send(lines);
-        });
-
-        glib::idle_add_local(move || match rx.try_recv() {
-            Ok(lines) => {
-                if model_clone.task_gen.get() == generation {
-                    model_clone.store.remove_all();
-                    for line in lines {
-                        let item = CommandItem::new(line);
-                        model_clone.store.append(&item);
-                    }
-                    if model_clone.store.n_items() > 0 {
-                        model_clone.selection.set_selected(0);
-                    }
-                }
-                glib::ControlFlow::Break
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-        });
+        // No -printf: let find output absolute paths directly, avoiding
+        // fragile manual path reconstruction (e.g. double slashes, empty lines).
+        let mut cmd = std::process::Command::new("find");
+        cmd.arg(&vault_path)
+            .arg("-type")
+            .arg("f")
+            .arg("-iname")
+            .arg(format!("*{}*", pattern));
+        self.run_subprocess(cmd);
     }
 
     fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        let generation = self.task_gen.get();
-        let max_results = self.max_results;
-        let vault_path = vault_path.to_string_lossy().to_string();
-        let pattern = pattern.to_string();
-        let model_clone = self.clone();
-
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
-
-        std::thread::spawn(move || {
-            let output = std::process::Command::new("rg")
-                .arg("--with-filename")
-                .arg("--line-number")
-                .arg("--no-heading")
-                .arg("--color")
-                .arg("never")
-                .arg(&pattern)
-                .arg(&vault_path)
-                .output();
-
-            let lines = match output {
-                Ok(out) => String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .take(max_results)
-                    .map(String::from)
-                    .collect::<Vec<_>>(),
-                Err(_) => Vec::new(),
-            };
-            let _ = tx.send(lines);
-        });
-
-        glib::idle_add_local(move || match rx.try_recv() {
-            Ok(lines) => {
-                if model_clone.task_gen.get() == generation {
-                    model_clone.store.remove_all();
-                    for line in lines {
-                        let item = CommandItem::new(line);
-                        model_clone.store.append(&item);
-                    }
-                    if model_clone.store.n_items() > 0 {
-                        model_clone.selection.set_selected(0);
-                    }
-                }
-                glib::ControlFlow::Break
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-        });
+        let mut cmd = std::process::Command::new("rg");
+        cmd.arg("--with-filename")
+            .arg("--line-number")
+            .arg("--no-heading")
+            .arg("--color")
+            .arg("never")
+            .arg(pattern)
+            .arg(&vault_path);
+        self.run_subprocess(cmd);
     }
 
     pub fn create_factory() -> SignalListItemFactory {
