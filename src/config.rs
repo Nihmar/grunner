@@ -47,7 +47,7 @@ impl Default for Config {
         let mut commands = HashMap::new();
         commands.insert(
             "f".to_string(),
-            "plocate -i \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string(),
+            "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string(),
         );
         commands.insert(
             "fg".to_string(),
@@ -231,7 +231,7 @@ enabled = true
 # Define colon commands. The key is the command name (without the leading ':').
 # The value is a shell command that will be executed with 'sh -c'.
 # Use "$1" for the argument typed after the command.
-# f  = "plocate -i \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
+# f  = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
 # fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
 
 # [obsidian]

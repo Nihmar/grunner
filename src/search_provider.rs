@@ -326,13 +326,23 @@ async fn query_all(
     };
 
     let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
+
+    // Query all providers concurrently instead of sequentially.
+    let futures: Vec<_> = providers
+        .iter()
+        .map(|provider| {
+            let app_icon = resolve_app_icon(&provider.desktop_id);
+            let conn = conn.clone();
+            let terms_str = terms_str.clone();
+            async move { query_one(&conn, provider, &terms_str, max_per_provider, &app_icon).await }
+        })
+        .collect();
+
+    let outcomes = futures::future::join_all(futures).await;
+
     let mut out = Vec::new();
-
-    for provider in providers {
-        // Resolve the app icon once per provider (cheap file read)
-        let app_icon = resolve_app_icon(&provider.desktop_id);
-
-        match query_one(&conn, provider, &terms_str, max_per_provider, &app_icon).await {
+    for (provider, outcome) in providers.iter().zip(outcomes) {
+        match outcome {
             Ok(mut results) => out.append(&mut results),
             Err(e) => eprintln!("[search] provider {} error: {}", provider.bus_name, e),
         }

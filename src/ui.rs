@@ -158,8 +158,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         obsidian_bar,
         move |e| {
             model.populate(&e.text());
-            // Show/hide the Obsidian button bar based on the model flag
-            obsidian_bar.set_visible(model.obsidian_action_mode());
+            // Show the Obsidian button bar in both bare :ob mode (action buttons)
+            // and :ob <arg> mode (file search), so the user can still click actions
+            // after typing a filename argument.
+            obsidian_bar.set_visible(model.obsidian_action_mode() || model.obsidian_file_mode());
         }
     ));
 
