@@ -62,13 +62,31 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     root.add_css_class("launcher-box");
     root.set_overflow(gtk4::Overflow::Hidden);
 
+    // --- Barra di ricerca con icona del comando ---
+    let entry_box = GtkBox::new(Orientation::Horizontal, 6);
+    entry_box.set_hexpand(true);
+    entry_box.set_margin_start(12);
+    entry_box.set_margin_end(12);
+    entry_box.set_margin_top(12);
+    entry_box.set_margin_bottom(0);
+
+    let command_icon = Image::new();
+    command_icon.set_pixel_size(24);
+    command_icon.set_valign(Align::Center);
+    command_icon.set_visible(false);
+    entry_box.append(&command_icon);
+
     let entry = Entry::builder()
         .placeholder_text("Search applications…")
         .hexpand(true)
         .build();
     entry.add_css_class("search-entry");
+    entry_box.append(&entry);
 
-    // --- Obsidian action button bar (initially hidden) ---
+    root.append(&entry_box);
+    // -------------------------------------------------
+
+    // --- Obsidian action button bar ---
     let obsidian_bar = GtkBox::new(Orientation::Horizontal, 8);
     obsidian_bar.set_halign(Align::Center);
     obsidian_bar.set_margin_top(6);
@@ -133,10 +151,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     root.append(&entry);
     root.append(&scrolled);
-    root.append(&obsidian_bar); // inserted between scrolled and power_bar
+    root.append(&obsidian_bar);
     root.append(&power_bar);
     window.set_content(Some(&root));
 
+    // --- Window show handler (reset state) ---
     window.connect_show(clone!(
         #[weak]
         entry,
@@ -144,25 +163,52 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         obsidian_bar,
         #[strong]
         model,
+        #[weak]
+        command_icon,
         move |_| {
             entry.set_text("");
             model.populate("");
-            obsidian_bar.set_visible(false); // hide bar on window show
+            obsidian_bar.set_visible(false);
             entry.grab_focus();
+
+            // Update command icon for empty string
+            command_icon.set_visible(false);
         }
     ));
 
+    // --- Entry changed handler ---
     entry.connect_changed(clone!(
         #[strong]
         model,
         #[weak]
         obsidian_bar,
+        #[weak]
+        command_icon,
         move |e| {
-            model.populate(&e.text());
-            // Show the Obsidian button bar in both bare :ob mode (action buttons)
-            // and :ob <arg> mode (file search), so the user can still click actions
-            // after typing a filename argument.
+            let text = e.text();
+            model.populate(&text);
             obsidian_bar.set_visible(model.obsidian_action_mode() || model.obsidian_file_mode());
+
+            // Update command icon based on query
+            if text.starts_with(":f") || text.starts_with(":fg") {
+                command_icon.set_icon_name(Some("text-x-generic"));
+                command_icon.set_visible(true);
+            } else if text.starts_with(":s") {
+                command_icon.set_icon_name(Some("system-search"));
+                command_icon.set_visible(true);
+            } else if text.starts_with(":ob") || text.starts_with(":obg") {
+                let icon_name = ["obsidian", "md.obsidian.Obsidian", "text-x-markdown"]
+                    .iter()
+                    .find(|&&name| {
+                        gtk4::IconTheme::for_display(&gtk4::gdk::Display::default().unwrap())
+                            .has_icon(name)
+                    })
+                    .unwrap_or(&"text-x-markdown");
+                command_icon.set_icon_name(Some(icon_name));
+                command_icon.set_visible(true);
+            } else {
+                command_icon.set_visible(false);
+            }
         }
     ));
 

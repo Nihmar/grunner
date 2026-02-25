@@ -109,6 +109,9 @@ pub fn launch_app(exec: &str, terminal: bool) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Power actions
+// ---------------------------------------------------------------------------
 pub fn power_action(action: &str) {
     let run_systemctl = |subcmd: &str| {
         if let Err(e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
@@ -158,6 +161,9 @@ fn logout_action() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 pub fn open_settings() {
     let path = config::config_path();
 
@@ -175,7 +181,9 @@ pub fn open_settings() {
     }
 }
 
-/// Open a file (or a file at a specific line) from a command result line.
+// ---------------------------------------------------------------------------
+// File/line opener
+// ---------------------------------------------------------------------------
 static FILE_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+):(\d+):").unwrap());
 
 pub fn open_file_or_line(line: &str) {
@@ -211,6 +219,9 @@ pub fn open_file_or_line(line: &str) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Obsidian actions
+// ---------------------------------------------------------------------------
 pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
     if !vault_path.exists() {
@@ -267,11 +278,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             let path = folder.join(format!("{}.md", today));
             // create(true) + append(true) handles both "create if new" and "append if exists"
             // in a single open — no need for a separate File::create step.
-            let mut file = match fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-            {
+            let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
                 Ok(f) => f,
                 Err(e) => {
                     eprintln!("Cannot open daily note {}: {}", path.display(), e);
@@ -325,10 +332,7 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
         eprintln!("Vault path does not exist: {}", vault_path.display());
         return;
     }
-    let uri = format!(
-        "obsidian://open?path={}",
-        urlencoding::encode(file_path)
-    );
+    let uri = format!("obsidian://open?path={}", urlencoding::encode(file_path));
     open_uri(&uri);
 }
 

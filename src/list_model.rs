@@ -31,6 +31,7 @@ pub struct AppListModel {
     pub obsidian_cfg: Option<ObsidianConfig>,
     obsidian_action_mode: Rc<Cell<bool>>,
     obsidian_file_mode: Rc<Cell<bool>>,
+    obsidian_grep_mode: Rc<Cell<bool>>, // new flag for :obg results
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     command_debounce_ms: u32,
     fuzzy_matcher: Rc<SkimMatcherV2>,
@@ -63,6 +64,7 @@ impl AppListModel {
             obsidian_cfg,
             obsidian_action_mode: Rc::new(Cell::new(false)),
             obsidian_file_mode: Rc::new(Cell::new(false)),
+            obsidian_grep_mode: Rc::new(Cell::new(false)),
             command_debounce: Rc::new(RefCell::new(None)),
             command_debounce_ms,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
@@ -148,8 +150,10 @@ impl AppListModel {
     }
 
     pub fn populate(&self, query: &str) {
+        // Reset all mode flags
         self.obsidian_action_mode.set(false);
         self.obsidian_file_mode.set(false);
+        self.obsidian_grep_mode.set(false);
         self.search_provider_mode.set(false);
 
         self.cancel_debounce();
@@ -240,6 +244,8 @@ impl AppListModel {
                         }
                     }
                     "obg" => {
+                        // Set grep mode so results get the Obsidian icon
+                        self.obsidian_grep_mode.set(true);
                         // Increment generation to cancel previous async tasks
                         self.task_gen.set(self.task_gen.get() + 1);
                         let vault_path = vault_path.to_string_lossy().to_string();
@@ -482,6 +488,7 @@ impl AppListModel {
         let factory = SignalListItemFactory::new();
 
         let obsidian_file_mode = self.obsidian_file_mode.clone();
+        let obsidian_grep_mode = self.obsidian_grep_mode.clone();
 
         let obsidian_icon = ["obsidian", "md.obsidian.Obsidian", "Obsidian"]
             .iter()
@@ -578,6 +585,7 @@ impl AppListModel {
             } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                 let line = cmd_item.line();
                 if line.starts_with('/') && !line.contains(':') {
+                    // Plain file path (from :ob find)
                     if obsidian_file_mode.get() {
                         image.set_icon_name(Some(&obsidian_icon));
                     } else {
@@ -602,7 +610,12 @@ impl AppListModel {
                         desc_label.set_text("");
                     }
                 } else {
-                    image.set_icon_name(Some("system-search"));
+                    // Grep output (contains ':') or other command output
+                    if obsidian_grep_mode.get() {
+                        image.set_icon_name(Some(&obsidian_icon));
+                    } else {
+                        image.set_icon_name(Some("system-search"));
+                    }
                     name_label.set_text(&line);
                     desc_label.set_visible(false);
                     desc_label.set_text("");
