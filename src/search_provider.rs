@@ -1,10 +1,10 @@
-use futures::stream::{FuturesUnordered, StreamExt};
 /// GNOME Shell Search Provider 2 integration.
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
+use futures::stream::{FuturesUnordered, StreamExt};
 use zbus::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -47,7 +47,6 @@ async fn get_or_init_conn() -> zbus::Result<Connection> {
 pub struct SearchProvider {
     pub bus_name: String,
     pub object_path: String,
-    pub desktop_id: String,
     /// Icon name resolved once from the .desktop file at discovery time.
     pub app_icon: String,
 }
@@ -140,7 +139,6 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
         bus_name: bus_name?,
         object_path: object_path?,
         app_icon: resolve_app_icon(desktop_id.as_deref().unwrap_or_default()),
-        desktop_id: desktop_id.unwrap_or_default(),
     })
 }
 
