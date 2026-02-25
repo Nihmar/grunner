@@ -51,7 +51,7 @@ impl Default for Config {
         );
         commands.insert(
             "fg".to_string(),
-            "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
+            "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
                 .to_string(),
         );
         Self {
@@ -232,7 +232,7 @@ enabled = true
 # The value is a shell command that will be executed with 'sh -c'.
 # Use "$1" for the argument typed after the command.
 # f  = "find ~ -iname \"*$1*\" 2>/dev/null | head -20"
-# fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
+# fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
 
 # [obsidian]
 # Uncomment and fill in to enable Obsidian integration.

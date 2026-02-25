@@ -127,22 +127,32 @@ impl AppListModel {
             let _ = tx.send(lines);
         });
 
-        // Schedule a one-shot idle callback on the main thread to pick up the
-        // result.  The thread will be done or nearly done by the time the idle
-        // fires, so the recv() is effectively instant.
-        glib::idle_add_local_once(move || {
-            if let Ok(lines) = rx.recv() {
-                if model_clone.task_gen.get() == generation {
-                    model_clone.store.remove_all();
-                    for line in lines {
-                        model_clone.store.append(&CommandItem::new(line));
-                    }
-                    if model_clone.store.n_items() > 0 {
-                        model_clone.selection.set_selected(0);
+        // Poll the receiver from the main thread without ever blocking it.
+        // If the subprocess hasn't finished yet we reschedule and try again
+        // on the next idle tick.
+        fn poll(rx: std::sync::mpsc::Receiver<Vec<String>>, model: AppListModel, generation: u64) {
+            match rx.try_recv() {
+                Ok(lines) => {
+                    if model.task_gen.get() == generation {
+                        model.store.remove_all();
+                        for line in lines {
+                            model.store.append(&CommandItem::new(line));
+                        }
+                        if model.store.n_items() > 0 {
+                            model.selection.set_selected(0);
+                        }
                     }
                 }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    // Not ready yet – yield to GTK and try again.
+                    glib::idle_add_local_once(move || poll(rx, model, generation));
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    // Sender dropped without sending (subprocess failed); nothing to do.
+                }
             }
-        });
+        }
+        glib::idle_add_local_once(move || poll(rx, model_clone, generation));
     }
 
     pub fn populate(&self, query: &str) {
