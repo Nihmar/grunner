@@ -62,8 +62,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     root.add_css_class("launcher-box");
     root.set_overflow(gtk4::Overflow::Hidden);
 
-    // --- Barra di ricerca con icona del comando ---
-    let entry_box = GtkBox::new(Orientation::Horizontal, 6);
+    // --- Search bar with command icon ---
+    let entry_box = GtkBox::new(Orientation::Horizontal, 12); // Increase spacing to 12
     entry_box.set_hexpand(true);
     entry_box.set_margin_start(12);
     entry_box.set_margin_end(12);
@@ -71,8 +71,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry_box.set_margin_bottom(0);
 
     let command_icon = Image::new();
-    command_icon.set_pixel_size(24);
+    command_icon.set_pixel_size(32);
     command_icon.set_valign(Align::Center);
+    // Add a little extra margin to match the row icon placement
+    command_icon.set_margin_start(6); // extra gap after icon
+    // command_icon.set_margin_end(6); // extra gap after icon
     command_icon.set_visible(false);
     entry_box.append(&command_icon);
 
