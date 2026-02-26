@@ -1,6 +1,6 @@
 use crate::actions::{
-    launch_app, open_file_or_line, open_obsidian_file_path, open_settings, perform_obsidian_action,
-    power_action,
+    launch_app, open_file_or_line, open_obsidian_file_line, open_obsidian_file_path, open_settings,
+    perform_obsidian_action, power_action,
 };
 use crate::app_item::AppItem;
 use crate::calc_item::CalcItem;
@@ -265,9 +265,25 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             let clipboard = display.clipboard();
                             clipboard.set_text(number);
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                            // In :ob file-search mode open the file directly in Obsidian;
-                            // otherwise fall back to the generic file/line opener.
-                            if model.obsidian_file_mode() {
+                            // Handle Obsidian grep mode
+                            if model.obsidian_grep_mode() {
+                                if let Some(cfg) = &model.obsidian_cfg {
+                                    // Parse grep output: file_path:line:content
+                                    let line = cmd_item.line();
+                                    if let Some((file_path, rest)) = line.split_once(':') {
+                                        if let Some((line_num, _)) = rest.split_once(':') {
+                                            open_obsidian_file_line(file_path, line_num, cfg);
+                                        } else {
+                                            // If no line number, just open the file
+                                            open_obsidian_file_path(file_path, cfg);
+                                        }
+                                    } else {
+                                        open_obsidian_file_path(&line, cfg);
+                                    }
+                                }
+                            }
+                            // In :ob file-search mode open the file directly in Obsidian
+                            else if model.obsidian_file_mode() {
                                 if let Some(cfg) = &model.obsidian_cfg {
                                     open_obsidian_file_path(&cmd_item.line(), cfg);
                                 }
@@ -355,7 +371,21 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     clipboard.set_text(number);
                     window.close();
                 } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                    if model.obsidian_file_mode() {
+                    // Handle Obsidian grep mode
+                    if model.obsidian_grep_mode() {
+                        if let Some(cfg) = &model.obsidian_cfg {
+                            let line = cmd_item.line();
+                            if let Some((file_path, rest)) = line.split_once(':') {
+                                if let Some((line_num, _)) = rest.split_once(':') {
+                                    open_obsidian_file_line(file_path, line_num, cfg);
+                                } else {
+                                    open_obsidian_file_path(file_path, cfg);
+                                }
+                            } else {
+                                open_obsidian_file_path(&line, cfg);
+                            }
+                        }
+                    } else if model.obsidian_file_mode() {
                         if let Some(cfg) = &model.obsidian_cfg {
                             open_obsidian_file_path(&cmd_item.line(), cfg);
                         }

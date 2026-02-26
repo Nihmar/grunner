@@ -325,7 +325,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
 }
 
 /// Open a specific vault file in Obsidian by its absolute path.
-/// Used when the user presses Enter on a search result in `:Ob` file-search mode.
+/// Used when the user presses Enter on a search result in `:ob` file-search mode.
 pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
     if !vault_path.exists() {
@@ -333,6 +333,30 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
         return;
     }
     let uri = format!("obsidian://open?path={}", urlencoding::encode(file_path));
+    open_uri(&uri);
+}
+
+/// Open a specific vault file at a given line number in Obsidian.
+/// Used when the user presses Enter on a search result in `:obg` grep mode.
+pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig) {
+    let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+    if !vault_path.exists() {
+        eprintln!("Vault path does not exist: {}", vault_path.display());
+        return;
+    }
+
+    // Ensure we have an absolute path to pass to Obsidian
+    let path = if file_path.starts_with('/') {
+        PathBuf::from(file_path)
+    } else {
+        vault_path.join(file_path)
+    };
+
+    let uri = format!(
+        "obsidian://open?path={}&line={}",
+        urlencoding::encode(&path.to_string_lossy()),
+        line
+    );
     open_uri(&uri);
 }
 

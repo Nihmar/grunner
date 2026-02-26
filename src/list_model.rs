@@ -586,11 +586,36 @@ impl AppListModel {
             } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                 let line = cmd_item.line();
 
-                // Handle Obsidian grep mode first (special icon)
+                // Handle Obsidian grep mode: parse line and show relative path + match details
                 if obsidian_grep_mode.get() {
                     image.set_icon_name(Some(&obsidian_icon));
-                    name_label.set_text(&line);
-                    desc_label.set_visible(false);
+
+                    // Parse grep line: file_path:line:content
+                    if let Some((file_path, rest)) = line.split_once(':') {
+                        // Compute relative path from vault root
+                        let display_path = if let Some(vault) = &vault_path {
+                            if file_path.starts_with(vault) {
+                                file_path
+                                    .strip_prefix(vault)
+                                    .unwrap()
+                                    .trim_start_matches('/')
+                                    .to_string()
+                            } else {
+                                file_path.to_string()
+                            }
+                        } else {
+                            file_path.to_string()
+                        };
+
+                        // Show relative path as name, and rest (line:content) as description
+                        name_label.set_text(&display_path);
+                        desc_label.set_text(rest);
+                        desc_label.set_visible(true);
+                    } else {
+                        // Fallback if no colon found
+                        name_label.set_text(&line);
+                        desc_label.set_visible(false);
+                    }
                     return;
                 }
 
@@ -737,5 +762,9 @@ impl AppListModel {
 
     pub fn obsidian_file_mode(&self) -> bool {
         self.obsidian_file_mode.get()
+    }
+
+    pub fn obsidian_grep_mode(&self) -> bool {
+        self.obsidian_grep_mode.get()
     }
 }
