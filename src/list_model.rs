@@ -83,10 +83,8 @@ impl AppListModel {
     /// immediately without requiring any user interaction.
     pub fn set_apps(&self, apps: Vec<DesktopApp>) {
         *self.all_apps.borrow_mut() = apps;
-        let query = self.current_query.borrow();
-        if !query.starts_with(':') {
-            self.populate(&query);
-        }
+        let query = self.current_query.borrow().clone();
+        self.populate(&query);
     }
 
     fn cancel_debounce(&self) {
