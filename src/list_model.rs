@@ -485,6 +485,12 @@ impl AppListModel {
         let obsidian_file_mode = self.obsidian_file_mode.clone();
         let obsidian_grep_mode = self.obsidian_grep_mode.clone();
 
+        // Capture the expanded vault path for relative path display
+        let vault_path = self.obsidian_cfg.as_ref().map(|cfg| {
+            let expanded = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+            expanded.to_string_lossy().to_string()
+        });
+
         let obsidian_icon = ["obsidian", "md.obsidian.Obsidian", "Obsidian"]
             .iter()
             .map(|id| crate::search_provider::resolve_app_icon(id))
@@ -590,33 +596,86 @@ impl AppListModel {
 
                 // Try to parse as file path (absolute)
                 if line.starts_with('/') {
-                    // Check if it's a plain file path (no colon) – from :f or :ob find
+                    // Check if it's a plain file path (no colon) – from :ob find
                     if !line.contains(':') {
                         // Plain file path
                         if obsidian_file_mode.get() {
                             image.set_icon_name(Some(&obsidian_icon));
+
+                            // Show filename as main label
+                            let filename = std::path::Path::new(&line)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or(&line);
+                            name_label.set_text(filename);
+
+                            // Compute relative directory from vault root for description
+                            if let Some(vault) = &vault_path {
+                                if line.starts_with(vault) {
+                                    // Strip vault prefix and any leading slash
+                                    let relative =
+                                        line.strip_prefix(vault).unwrap().trim_start_matches('/');
+                                    if let Some(parent) = std::path::Path::new(relative)
+                                        .parent()
+                                        .and_then(|p| p.to_str())
+                                    {
+                                        if !parent.is_empty() {
+                                            desc_label.set_text(parent);
+                                            desc_label.set_visible(true);
+                                        } else {
+                                            desc_label.set_visible(false);
+                                        }
+                                    } else {
+                                        desc_label.set_visible(false);
+                                    }
+                                } else {
+                                    // Fallback to absolute parent (should not happen in Obsidian mode)
+                                    if let Some(parent) = std::path::Path::new(&line)
+                                        .parent()
+                                        .and_then(|p| p.to_str())
+                                    {
+                                        desc_label.set_text(parent);
+                                        desc_label.set_visible(true);
+                                    } else {
+                                        desc_label.set_visible(false);
+                                    }
+                                }
+                            } else {
+                                // No vault configured – fallback to absolute parent
+                                if let Some(parent) = std::path::Path::new(&line)
+                                    .parent()
+                                    .and_then(|p| p.to_str())
+                                {
+                                    desc_label.set_text(parent);
+                                    desc_label.set_visible(true);
+                                } else {
+                                    desc_label.set_visible(false);
+                                }
+                            }
+                            return;
                         } else {
+                            // Not Obsidian file mode, treat as regular file (e.g., from :f)
                             let (ctype, _) =
                                 gtk4::gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
                             let icon = gtk4::gio::content_type_get_icon(&ctype);
                             image.set_from_gicon(&icon);
+                            let filename = std::path::Path::new(&line)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or(&line);
+                            name_label.set_text(filename);
+                            if let Some(parent) = std::path::Path::new(&line)
+                                .parent()
+                                .and_then(|p| p.to_str())
+                            {
+                                desc_label.set_visible(true);
+                                desc_label.set_text(parent);
+                            } else {
+                                desc_label.set_visible(false);
+                                desc_label.set_text("");
+                            }
+                            return;
                         }
-                        let filename = std::path::Path::new(&line)
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or(&line);
-                        name_label.set_text(filename);
-                        if let Some(parent) = std::path::Path::new(&line)
-                            .parent()
-                            .and_then(|p| p.to_str())
-                        {
-                            desc_label.set_visible(true);
-                            desc_label.set_text(parent);
-                        } else {
-                            desc_label.set_visible(false);
-                            desc_label.set_text("");
-                        }
-                        return;
                     } else {
                         // Line contains ':' – likely grep output from :fg or similar
                         if let Some((file_path, rest)) = line.split_once(':') {
