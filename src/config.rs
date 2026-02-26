@@ -38,7 +38,8 @@ pub struct Config {
     pub calculator: bool,
     pub commands: HashMap<String, String>,
     pub obsidian: Option<ObsidianConfig>,
-    pub command_debounce_ms: u32, // <-- new
+    pub command_debounce_ms: u32,
+    pub search_provider_blacklist: Vec<String>,
 }
 
 impl Default for Config {
@@ -66,6 +67,7 @@ impl Default for Config {
             commands,
             obsidian: None,
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
+            search_provider_blacklist: Vec::new(),
         }
     }
 }
@@ -91,6 +93,7 @@ struct SearchConfig {
     max_results: Option<usize>,
     app_dirs: Option<Vec<String>>,
     command_debounce_ms: Option<u32>,
+    provider_blacklist: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -162,6 +165,9 @@ fn apply_toml(content: &str) -> Config {
         if let Some(debounce) = search.command_debounce_ms {
             cfg.command_debounce_ms = debounce;
         }
+        if let Some(blacklist) = search.provider_blacklist {
+            cfg.search_provider_blacklist = blacklist;
+        }
     }
 
     if let Some(calc) = toml_cfg.calculator {
@@ -222,6 +228,13 @@ command_debounce_ms = 300
 app_dirs = [
 {dirs}
 ]
+
+# List of GNOME Shell search providers to exclude.
+# Use the DesktopId as it appears in the provider's .ini file.
+# provider_blacklist = [
+#     "org.gnome.Software.desktop",
+#     "org.gnome.Characters.desktop",
+# ]
 
 [calculator]
 # Enable inline calculator (evaluates expressions typed in the search bar).

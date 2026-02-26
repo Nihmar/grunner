@@ -41,6 +41,7 @@ pub struct AppListModel {
     fuzzy_matcher: Rc<SkimMatcherV2>,
     search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
     search_provider_mode: Rc<Cell<bool>>,
+    search_provider_blacklist: Vec<String>, // new field
 }
 
 impl AppListModel {
@@ -52,6 +53,7 @@ impl AppListModel {
         commands: HashMap<String, String>,
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
+        search_provider_blacklist: Vec<String>, // new parameter
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
@@ -76,6 +78,7 @@ impl AppListModel {
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
             search_provider_mode: Rc::new(Cell::new(false)),
+            search_provider_blacklist, // store it
         }
     }
 
@@ -188,9 +191,10 @@ impl AppListModel {
                     self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
                     return;
                 }
-                let providers = self
-                    .search_providers
-                    .get_or_init(search_provider::discover_providers);
+                // Initialize providers using the stored blacklist
+                let providers = self.search_providers.get_or_init(|| {
+                    search_provider::discover_providers(&self.search_provider_blacklist)
+                });
                 if providers.is_empty() {
                     self.store.remove_all();
                     self.store.append(&crate::cmd_item::CommandItem::new(

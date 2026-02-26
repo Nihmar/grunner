@@ -1,10 +1,10 @@
+use futures::stream::{FuturesUnordered, StreamExt};
 /// GNOME Shell Search Provider 2 integration.
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
-use futures::stream::{FuturesUnordered, StreamExt};
 use zbus::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -49,6 +49,8 @@ pub struct SearchProvider {
     pub object_path: String,
     /// Icon name resolved once from the .desktop file at discovery time.
     pub app_icon: String,
+    /// Desktop ID (e.g., "org.gnome.Nautilus.desktop") used for blacklisting.
+    pub desktop_id: String,
 }
 
 /// Icon carried by a search result — two possible representations.
@@ -78,13 +80,7 @@ pub struct SearchResult {
 // Provider discovery
 // ---------------------------------------------------------------------------
 
-fn is_blacklisted(desktop_id: &str) -> bool {
-    let blacklist = ["epiphany"];
-    let desktop_id_lower = desktop_id.to_lowercase();
-    blacklist.iter().any(|&b| desktop_id_lower.contains(b))
-}
-
-pub fn discover_providers() -> Vec<SearchProvider> {
+pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
     let home = std::env::var("HOME").unwrap_or_default();
     let dirs: Vec<PathBuf> = vec![
         PathBuf::from("/usr/share/gnome-shell/search-providers"),
@@ -106,6 +102,10 @@ pub fn discover_providers() -> Vec<SearchProvider> {
             let path = entry.path();
             if path.extension().map(|e| e == "ini").unwrap_or(false) {
                 if let Some(p) = parse_ini(&path) {
+                    // Skip if this provider's desktop_id is in the blacklist.
+                    if blacklist.iter().any(|b| b == &p.desktop_id) {
+                        continue;
+                    }
                     providers.push(p);
                 }
             }
@@ -141,15 +141,13 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
         return None;
     }
 
-    let desktop_id = desktop_id?;  // now we require DesktopId
-    if is_blacklisted(&desktop_id) {
-        return None;
-    }
+    let desktop_id = desktop_id?; // now we require DesktopId
 
     Some(SearchProvider {
         bus_name: bus_name?,
         object_path: object_path?,
         app_icon: resolve_app_icon(&desktop_id),
+        desktop_id,
     })
 }
 

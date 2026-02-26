@@ -63,6 +63,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         cfg.commands.clone(),
         obsidian_cfg,
         cfg.command_debounce_ms,
+        cfg.search_provider_blacklist.clone(), // <-- new sixth argument
     );
 
     let window = ApplicationWindow::builder()
