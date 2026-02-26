@@ -6,6 +6,23 @@ A fast, keyboard-driven application launcher for GNOME and other Linux desktops,
 
 ---
 
+## Gallery
+
+Take a quick look at grunner in action:
+
+| | |
+|---|---|
+| **Main window** – fuzzy application search | ![Main view](screenshots/main_view.png) |
+| **Application filtering** | ![App filter](screenshots/app_filter.png) |
+| **File search** (`:f`) using plocate | ![Locate](screenshots/locate.png) |
+| **Full‑text grep** (`:fg`) using ripgrep | ![Ripgrep](screenshots/ripgrep.png) |
+| **Obsidian actions** (`:ob`) – vault, new note, daily note, quick note | ![Obsidian](screenshots/obsidian.png) |
+| **Obsidian file search** (`:ob` with file list) | ![Obsidian locate](screenshots/obsidian_locate.png) |
+| **Obsidian vault grep** (`:obg`) | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png) |
+| **GNOME Shell search providers** (`:s`) – files, calculator, etc. | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
+
+---
+
 ## Features
 
 - **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
