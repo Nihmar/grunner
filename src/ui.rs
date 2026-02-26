@@ -20,7 +20,29 @@ use gtk4::{
 };
 use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
-use std::rc::Rc;
+
+// ---------------------------------------------------------------------------
+// Async app-list loader
+// ---------------------------------------------------------------------------
+
+/// Polls for the result of the background `load_apps` thread and calls
+/// `model.set_apps()` once it arrives. Uses the same idle-poll pattern as
+/// `run_subprocess` in list_model to stay on the GTK main thread.
+fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>, model: AppListModel) {
+    match rx.try_recv() {
+        Ok(apps) => {
+            model.set_apps(apps);
+        }
+        Err(std::sync::mpsc::TryRecvError::Empty) => {
+            glib::idle_add_local_once(move || poll_apps(rx, model));
+        }
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
 
 pub fn build_ui(app: &Application, cfg: &Config) {
     // Load CSS
@@ -32,11 +54,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    let all_apps: Rc<Vec<launcher::DesktopApp>> = Rc::new(launcher::load_apps(&cfg.app_dirs));
     let obsidian_cfg = cfg.obsidian.clone();
 
+    // Model starts empty; apps are loaded in a background thread below.
     let model = AppListModel::new(
-        all_apps,
         cfg.max_results,
         cfg.calculator,
         cfg.commands.clone(),
@@ -62,8 +83,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     root.add_css_class("launcher-box");
     root.set_overflow(gtk4::Overflow::Hidden);
 
-    // --- Search bar with command icon ---
-    let entry_box = GtkBox::new(Orientation::Horizontal, 12); // Increase spacing to 12
+    // --- Barra di ricerca con icona del comando ---
+    let entry_box = GtkBox::new(Orientation::Horizontal, 6);
     entry_box.set_hexpand(true);
     entry_box.set_margin_start(12);
     entry_box.set_margin_end(12);
@@ -71,11 +92,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry_box.set_margin_bottom(0);
 
     let command_icon = Image::new();
-    command_icon.set_pixel_size(32);
+    command_icon.set_pixel_size(24);
     command_icon.set_valign(Align::Center);
-    // Add a little extra margin to match the row icon placement
-    command_icon.set_margin_start(6); // extra gap after icon
-    // command_icon.set_margin_end(6); // extra gap after icon
     command_icon.set_visible(false);
     entry_box.append(&command_icon);
 
@@ -187,8 +205,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         obsidian_bar,
         #[weak]
         command_icon,
-        #[weak]
-        entry,
         move |e| {
             let text = e.text();
             model.populate(&text);
@@ -215,7 +231,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 command_icon.set_visible(false);
             }
 
-            entry.queue_draw();
+            e.queue_draw();
         }
     ));
 
@@ -249,20 +265,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                             let clipboard = display.clipboard();
                             clipboard.set_text(number);
                         } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                            // In :ob file‑search or :obg grep mode open directly in Obsidian
-                            if model.obsidian_file_mode() || model.obsidian_grep_mode() {
+                            // In :ob file-search mode open the file directly in Obsidian;
+                            // otherwise fall back to the generic file/line opener.
+                            if model.obsidian_file_mode() {
                                 if let Some(cfg) = &model.obsidian_cfg {
-                                    let line = cmd_item.line();
-                                    if model.obsidian_grep_mode() {
-                                        // Extract file path from grep output (before first colon)
-                                        if let Some((file_path, _)) = line.split_once(':') {
-                                            open_obsidian_file_path(file_path, cfg);
-                                        } else {
-                                            open_obsidian_file_path(&line, cfg);
-                                        }
-                                    } else {
-                                        open_obsidian_file_path(&line, cfg);
-                                    }
+                                    open_obsidian_file_path(&cmd_item.line(), cfg);
                                 }
                             } else {
                                 open_file_or_line(&cmd_item.line());
@@ -348,19 +355,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     clipboard.set_text(number);
                     window.close();
                 } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                    // Same mode‑check as the keyboard handler above
-                    if model.obsidian_file_mode() || model.obsidian_grep_mode() {
+                    if model.obsidian_file_mode() {
                         if let Some(cfg) = &model.obsidian_cfg {
-                            let line = cmd_item.line();
-                            if model.obsidian_grep_mode() {
-                                if let Some((file_path, _)) = line.split_once(':') {
-                                    open_obsidian_file_path(file_path, cfg);
-                                } else {
-                                    open_obsidian_file_path(&line, cfg);
-                                }
-                            } else {
-                                open_obsidian_file_path(&line, cfg);
-                            }
+                            open_obsidian_file_path(&cmd_item.line(), cfg);
                         }
                     } else {
                         open_file_or_line(&cmd_item.line());
@@ -392,9 +389,26 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     window.present();
     entry.grab_focus();
     model.populate("");
+
+    // Kick off background app loading. The window is already visible and
+    // interactive at this point. When the thread finishes, poll_apps() calls
+    // model.set_apps() on the main thread, which re-runs the current query
+    // (empty on first open, or whatever the user has already typed).
+    {
+        let dirs = cfg.app_dirs.clone();
+        let model_poll = model.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(launcher::load_apps(&dirs));
+        });
+        glib::idle_add_local_once(move || poll_apps(rx, model_poll));
+    }
 }
 
-// build_power_bar remains unchanged
+// ---------------------------------------------------------------------------
+// Power bar
+// ---------------------------------------------------------------------------
+
 fn build_power_bar(window: &ApplicationWindow, entry: &Entry) -> GtkBox {
     let power_bar = GtkBox::new(Orientation::Horizontal, 8);
     power_bar.add_css_class("power-bar");

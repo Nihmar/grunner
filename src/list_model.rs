@@ -23,7 +23,11 @@ use std::time::Duration;
 pub struct AppListModel {
     pub store: gio::ListStore,
     pub selection: SingleSelection,
-    all_apps: Rc<Vec<DesktopApp>>,
+    /// Populated asynchronously after the window is shown.
+    all_apps: Rc<RefCell<Vec<DesktopApp>>>,
+    /// The last query passed to `populate()`, so that `set_apps()` can
+    /// re-run it once the app list has been loaded.
+    current_query: Rc<RefCell<String>>,
     max_results: usize,
     calculator_enabled: bool,
     commands: Rc<HashMap<String, String>>,
@@ -40,8 +44,9 @@ pub struct AppListModel {
 }
 
 impl AppListModel {
+    /// Create a model with an empty app list. Call `set_apps()` once the
+    /// background load has completed to populate and refresh the view.
     pub fn new(
-        all_apps: Rc<Vec<DesktopApp>>,
         max_results: usize,
         calculator_enabled: bool,
         commands: HashMap<String, String>,
@@ -56,7 +61,8 @@ impl AppListModel {
         Self {
             store,
             selection,
-            all_apps,
+            all_apps: Rc::new(RefCell::new(Vec::new())),
+            current_query: Rc::new(RefCell::new(String::new())),
             max_results,
             calculator_enabled,
             commands: Rc::new(commands),
@@ -70,6 +76,16 @@ impl AppListModel {
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
             search_provider_mode: Rc::new(Cell::new(false)),
+        }
+    }
+
+    /// Replace the app list and re-run the current query so the view updates
+    /// immediately without requiring any user interaction.
+    pub fn set_apps(&self, apps: Vec<DesktopApp>) {
+        *self.all_apps.borrow_mut() = apps;
+        let query = self.current_query.borrow();
+        if !query.starts_with(':') {
+            self.populate(&query);
         }
     }
 
@@ -150,6 +166,9 @@ impl AppListModel {
     }
 
     pub fn populate(&self, query: &str) {
+        // Remember the query so set_apps() can replay it after the async load.
+        *self.current_query.borrow_mut() = query.to_string();
+
         self.obsidian_action_mode.set(false);
         self.obsidian_file_mode.set(false);
         self.obsidian_grep_mode.set(false);
@@ -284,13 +303,15 @@ impl AppListModel {
             }
         }
 
+        // Hold the borrow for the duration of the iteration.
+        let apps = self.all_apps.borrow();
+
         if query.is_empty() {
-            for app in self.all_apps.iter() {
+            for app in apps.iter() {
                 self.store.append(&AppItem::new(app));
             }
         } else {
-            let mut results: Vec<(i64, &DesktopApp)> = self
-                .all_apps
+            let mut results: Vec<(i64, &DesktopApp)> = apps
                 .iter()
                 .filter_map(|app| {
                     let name_score = self.fuzzy_matcher.fuzzy_match(&app.name, query);
@@ -600,15 +621,12 @@ impl AppListModel {
                         return;
                     } else {
                         // Line contains ':' – likely grep output from :fg or similar
-                        // Extract file path (part before first colon)
                         if let Some((file_path, rest)) = line.split_once(':') {
-                            // Use content-type icon based on the file
                             let (ctype, _) =
                                 gtk4::gio::content_type_guess(Some(file_path), None::<&[u8]>);
                             let icon = gtk4::gio::content_type_get_icon(&ctype);
                             image.set_from_gicon(&icon);
 
-                            // Display filename as name, and the rest (line:content) as description
                             let filename = std::path::Path::new(file_path)
                                 .file_name()
                                 .and_then(|n| n.to_str())
@@ -621,7 +639,7 @@ impl AppListModel {
                     }
                 }
 
-                // Fallback for any other lines (e.g., relative paths, non-file output)
+                // Fallback for any other lines
                 image.set_icon_name(Some("system-search"));
                 name_label.set_text(&line);
                 desc_label.set_visible(false);
@@ -654,10 +672,6 @@ impl AppListModel {
         });
 
         factory
-    }
-
-    pub fn obsidian_grep_mode(&self) -> bool {
-        self.obsidian_grep_mode.get()
     }
 
     pub fn obsidian_action_mode(&self) -> bool {
