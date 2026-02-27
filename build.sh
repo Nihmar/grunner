@@ -16,7 +16,7 @@ DESKTOP_DIR="$HOME/.local/share/applications"
 # ---------------------------------------------------------------------------
 
 echo "Building grunner in release mode..."
-cargo build --release
+RUSTFLAGS="-C target-cpu=native" cargo build --release
 echo "Build successful."
 
 # ---------------------------------------------------------------------------
