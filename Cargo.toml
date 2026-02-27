@@ -25,3 +25,8 @@ futures = { version = "0.3", default-features = false, features = ["async-await"
 tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "time", "macros", "net"] }
 rayon = "1"
 bincode = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
