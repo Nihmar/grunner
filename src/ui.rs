@@ -106,6 +106,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry_box.append(&entry);
 
     root.append(&entry_box);
+
+    window.present();
     // -------------------------------------------------
 
     // --- Obsidian action button bar ---
@@ -417,7 +419,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         }
     ));
 
-    window.present();
     entry.grab_focus();
     model.populate("");
 
