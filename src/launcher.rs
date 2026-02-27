@@ -1,6 +1,7 @@
+use jwalk::WalkDir;
 use rayon::prelude::*;
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -70,26 +71,29 @@ fn save_cache(apps: &[DesktopApp]) {
 
 /// Scans all directories in parallel, deduplicating by file path.
 fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
-    // First pass (sequential): collect all unique .desktop paths.
-    // Deduplication must be sequential because HashSet isn't Sync.
-    let mut seen = HashSet::new();
+    // First pass (parallel): collect all .desktop paths from each directory.
     let paths: Vec<PathBuf> = dirs
-        .iter()
+        .par_iter()
         .filter(|d| d.exists())
         .flat_map(|dir| {
-            fs::read_dir(dir)
+            WalkDir::new(dir)
                 .into_iter()
-                .flatten()
-                .flatten()
+                .filter_map(Result::ok)
+                .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("desktop"))
                 .map(|e| e.path())
-                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("desktop"))
                 .collect::<Vec<_>>()
         })
+        .collect();
+
+    // Deduplicate sequentially using a fast hash set.
+    let mut seen = FxHashSet::default();
+    let unique_paths: Vec<PathBuf> = paths
+        .into_iter()
         .filter(|p| seen.insert(p.clone()))
         .collect();
 
     // Second pass (parallel): parse .desktop files.
-    let mut apps: Vec<DesktopApp> = paths
+    let mut apps: Vec<DesktopApp> = unique_paths
         .par_iter()
         .filter_map(|p| parse_desktop_file(p))
         .collect();
