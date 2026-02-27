@@ -171,7 +171,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .child(&list_view)
         .build();
 
-    root.append(&entry);
+    // root.append(&entry);
     root.append(&scrolled);
     root.append(&obsidian_bar);
     root.append(&power_bar);
@@ -425,15 +425,13 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // interactive at this point. When the thread finishes, poll_apps() calls
     // model.set_apps() on the main thread, which re-runs the current query
     // (empty on first open, or whatever the user has already typed).
-    {
-        let dirs = cfg.app_dirs.clone();
-        let model_poll = model.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(launcher::load_apps(&dirs));
-        });
-        glib::idle_add_local_once(move || poll_apps(rx, model_poll));
-    }
+    let dirs = cfg.app_dirs.clone();
+    let model_poll = model.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(launcher::load_apps(&dirs));
+    });
+    glib::idle_add_local_once(move || poll_apps(rx, model_poll));
 }
 
 // ---------------------------------------------------------------------------
