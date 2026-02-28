@@ -19,6 +19,20 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+// ── Obsidian mode ─────────────────────────────────────────────────────────────
+
+/// Replaces three separate `Rc<Cell<bool>>` fields with a single enum.
+#[derive(Clone, Copy, Default, PartialEq)]
+enum ObsidianMode {
+    #[default]
+    None,
+    Action,
+    File,
+    Grep,
+}
+
+// ── Model ─────────────────────────────────────────────────────────────────────
+
 #[derive(Clone)]
 pub struct AppListModel {
     pub store: gio::ListStore,
@@ -33,15 +47,13 @@ pub struct AppListModel {
     commands: Rc<HashMap<String, String>>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
-    obsidian_action_mode: Rc<Cell<bool>>,
-    obsidian_file_mode: Rc<Cell<bool>>,
-    obsidian_grep_mode: Rc<Cell<bool>>,
+    obsidian_mode: Rc<Cell<ObsidianMode>>,
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     command_debounce_ms: u32,
     fuzzy_matcher: Rc<SkimMatcherV2>,
     search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
     search_provider_mode: Rc<Cell<bool>>,
-    search_provider_blacklist: Vec<String>, // new field
+    search_provider_blacklist: Vec<String>,
 }
 
 impl AppListModel {
@@ -53,7 +65,7 @@ impl AppListModel {
         commands: HashMap<String, String>,
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
-        search_provider_blacklist: Vec<String>, // new parameter
+        search_provider_blacklist: Vec<String>,
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
@@ -70,17 +82,17 @@ impl AppListModel {
             commands: Rc::new(commands),
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
-            obsidian_action_mode: Rc::new(Cell::new(false)),
-            obsidian_file_mode: Rc::new(Cell::new(false)),
-            obsidian_grep_mode: Rc::new(Cell::new(false)),
+            obsidian_mode: Rc::new(Cell::new(ObsidianMode::None)),
             command_debounce: Rc::new(RefCell::new(None)),
             command_debounce_ms,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
             search_provider_mode: Rc::new(Cell::new(false)),
-            search_provider_blacklist, // store it
+            search_provider_blacklist,
         }
     }
+
+    // ── Public helpers ────────────────────────────────────────────────────────
 
     /// Replace the app list and re-run the current query so the view updates
     /// immediately without requiring any user interaction.
@@ -90,12 +102,29 @@ impl AppListModel {
         self.populate(&query);
     }
 
+    pub fn obsidian_action_mode(&self) -> bool {
+        self.obsidian_mode.get() == ObsidianMode::Action
+    }
+
+    pub fn obsidian_file_mode(&self) -> bool {
+        self.obsidian_mode.get() == ObsidianMode::File
+    }
+
+    pub fn obsidian_grep_mode(&self) -> bool {
+        self.obsidian_mode.get() == ObsidianMode::Grep
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /// Cancel any pending debounced command.
     fn cancel_debounce(&self) {
         if let Some(source_id) = self.command_debounce.borrow_mut().take() {
             let _ = source_id.remove();
         }
     }
 
+    /// Schedule `f` to run after `delay_ms` milliseconds, cancelling any
+    /// previously-scheduled command first.
     fn schedule_command_with_delay<F>(&self, delay_ms: u32, f: F)
     where
         F: FnOnce() + 'static,
@@ -120,6 +149,198 @@ impl AppListModel {
     {
         self.schedule_command_with_delay(self.command_debounce_ms, f);
     }
+
+    /// Increment the task-generation counter (used to discard stale results)
+    /// and return the new value.
+    fn bump_task_gen(&self) -> u64 {
+        let next_gen = self.task_gen.get() + 1;
+        self.task_gen.set(next_gen);
+        next_gen
+    }
+
+    /// Clear the store, show a single informational/error message, and select it.
+    fn show_error_item(&self, msg: impl Into<String>) {
+        self.store.remove_all();
+        self.store.append(&CommandItem::new(msg.into()));
+        self.selection.set_selected(0);
+    }
+
+    /// Clear the store and leave nothing selected.
+    fn clear_store(&self) {
+        self.store.remove_all();
+        self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
+    }
+
+    // ── Populate ──────────────────────────────────────────────────────────────
+
+    pub fn populate(&self, query: &str) {
+        *self.current_query.borrow_mut() = query.to_string();
+        self.obsidian_mode.set(ObsidianMode::None);
+        self.search_provider_mode.set(false);
+        self.cancel_debounce();
+
+        if query.starts_with(':') {
+            self.handle_colon_command(query);
+            return;
+        }
+
+        // --- Non-colon query: show apps / calculator ---
+        self.store.remove_all();
+        self.bump_task_gen();
+
+        if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
+            if let Some(result_str) = eval_expression(query) {
+                self.store.append(&CalcItem::new(result_str));
+            }
+        }
+
+        let apps = self.all_apps.borrow();
+        if query.is_empty() {
+            for app in apps.iter() {
+                self.store.append(&AppItem::new(app));
+            }
+        } else {
+            let mut results: Vec<(i64, &DesktopApp)> = apps
+                .iter()
+                .filter_map(|app| {
+                    let name_score = self.fuzzy_matcher.fuzzy_match(&app.name, query);
+                    let desc_score = if !app.description.is_empty() {
+                        self.fuzzy_matcher
+                            .fuzzy_match(&app.description, query)
+                            .map(|s| s / 2)
+                    } else {
+                        None
+                    };
+                    let score = match (name_score, desc_score) {
+                        (None, None) => return None,
+                        (a, b) => a.unwrap_or(i64::MIN).max(b.unwrap_or(i64::MIN)),
+                    };
+                    Some((score, app))
+                })
+                .collect();
+
+            results.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+            results.truncate(self.max_results);
+
+            for (_, app) in results {
+                self.store.append(&AppItem::new(app));
+            }
+        }
+
+        if self.store.n_items() > 0 {
+            self.selection.set_selected(0);
+        }
+    }
+
+    // ── Colon-command dispatch ────────────────────────────────────────────────
+
+    fn handle_colon_command(&self, query: &str) {
+        let (cmd_part, arg) = query[1..]
+            .splitn(2, ' ')
+            .collect::<Vec<_>>()
+            .split_first()
+            .map(|(cmd, rest)| (*cmd, rest.first().copied().unwrap_or("").trim()))
+            .unwrap_or((&query[1..], ""));
+
+        match cmd_part {
+            "s" => self.handle_search_provider(arg),
+            "ob" | "obg" => self.handle_obsidian(cmd_part, arg),
+            cmd_name => self.handle_custom_command(cmd_name, arg),
+        }
+    }
+
+    fn handle_search_provider(&self, arg: &str) {
+        if arg.is_empty() {
+            self.clear_store();
+            return;
+        }
+
+        let providers = self
+            .search_providers
+            .get_or_init(|| search_provider::discover_providers(&self.search_provider_blacklist));
+
+        if providers.is_empty() {
+            self.show_error_item("No GNOME Shell search providers found");
+            return;
+        }
+
+        self.search_provider_mode.set(true);
+        self.bump_task_gen();
+        let providers_clone: Vec<SearchProvider> = providers.to_vec();
+        let arg = arg.to_string();
+        let max = self.max_results;
+        let model_clone = self.clone();
+        self.schedule_command_with_delay(120, move || {
+            model_clone.run_provider_search(providers_clone, arg, max);
+        });
+    }
+
+    fn handle_obsidian(&self, cmd_name: &str, arg: &str) {
+        let obs_cfg = match &self.obsidian_cfg {
+            Some(c) => c.clone(),
+            None => {
+                self.show_error_item("Obsidian not configured – edit config");
+                return;
+            }
+        };
+
+        let vault_path = expand_home(&obs_cfg.vault);
+        if !vault_path.exists() {
+            self.show_error_item(format!(
+                "Vault path does not exist: {}",
+                vault_path.display()
+            ));
+            return;
+        }
+
+        match cmd_name {
+            "ob" if arg.is_empty() => {
+                self.obsidian_mode.set(ObsidianMode::Action);
+                self.clear_store();
+            }
+            "ob" => {
+                self.obsidian_mode.set(ObsidianMode::File);
+                self.bump_task_gen();
+                let vault_str = vault_path.to_string_lossy().into_owned();
+                let arg = arg.to_string();
+                let model_clone = self.clone();
+                self.schedule_command(move || {
+                    model_clone.run_find_in_vault(PathBuf::from(vault_str), &arg);
+                });
+            }
+            "obg" if arg.is_empty() => {
+                self.obsidian_mode.set(ObsidianMode::Grep);
+                self.clear_store();
+            }
+            "obg" => {
+                self.obsidian_mode.set(ObsidianMode::Grep);
+                self.bump_task_gen();
+                let vault_str = vault_path.to_string_lossy().into_owned();
+                let arg = arg.to_string();
+                let model_clone = self.clone();
+                self.schedule_command(move || {
+                    model_clone.run_rg_in_vault(PathBuf::from(vault_str), &arg);
+                });
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn handle_custom_command(&self, cmd_name: &str, arg: &str) {
+        let Some(template) = self.commands.get(cmd_name) else {
+            return;
+        };
+        self.bump_task_gen();
+        let template = template.clone();
+        let arg = arg.to_string();
+        let cmd_name = cmd_name.to_string();
+        let model_clone = self.clone();
+        self.schedule_command(move || {
+            model_clone.run_command(&cmd_name, &template, &arg);
+        });
+    }
+
+    // ── Background workers ────────────────────────────────────────────────────
 
     fn run_subprocess(&self, mut cmd: std::process::Command) {
         let generation = self.task_gen.get();
@@ -164,189 +385,6 @@ impl AppListModel {
             }
         }
         glib::idle_add_local_once(move || poll(rx, model_clone, generation));
-    }
-
-    pub fn populate(&self, query: &str) {
-        // Remember the query so set_apps() can replay it after the async load.
-        *self.current_query.borrow_mut() = query.to_string();
-
-        self.obsidian_action_mode.set(false);
-        self.obsidian_file_mode.set(false);
-        self.obsidian_grep_mode.set(false);
-        self.search_provider_mode.set(false);
-
-        self.cancel_debounce();
-
-        // --- Colon command handling ---
-        if query.starts_with(':') {
-            let parts: Vec<&str> = query.splitn(2, ' ').collect();
-            let cmd_part = parts.first().copied().unwrap_or(query);
-            let arg = parts.get(1).unwrap_or(&"").trim();
-            let cmd_name = &cmd_part[1..];
-
-            // :s <query> — GNOME Shell search providers
-            if cmd_name == "s" {
-                if arg.is_empty() {
-                    self.store.remove_all();
-                    self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
-                    return;
-                }
-                // Initialize providers using the stored blacklist
-                let providers = self.search_providers.get_or_init(|| {
-                    search_provider::discover_providers(&self.search_provider_blacklist)
-                });
-                if providers.is_empty() {
-                    self.store.remove_all();
-                    self.store.append(&crate::cmd_item::CommandItem::new(
-                        "No GNOME Shell search providers found".to_string(),
-                    ));
-                    self.selection.set_selected(0);
-                    return;
-                }
-                self.search_provider_mode.set(true);
-                self.task_gen.set(self.task_gen.get() + 1);
-                let providers_clone: Vec<SearchProvider> = providers.to_vec();
-                let arg = arg.to_string();
-                let max = self.max_results;
-                let model_clone = self.clone();
-                self.schedule_command_with_delay(120, move || {
-                    model_clone.run_provider_search(providers_clone, arg, max);
-                });
-                return;
-            }
-
-            // Obsidian commands
-            if cmd_name == "ob" || cmd_name == "obg" {
-                let obs_cfg = match &self.obsidian_cfg {
-                    Some(c) => c.clone(),
-                    None => {
-                        self.store.remove_all();
-                        let item =
-                            CommandItem::new("Obsidian not configured – edit config".to_string());
-                        self.store.append(&item);
-                        self.selection.set_selected(0);
-                        return;
-                    }
-                };
-                let vault_path = expand_home(&obs_cfg.vault);
-                if !vault_path.exists() {
-                    self.store.remove_all();
-                    let item = CommandItem::new(format!(
-                        "Vault path does not exist: {}",
-                        vault_path.display()
-                    ));
-                    self.store.append(&item);
-                    self.selection.set_selected(0);
-                    return;
-                }
-
-                match cmd_name {
-                    "ob" => {
-                        if arg.is_empty() {
-                            self.obsidian_action_mode.set(true);
-                            self.store.remove_all();
-                            self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
-                            return;
-                        } else {
-                            self.obsidian_file_mode.set(true);
-                            self.task_gen.set(self.task_gen.get() + 1);
-                            let vault_path = vault_path.to_string_lossy().to_string();
-                            let arg = arg.to_string();
-                            let model_clone = self.clone();
-                            self.schedule_command(move || {
-                                model_clone.run_find_in_vault(PathBuf::from(vault_path), &arg);
-                            });
-                            return;
-                        }
-                    }
-                    "obg" => {
-                        self.obsidian_grep_mode.set(true);
-                        if arg.is_empty() {
-                            self.store.remove_all();
-                            self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
-                            return;
-                        }
-                        self.task_gen.set(self.task_gen.get() + 1);
-                        let vault_path = vault_path.to_string_lossy().to_string();
-                        let arg = arg.to_string();
-                        let model_clone = self.clone();
-                        self.schedule_command(move || {
-                            model_clone.run_rg_in_vault(PathBuf::from(vault_path), &arg);
-                        });
-                        return;
-                    }
-                    _ => unreachable!(),
-                }
-            }
-
-            // Regular colon commands (from config)
-            if let Some(template) = (!self.commands.is_empty())
-                .then(|| self.commands.get(cmd_name))
-                .flatten()
-            {
-                self.task_gen.set(self.task_gen.get() + 1);
-                let template = template.clone();
-                let arg = arg.to_string();
-                let cmd_name = cmd_name.to_string();
-                let model_clone = self.clone();
-                self.schedule_command(move || {
-                    model_clone.run_command(&cmd_name, &template, &arg);
-                });
-                return;
-            } else {
-                return;
-            }
-        }
-
-        // --- Non-colon query: clear and show apps/calculator ---
-        self.store.remove_all();
-        self.task_gen.set(self.task_gen.get() + 1);
-
-        if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
-            if let Some(result_str) = eval_expression(query) {
-                let calc_item = CalcItem::new(result_str);
-                self.store.append(&calc_item);
-            }
-        }
-
-        // Hold the borrow for the duration of the iteration.
-        let apps = self.all_apps.borrow();
-
-        if query.is_empty() {
-            for app in apps.iter() {
-                self.store.append(&AppItem::new(app));
-            }
-        } else {
-            let mut results: Vec<(i64, &DesktopApp)> = apps
-                .iter()
-                .filter_map(|app| {
-                    let name_score = self.fuzzy_matcher.fuzzy_match(&app.name, query);
-                    let desc_score = if !app.description.is_empty() {
-                        self.fuzzy_matcher
-                            .fuzzy_match(&app.description, query)
-                            .map(|s| s / 2)
-                    } else {
-                        None
-                    };
-                    let score = match (name_score, desc_score) {
-                        (None, None) => return None,
-                        (a, b) => a.unwrap_or(i64::MIN).max(b.unwrap_or(i64::MIN)),
-                    };
-                    Some((score, app))
-                })
-                .collect();
-
-            results.sort_unstable_by(|a, b| b.0.cmp(&a.0));
-            results.truncate(self.max_results);
-
-            for (_, app) in results {
-                self.store.append(&AppItem::new(app));
-            }
-        }
-
-        if self.store.n_items() > 0 {
-            self.selection.set_selected(0);
-        }
     }
 
     fn run_provider_search(&self, providers: Vec<SearchProvider>, query: String, max: usize) {
@@ -440,9 +478,7 @@ impl AppListModel {
                         });
                         return;
                     }
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        return;
-                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
                 }
             }
         }
@@ -480,24 +516,22 @@ impl AppListModel {
         cmd.arg("--with-filename")
             .arg("--line-number")
             .arg("--no-heading")
-            .arg("--color")
-            .arg("never")
+            .arg("--color=never")
             .arg(pattern)
             .arg(&vault_path);
         self.run_subprocess(cmd);
     }
 
+    // ── Factory ───────────────────────────────────────────────────────────────
+
     pub fn create_factory(&self) -> SignalListItemFactory {
         let factory = SignalListItemFactory::new();
 
-        let obsidian_file_mode = self.obsidian_file_mode.clone();
-        let obsidian_grep_mode = self.obsidian_grep_mode.clone();
-
-        // Capture the expanded vault path for relative path display
-        let vault_path = self.obsidian_cfg.as_ref().map(|cfg| {
-            let expanded = expand_home(&cfg.vault);
-            expanded.to_string_lossy().to_string()
-        });
+        let obsidian_mode = self.obsidian_mode.clone();
+        let vault_path = self
+            .obsidian_cfg
+            .as_ref()
+            .map(|cfg| expand_home(&cfg.vault).to_string_lossy().into_owned());
 
         let obsidian_icon = ["obsidian", "md.obsidian.Obsidian", "Obsidian"]
             .iter()
@@ -568,6 +602,22 @@ impl AppListModel {
                 .and_then(|c| c.downcast::<gtk4::Label>().ok())
                 .expect("missing desc_label");
 
+            /// Show or hide `desc_label` based on whether `text` is non-empty.
+            fn set_desc(label: &gtk4::Label, text: &str) {
+                let visible = !text.is_empty();
+                label.set_visible(visible);
+                label.set_text(if visible { text } else { "" });
+            }
+
+            /// Compute a path relative to `vault`, falling back to absolute.
+            fn relative_to_vault<'a>(path: &'a str, vault: &Option<String>) -> &'a str {
+                vault
+                    .as_deref()
+                    .and_then(|v| path.strip_prefix(v))
+                    .map(|s| s.trim_start_matches('/'))
+                    .unwrap_or(path)
+            }
+
             if let Some(app_item) = obj.downcast_ref::<AppItem>() {
                 let icon = app_item.icon();
                 if icon.is_empty() {
@@ -578,161 +628,87 @@ impl AppListModel {
                     image.set_icon_name(Some(&icon));
                 }
                 name_label.set_text(&app_item.name());
-                let desc = app_item.description();
-                if desc.is_empty() {
-                    desc_label.set_visible(false);
-                    desc_label.set_text("");
-                } else {
-                    desc_label.set_visible(true);
-                    desc_label.set_text(&desc);
-                }
+                set_desc(&desc_label, &app_item.description());
             } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
                 image.set_icon_name(Some("accessories-calculator"));
                 name_label.set_text(&calc_item.result());
-                desc_label.set_visible(false);
-                desc_label.set_text("");
+                set_desc(&desc_label, "");
             } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                 let line = cmd_item.line();
+                let mode = obsidian_mode.get();
 
-                // Handle Obsidian grep mode: parse line and show relative path + match details
-                if obsidian_grep_mode.get() {
+                if mode == ObsidianMode::Grep {
                     image.set_icon_name(Some(&obsidian_icon));
-
-                    // Parse grep line: file_path:line:content
                     if let Some((file_path, rest)) = line.split_once(':') {
-                        // Compute relative path from vault root
-                        let display_path = if let Some(vault) = &vault_path {
-                            if file_path.starts_with(vault) {
-                                file_path
-                                    .strip_prefix(vault)
-                                    .unwrap()
-                                    .trim_start_matches('/')
-                                    .to_string()
-                            } else {
-                                file_path.to_string()
-                            }
-                        } else {
-                            file_path.to_string()
-                        };
-
-                        // Show relative path as name, and rest (line:content) as description
-                        name_label.set_text(&display_path);
-                        desc_label.set_text(rest);
-                        desc_label.set_visible(true);
+                        let display = relative_to_vault(file_path, &vault_path);
+                        name_label.set_text(display);
+                        set_desc(&desc_label, rest);
                     } else {
-                        // Fallback if no colon found
                         name_label.set_text(&line);
-                        desc_label.set_visible(false);
+                        set_desc(&desc_label, "");
                     }
                     return;
                 }
 
-                // Try to parse as file path (absolute)
                 if line.starts_with('/') {
-                    // Check if it's a plain file path (no colon) – from :ob find
                     if !line.contains(':') {
-                        // Plain file path
-                        if obsidian_file_mode.get() {
+                        // Plain absolute path (e.g. from :ob find)
+                        if mode == ObsidianMode::File {
                             image.set_icon_name(Some(&obsidian_icon));
-
-                            // Show filename as main label
                             let filename = std::path::Path::new(&line)
                                 .file_name()
                                 .and_then(|n| n.to_str())
                                 .unwrap_or(&line);
                             name_label.set_text(filename);
-
-                            // Compute relative directory from vault root for description
-                            if let Some(vault) = &vault_path {
-                                if line.starts_with(vault) {
-                                    // Strip vault prefix and any leading slash
-                                    let relative =
-                                        line.strip_prefix(vault).unwrap().trim_start_matches('/');
-                                    if let Some(parent) = std::path::Path::new(relative)
-                                        .parent()
-                                        .and_then(|p| p.to_str())
-                                    {
-                                        if !parent.is_empty() {
-                                            desc_label.set_text(parent);
-                                            desc_label.set_visible(true);
-                                        } else {
-                                            desc_label.set_visible(false);
-                                        }
-                                    } else {
-                                        desc_label.set_visible(false);
-                                    }
-                                } else {
-                                    // Fallback to absolute parent (should not happen in Obsidian mode)
-                                    if let Some(parent) = std::path::Path::new(&line)
-                                        .parent()
-                                        .and_then(|p| p.to_str())
-                                    {
-                                        desc_label.set_text(parent);
-                                        desc_label.set_visible(true);
-                                    } else {
-                                        desc_label.set_visible(false);
-                                    }
-                                }
-                            } else {
-                                // No vault configured – fallback to absolute parent
-                                if let Some(parent) = std::path::Path::new(&line)
-                                    .parent()
-                                    .and_then(|p| p.to_str())
-                                {
-                                    desc_label.set_text(parent);
-                                    desc_label.set_visible(true);
-                                } else {
-                                    desc_label.set_visible(false);
-                                }
-                            }
-                            return;
-                        } else {
-                            // Not Obsidian file mode, treat as regular file (e.g., from :f)
-                            let (ctype, _) =
-                                gtk4::gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
-                            let icon = gtk4::gio::content_type_get_icon(&ctype);
-                            image.set_from_gicon(&icon);
-                            let filename = std::path::Path::new(&line)
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or(&line);
-                            name_label.set_text(filename);
-                            if let Some(parent) = std::path::Path::new(&line)
+                            let relative = relative_to_vault(&line, &vault_path);
+                            let parent = std::path::Path::new(relative)
                                 .parent()
                                 .and_then(|p| p.to_str())
-                            {
-                                desc_label.set_visible(true);
-                                desc_label.set_text(parent);
-                            } else {
-                                desc_label.set_visible(false);
-                                desc_label.set_text("");
-                            }
-                            return;
-                        }
-                    } else {
-                        // Line contains ':' – likely grep output from :fg or similar
-                        if let Some((file_path, rest)) = line.split_once(':') {
+                                .filter(|s| !s.is_empty())
+                                .or_else(|| {
+                                    // Fallback: absolute parent when outside vault
+                                    std::path::Path::new(&line)
+                                        .parent()
+                                        .and_then(|p| p.to_str())
+                                });
+                            set_desc(&desc_label, parent.unwrap_or(""));
+                        } else {
+                            // Regular file (e.g. from :f)
                             let (ctype, _) =
-                                gtk4::gio::content_type_guess(Some(file_path), None::<&[u8]>);
-                            let icon = gtk4::gio::content_type_get_icon(&ctype);
-                            image.set_from_gicon(&icon);
-
-                            let filename = std::path::Path::new(file_path)
+                                gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
+                            image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+                            let filename = std::path::Path::new(&line)
                                 .file_name()
                                 .and_then(|n| n.to_str())
-                                .unwrap_or(file_path);
+                                .unwrap_or(&line);
                             name_label.set_text(filename);
-                            desc_label.set_visible(true);
-                            desc_label.set_text(rest);
-                            return;
+                            let parent = std::path::Path::new(&line)
+                                .parent()
+                                .and_then(|p| p.to_str())
+                                .unwrap_or("");
+                            set_desc(&desc_label, parent);
                         }
+                        return;
+                    }
+
+                    // Line is absolute path with colon – grep output from :fg
+                    if let Some((file_path, rest)) = line.split_once(':') {
+                        let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
+                        image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+                        let filename = std::path::Path::new(file_path)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(file_path);
+                        name_label.set_text(filename);
+                        set_desc(&desc_label, rest);
+                        return;
                     }
                 }
 
                 // Fallback for any other lines
                 image.set_icon_name(Some("system-search"));
                 name_label.set_text(&line);
-                desc_label.set_visible(false);
+                set_desc(&desc_label, "");
             } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
                 let icon_file = sr_item.icon_file();
                 let icon_themed = sr_item.icon_themed();
@@ -747,32 +723,13 @@ impl AppListModel {
                     image.set_icon_name(Some("system-search"));
                 }
                 name_label.set_text(&sr_item.name());
-                let desc = sr_item.description();
-                if desc.is_empty() {
-                    desc_label.set_visible(false);
-                    desc_label.set_text("");
-                } else {
-                    desc_label.set_visible(true);
-                    desc_label.set_text(&desc);
-                }
+                set_desc(&desc_label, &sr_item.description());
             } else {
                 name_label.set_text("?");
-                desc_label.set_visible(false);
+                set_desc(&desc_label, "");
             }
         });
 
         factory
-    }
-
-    pub fn obsidian_action_mode(&self) -> bool {
-        self.obsidian_action_mode.get()
-    }
-
-    pub fn obsidian_file_mode(&self) -> bool {
-        self.obsidian_file_mode.get()
-    }
-
-    pub fn obsidian_grep_mode(&self) -> bool {
-        self.obsidian_grep_mode.get()
     }
 }
