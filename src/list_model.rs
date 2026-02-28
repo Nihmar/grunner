@@ -27,16 +27,19 @@ fn parse_colon_command(query: &str) -> (&str, &str) {
     }
 }
 
-// ── Obsidian mode ─────────────────────────────────────────────────────────────
+// ── Active mode ───────────────────────────────────────────────────────────────
 
-/// Replaces three separate `Rc<Cell<bool>>` fields with a single enum.
+/// Tracks which colon-command mode is currently active.  Replaces the
+/// previous `ObsidianMode` enum **and** the separate `search_provider_mode:
+/// Rc<Cell<bool>>` field with a single, explicit state machine.
 #[derive(Clone, Copy, Default, PartialEq)]
-enum ObsidianMode {
+enum ActiveMode {
     #[default]
     None,
-    Action,
-    File,
-    Grep,
+    SearchProvider,
+    ObsidianAction,
+    ObsidianFile,
+    ObsidianGrep,
 }
 
 // ── Model ─────────────────────────────────────────────────────────────────────
@@ -55,12 +58,11 @@ pub struct AppListModel {
     commands: Rc<HashMap<String, String>>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
-    obsidian_mode: Rc<Cell<ObsidianMode>>,
+    active_mode: Rc<Cell<ActiveMode>>,
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     command_debounce_ms: u32,
     fuzzy_matcher: Rc<SkimMatcherV2>,
     search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
-    search_provider_mode: Rc<Cell<bool>>,
     search_provider_blacklist: Vec<String>,
 }
 
@@ -90,12 +92,11 @@ impl AppListModel {
             commands: Rc::new(commands),
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
-            obsidian_mode: Rc::new(Cell::new(ObsidianMode::None)),
+            active_mode: Rc::new(Cell::new(ActiveMode::None)),
             command_debounce: Rc::new(RefCell::new(None)),
             command_debounce_ms,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
-            search_provider_mode: Rc::new(Cell::new(false)),
             search_provider_blacklist,
         }
     }
@@ -171,8 +172,7 @@ impl AppListModel {
 
     pub fn populate(&self, query: &str) {
         *self.current_query.borrow_mut() = query.to_string();
-        self.obsidian_mode.set(ObsidianMode::None);
-        self.search_provider_mode.set(false);
+        self.active_mode.set(ActiveMode::None);
         self.cancel_debounce();
 
         if query.starts_with(':') {
@@ -255,7 +255,7 @@ impl AppListModel {
             return;
         }
 
-        self.search_provider_mode.set(true);
+        self.active_mode.set(ActiveMode::SearchProvider);
         self.bump_task_gen();
         let providers_clone: Vec<SearchProvider> = providers.to_vec();
         let arg = arg.to_string();
@@ -286,11 +286,11 @@ impl AppListModel {
 
         match cmd_name {
             "ob" if arg.is_empty() => {
-                self.obsidian_mode.set(ObsidianMode::Action);
+                self.active_mode.set(ActiveMode::ObsidianAction);
                 self.clear_store();
             }
             "ob" => {
-                self.obsidian_mode.set(ObsidianMode::File);
+                self.active_mode.set(ActiveMode::ObsidianFile);
                 self.bump_task_gen();
                 let vault_str = vault_path.to_string_lossy().into_owned();
                 let arg = arg.to_string();
@@ -300,11 +300,11 @@ impl AppListModel {
                 });
             }
             "obg" if arg.is_empty() => {
-                self.obsidian_mode.set(ObsidianMode::Grep);
+                self.active_mode.set(ActiveMode::ObsidianGrep);
                 self.clear_store();
             }
             "obg" => {
-                self.obsidian_mode.set(ObsidianMode::Grep);
+                self.active_mode.set(ActiveMode::ObsidianGrep);
                 self.bump_task_gen();
                 let vault_str = vault_path.to_string_lossy().into_owned();
                 let arg = arg.to_string();
@@ -524,7 +524,7 @@ impl AppListModel {
     pub fn create_factory(&self) -> SignalListItemFactory {
         let factory = SignalListItemFactory::new();
 
-        let obsidian_mode = self.obsidian_mode.clone();
+        let active_mode = self.active_mode.clone();
         let vault_path = self
             .obsidian_cfg
             .as_ref()
@@ -632,9 +632,9 @@ impl AppListModel {
                 set_desc(&desc_label, "");
             } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
                 let line = cmd_item.line();
-                let mode = obsidian_mode.get();
+                let mode = active_mode.get();
 
-                if mode == ObsidianMode::Grep {
+                if mode == ActiveMode::ObsidianGrep {
                     image.set_icon_name(Some(&obsidian_icon));
                     if let Some((file_path, rest)) = line.split_once(':') {
                         let display = relative_to_vault(file_path, &vault_path);
@@ -650,7 +650,7 @@ impl AppListModel {
                 if line.starts_with('/') {
                     if !line.contains(':') {
                         // Plain absolute path (e.g. from :ob find)
-                        if mode == ObsidianMode::File {
+                        if mode == ActiveMode::ObsidianFile {
                             image.set_icon_name(Some(&obsidian_icon));
                             let filename = std::path::Path::new(&line)
                                 .file_name()
