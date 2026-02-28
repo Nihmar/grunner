@@ -2,6 +2,7 @@ use crate::config;
 use crate::config::ObsidianConfig;
 use crate::launcher;
 use crate::obsidian_item::ObsidianAction;
+use crate::utils::expand_home;
 use chrono::Local;
 use gtk4::prelude::DisplayExt;
 use once_cell::sync::Lazy;
@@ -11,16 +12,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-
-fn expand_home(path: &str, home: &str) -> PathBuf {
-    if let Some(rest) = path.strip_prefix("~/") {
-        PathBuf::from(home).join(rest)
-    } else if path == "~" {
-        PathBuf::from(home)
-    } else {
-        PathBuf::from(path)
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Shared PATH-search helper
@@ -223,7 +214,7 @@ pub fn open_file_or_line(line: &str) {
 // Obsidian actions
 // ---------------------------------------------------------------------------
 pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: &ObsidianConfig) {
-    let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+    let vault_path = expand_home(&cfg.vault);
     if !vault_path.exists() {
         eprintln!("Vault path does not exist: {}", vault_path.display());
         return;
@@ -327,7 +318,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
 /// Open a specific vault file in Obsidian by its absolute path.
 /// Used when the user presses Enter on a search result in `:ob` file-search mode.
 pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
-    let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+    let vault_path = expand_home(&cfg.vault);
     if !vault_path.exists() {
         eprintln!("Vault path does not exist: {}", vault_path.display());
         return;
@@ -339,7 +330,7 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
 /// Open a specific vault file at a given line number in Obsidian.
 /// Used when the user presses Enter on a search result in `:obg` grep mode.
 pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig) {
-    let vault_path = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+    let vault_path = expand_home(&cfg.vault);
     if !vault_path.exists() {
         eprintln!("Vault path does not exist: {}", vault_path.display());
         return;

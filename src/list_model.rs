@@ -3,10 +3,10 @@ use crate::calc_item::CalcItem;
 use crate::calculator::{eval_expression, is_arithmetic_query};
 use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
-use crate::config::expand_home;
 use crate::launcher::DesktopApp;
 use crate::search_provider::{self, SearchProvider};
 use crate::search_result_item::SearchResultItem;
+use crate::utils::expand_home;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use glib::object::Cast;
@@ -228,8 +228,7 @@ impl AppListModel {
                         return;
                     }
                 };
-                let vault_path =
-                    expand_home(&obs_cfg.vault, &std::env::var("HOME").unwrap_or_default());
+                let vault_path = expand_home(&obs_cfg.vault);
                 if !vault_path.exists() {
                     self.store.remove_all();
                     let item = CommandItem::new(format!(
@@ -491,7 +490,7 @@ impl AppListModel {
 
         // Capture the expanded vault path for relative path display
         let vault_path = self.obsidian_cfg.as_ref().map(|cfg| {
-            let expanded = expand_home(&cfg.vault, &std::env::var("HOME").unwrap_or_default());
+            let expanded = expand_home(&cfg.vault);
             expanded.to_string_lossy().to_string()
         });
 

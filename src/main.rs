@@ -10,6 +10,7 @@ mod obsidian_item;
 mod search_provider;
 mod search_result_item;
 mod ui;
+mod utils;
 use gtk4::prelude::*;
 use libadwaita::Application;
 

@@ -1,3 +1,4 @@
+use crate::utils::expand_home;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -44,7 +45,6 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        let home = std::env::var("HOME").unwrap_or_default();
         let mut commands = HashMap::new();
         commands.insert(
             "f".to_string(),
@@ -61,7 +61,7 @@ impl Default for Config {
             max_results: DEFAULT_MAX_RESULTS,
             app_dirs: default_app_dirs()
                 .into_iter()
-                .map(|s| expand_home(&s, &home))
+                .map(|s| expand_home(&s))
                 .collect(),
             calculator: DEFAULT_CALCULATOR,
             commands,
@@ -159,8 +159,7 @@ fn apply_toml(content: &str) -> Config {
             cfg.max_results = m;
         }
         if let Some(dirs) = search.app_dirs {
-            let home = std::env::var("HOME").unwrap_or_default();
-            cfg.app_dirs = dirs.into_iter().map(|s| expand_home(&s, &home)).collect();
+            cfg.app_dirs = dirs.into_iter().map(|s| expand_home(&s)).collect();
         }
         if let Some(debounce) = search.command_debounce_ms {
             cfg.command_debounce_ms = debounce;
@@ -185,17 +184,6 @@ fn apply_toml(content: &str) -> Config {
     }
 
     cfg
-}
-
-// Expand leading `~`
-pub fn expand_home(path: &str, home: &str) -> PathBuf {
-    if let Some(rest) = path.strip_prefix("~/") {
-        PathBuf::from(home).join(rest)
-    } else if path == "~" {
-        PathBuf::from(home)
-    } else {
-        PathBuf::from(path)
-    }
 }
 
 // Default TOML content (updated with new option)
