@@ -76,26 +76,29 @@ fn activate_item(obj: &glib::Object, model: &AppListModel) {
         let display = gtk4::gdk::Display::default().expect("cannot get display");
         display.clipboard().set_text(number);
     } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-        if model.obsidian_grep_mode() {
+        let line = cmd_item.line();
+        if model.obsidian_grep_mode() || model.obsidian_file_mode() {
             if let Some(cfg) = &model.obsidian_cfg {
-                open_obsidian_grep_line(&cmd_item.line(), cfg);
-            }
-        } else if model.obsidian_file_mode() {
-            if let Some(cfg) = &model.obsidian_cfg {
-                open_obsidian_file_path(&cmd_item.line(), cfg);
+                if model.obsidian_grep_mode() {
+                    open_obsidian_grep_line(&line, cfg);
+                } else {
+                    open_obsidian_file_path(&line, cfg);
+                }
             }
         } else {
-            open_file_or_line(&cmd_item.line());
+            open_file_or_line(&line);
         }
     } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
         if let Some(cfg) = &model.obsidian_cfg {
             perform_obsidian_action(obs_item.action(), obs_item.arg().as_deref(), cfg);
         }
     } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
-        let bus = sr_item.bus_name();
-        let path = sr_item.object_path();
-        let id = sr_item.id();
-        let terms = sr_item.terms();
+        let (bus, path, id, terms) = (
+            sr_item.bus_name(),
+            sr_item.object_path(),
+            sr_item.id(),
+            sr_item.terms(),
+        );
         std::thread::spawn(move || {
             crate::search_provider::activate_result(&bus, &path, &id, &terms);
         });
@@ -119,6 +122,12 @@ fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::Ic
     btn_box.append(&Label::new(Some(label)));
     btn.set_child(Some(&btn_box));
     btn
+}
+
+/// Moves the list selection to `pos` and scrolls it into view.
+fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
+    model.selection.set_selected(pos);
+    let _ = list_view.activate_action("list.scroll-to-item", Some(&pos.to_variant()));
 }
 
 // ---------------------------------------------------------------------------
@@ -156,8 +165,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .decorated(false)
         .resizable(false)
         .build();
-    window.set_css_classes(&[&"launcher-window"]);
-    window.remove_css_class("background");
+    // Remove the "background" class only after realization — the pre-realize
+    // call would be a no-op since the style context isn't live yet.
+    window.set_css_classes(&["launcher-window"]);
     window.connect_realize(|w| {
         w.remove_css_class("background");
     });
@@ -217,7 +227,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             move |_| {
                 let current_text = entry.text();
                 let arg = extract_obsidian_arg(&current_text);
-                let arg_opt = if arg.is_empty() { None } else { Some(arg) };
+                let arg_opt = (!arg.is_empty()).then_some(arg);
 
                 if let Some(cfg) = &model.obsidian_cfg {
                     perform_obsidian_action(action, arg_opt, cfg);
@@ -228,7 +238,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         obsidian_bar.append(&btn);
     }
 
-    let power_bar = build_power_bar(&window, &entry);
+    // Resolve the icon theme once — shared by power bar and obsidian icon below.
+    let icon_theme = gtk4::IconTheme::for_display(&display);
+
+    let power_bar = build_power_bar(&window, &entry, &icon_theme);
 
     let factory = model.create_factory();
     let list_view = ListView::new(Some(model.selection.clone()), Some(factory));
@@ -269,7 +282,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     ));
 
     // Resolve the Obsidian icon name once — reused in connect_changed below.
-    let icon_theme = gtk4::IconTheme::for_display(&display);
     let obsidian_icon_name = ["obsidian", "md.obsidian.Obsidian", "text-x-markdown"]
         .iter()
         .find(|&&name| icon_theme.has_icon(name))
@@ -287,21 +299,31 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         move |e| {
             let text = e.text().to_lowercase();
             model.populate(&text);
-            obsidian_bar.set_visible(model.obsidian_action_mode() || model.obsidian_file_mode());
+            obsidian_bar.set_visible(
+                model.obsidian_action_mode()
+                    || model.obsidian_file_mode()
+                    || model.obsidian_grep_mode(),
+            );
 
             // Update command icon based on active prefix
-            if text.starts_with(":f") || text.starts_with(":fg") {
+            if text.starts_with(":f") {
                 command_icon.set_icon_name(Some("text-x-generic"));
                 command_icon.set_visible(true);
             } else if text.starts_with(":s") {
                 command_icon.set_icon_name(Some("system-search"));
                 command_icon.set_visible(true);
-            } else if text.starts_with(":ob") || text.starts_with(":obg") {
+            } else if text.starts_with(":ob") {
+                // ":obg" also starts with ":ob", so one check covers both
                 command_icon.set_icon_name(Some(obsidian_icon_name));
                 command_icon.set_visible(true);
             } else {
                 command_icon.set_visible(false);
             }
+
+            // Force a full repaint to avoid stale pixel artifacts left behind
+            // when text is deleted quickly (GTK4 doesn't always invalidate the
+            // full previously-painted area on its own).
+            e.queue_draw();
         }
     ));
 
@@ -335,20 +357,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     let pos = model.selection.selected();
                     let n = model.store.n_items();
                     if pos + 1 < n {
-                        let next = pos + 1;
-                        model.selection.set_selected(next);
-                        let _ = list_view
-                            .activate_action("list.scroll-to-item", Some(&next.to_variant()));
+                        scroll_selection_to(&model, &list_view, pos + 1);
                     }
                     glib::Propagation::Stop
                 }
                 Key::Up | Key::KP_Up => {
                     let pos = model.selection.selected();
                     if pos > 0 {
-                        let prev = pos - 1;
-                        model.selection.set_selected(prev);
-                        let _ = list_view
-                            .activate_action("list.scroll-to-item", Some(&prev.to_variant()));
+                        scroll_selection_to(&model, &list_view, pos - 1);
                     }
                     glib::Propagation::Stop
                 }
@@ -356,17 +372,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     let pos = model.selection.selected();
                     let n = model.store.n_items();
                     let next = (pos + 10).min(n.saturating_sub(1));
-                    model.selection.set_selected(next);
-                    let _ =
-                        list_view.activate_action("list.scroll-to-item", Some(&next.to_variant()));
+                    scroll_selection_to(&model, &list_view, next);
                     glib::Propagation::Stop
                 }
                 Key::Page_Up => {
                     let pos = model.selection.selected();
-                    let prev = pos.saturating_sub(10);
-                    model.selection.set_selected(prev);
-                    let _ =
-                        list_view.activate_action("list.scroll-to-item", Some(&prev.to_variant()));
+                    scroll_selection_to(&model, &list_view, pos.saturating_sub(10));
                     glib::Propagation::Stop
                 }
                 _ => glib::Propagation::Proceed,
@@ -406,7 +417,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 // Power bar
 // ---------------------------------------------------------------------------
 
-fn build_power_bar(window: &ApplicationWindow, entry: &Entry) -> GtkBox {
+fn build_power_bar(
+    window: &ApplicationWindow,
+    entry: &Entry,
+    icon_theme: &gtk4::IconTheme,
+) -> GtkBox {
     let power_bar = GtkBox::new(Orientation::Horizontal, 8);
     power_bar.add_css_class("power-bar");
     power_bar.set_hexpand(true);
@@ -415,15 +430,12 @@ fn build_power_bar(window: &ApplicationWindow, entry: &Entry) -> GtkBox {
     power_bar.set_margin_start(12);
     power_bar.set_margin_end(12);
 
-    let display = gtk4::gdk::Display::default().expect("Cannot connect to display");
-    let icon_theme = gtk4::IconTheme::for_display(&display);
-
     // Settings button
     {
         let btn = make_icon_button(
             "Settings",
             &["preferences-system", "emblem-system", "settings-configure"],
-            &icon_theme,
+            icon_theme,
         );
         btn.connect_clicked(clone!(
             #[weak]
@@ -466,7 +478,7 @@ fn build_power_bar(window: &ApplicationWindow, entry: &Entry) -> GtkBox {
             "logout",
         ),
     ] {
-        let btn = make_icon_button(label, icon_candidates, &icon_theme);
+        let btn = make_icon_button(label, icon_candidates, icon_theme);
 
         let action = action.to_string();
         let label_str = label.to_string();
