@@ -1,5 +1,6 @@
 mod actions;
 mod app_item;
+mod app_mode;
 mod calc_item;
 mod calculator;
 mod cmd_item;
@@ -19,21 +20,16 @@ use std::env;
 const APP_ID: &str = "org.nihmar.grunner";
 
 fn main() -> glib::ExitCode {
-    // Check args BEFORE gtk initializes
     let args: Vec<String> = env::args().collect();
 
     if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        return ExitCode::SUCCESS; // Exit before GTK starts
+        return ExitCode::SUCCESS;
     }
 
     let cfg = config::load();
     let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(move |app| {
-        // GApplication ensures only one process runs at a time, but
-        // connect_activate fires again on the existing process whenever a
-        // second invocation is attempted. If a window already exists, bring
-        // it to the front instead of building a second one.
         if let Some(win) = app.windows().first() {
             win.present();
             return;
