@@ -1,28 +1,24 @@
-/*
- * Uses libadwaita 1.6+ CSS custom properties (var(--name) syntax).
- * Automatically follows light/dark mode and the user's accent color.
- */
 
-/* ── Window — transparent surface so compositor handles shape ── */
+
+
 .launcher-window {
     background-color: var(--window-bg-color);
     color: var(--window-fg-color);
-    border: none; /* 1px solid
-        color-mix(in srgb, var(--window-fg-color) 12%, transparent); */
+    border: none; 
     border-radius: calc(var(--window-radius, 12px) - 4px);
 }
 
-/* ── Inner box — the visible rounded card ── */
+
 .launcher-box {
     background-color: var(--window-bg-color);
     color: var(--window-fg-color);
     border: 1px solid
         color-mix(in srgb, var(--window-fg-color) 12%, transparent);
     border-radius: calc(var(--window-radius, 12px) - 4px);
-    /* overflow clipping is set via widget.set_overflow() in Rust, not CSS */
+    
 }
 
-/* ── Search Entry ── */
+
 .search-entry {
     background-color: var(--window-bg-color);
     color: var(--window-fg-color);
@@ -44,7 +40,7 @@
     background-color: var(--window-bg-color);
 }
 
-/* ── Result List ── */
+
 .app-list {
     background-color: transparent;
     padding: 6px;
@@ -75,13 +71,13 @@
     );
 }
 
-/* ── App icon ── */
+
 .app-icon {
     min-width: 32px;
     min-height: 32px;
 }
 
-/* ── Row labels ── */
+
 .row-name {
     color: var(--window-fg-color);
     font-size: 14px;
@@ -101,7 +97,7 @@
     color: color-mix(in srgb, var(--accent-color) 70%, transparent);
 }
 
-/* ── Scrollbar ── */
+
 scrollbar {
     background-color: transparent;
 }

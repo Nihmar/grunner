@@ -6,8 +6,8 @@ use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, Button, Entry, Orientation};
 use libadwaita::ApplicationWindow;
 
-/// Extracts the argument following ":ob " from the search entry text.
-/// Returns an empty string if none is present.
+
+
 pub fn extract_obsidian_arg(text: &str) -> &str {
     text.strip_prefix(":ob ").map(str::trim).unwrap_or("")
 }

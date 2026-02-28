@@ -1,5 +1,5 @@
 use futures::stream::{FuturesUnordered, StreamExt};
-/// GNOME Shell Search Provider 2 integration.
+
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -8,16 +8,16 @@ use std::time::Duration;
 use zbus::Connection;
 use zbus::zvariant::OwnedValue;
 
-// ---------------------------------------------------------------------------
-// Cached tokio runtime & D-Bus session connection
-// ---------------------------------------------------------------------------
 
-/// A single multi-thread tokio runtime (1 worker) that lives for the process
-/// lifetime.  Keeping it alive means the zbus `Connection` (which spawns
-/// internal tasks on the runtime) never loses its executor.
+
+
+
+
+
+
 static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
-/// Session-bus connection, created once and reused for every search.
+
 static DBUS_CONN: OnceLock<Connection> = OnceLock::new();
 
 fn get_runtime() -> &'static tokio::runtime::Runtime {
@@ -141,7 +141,7 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
         return None;
     }
 
-    let desktop_id = desktop_id?; // now we require DesktopId
+    let desktop_id = desktop_id?;
 
     Some(SearchProvider {
         bus_name: bus_name?,
@@ -151,15 +151,15 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// .desktop icon resolution
-// ---------------------------------------------------------------------------
 
-/// Read the `Icon=` field from a .desktop file identified by its desktop-id.
-/// Returns an empty string if not found.
+
+
+
+
+
 pub fn resolve_app_icon(desktop_id: &str) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
-    // Strip .desktop suffix if already present, then re-add it.
+
     let filename = if desktop_id.ends_with(".desktop") {
         desktop_id.to_string()
     } else {
@@ -184,18 +184,18 @@ pub fn resolve_app_icon(desktop_id: &str) -> String {
     String::new()
 }
 
-// ---------------------------------------------------------------------------
-// GVariant icon parsing
-// ---------------------------------------------------------------------------
 
-/// Parse a GIcon serialized as a GVariant (as produced by g_icon_serialize).
-///
-/// The format on the wire is `(sa{sv})`:
-///   - First field:  type string — "themed-icon" | "file-icon" | "bytes-icon"
-///   - Second field: dict with type-specific keys
-///
-/// GThemedIcon  → key "names"  → as  (array of icon-theme names)
-/// GFileIcon    → key "file"   → s   (absolute path or file:// URI)
+
+
+
+
+
+
+
+
+
+
+
 fn parse_icon_variant(val: &OwnedValue) -> Option<IconData> {
     use zbus::zvariant::Value;
 
@@ -265,7 +265,7 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
         match v {
             Value::Value(inner) => walk(inner),
             Value::Dict(d) => {
-                // Try the "names" key first
+
                 for (k, val) in d.iter() {
                     if let (Value::Str(key), v2) = (k, val) {
                         if key.as_str() == "names" {
@@ -275,7 +275,7 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
                         }
                     }
                 }
-                // Fallback: any string array in the dict
+
                 for (_, val) in d.iter() {
                     if let Some(name) = first_name_from_array(val) {
                         return Some(name);
@@ -283,7 +283,7 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
                 }
                 None
             }
-            // Sometimes the payload is just the array directly
+
             Value::Array(_) => first_name_from_array(v),
             _ => None,
         }
@@ -292,8 +292,8 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
     walk(val).map(IconData::Themed)
 }
 
-/// Extract the file path from a GFileIcon payload.
-/// Looks for a "file" key whose value is a string path or file:// URI.
+
+
 fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
     use zbus::zvariant::Value;
 
@@ -303,7 +303,7 @@ fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
             Value::Str(s) => {
                 let s = s.as_str();
                 if !s.is_empty() {
-                    // Strip file:// URI scheme if present
+
                     let path = s.strip_prefix("file://").unwrap_or(s);
                     Some(path.to_string())
                 } else {
@@ -320,7 +320,7 @@ fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
                         }
                     }
                 }
-                // Any string in the dict
+
                 d.iter().find_map(|(_, v)| walk(v))
             }
             _ => None,
@@ -330,9 +330,9 @@ fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
     walk(val).map(IconData::File)
 }
 
-// ---------------------------------------------------------------------------
-// Querying
-// ---------------------------------------------------------------------------
+
+
+
 
 pub fn run_search_streaming(
     providers: &[SearchProvider],
@@ -364,7 +364,7 @@ async fn query_all_streaming(
 
     let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
 
-    // Query all providers concurrently; stream results as each finishes.
+
     let mut futs: FuturesUnordered<_> = providers
         .iter()
         .map(|provider| {
@@ -382,7 +382,7 @@ async fn query_all_streaming(
         match outcome {
             Ok(results) if !results.is_empty() => {
                 if tx.send(results).is_err() {
-                    break; // receiver dropped — search cancelled
+                    break;
                 }
             }
             Err(e) => eprintln!("[search] provider {} error: {}", bus_name, e),
@@ -407,7 +407,7 @@ async fn query_one(
     )
     .await?;
 
-    // Timeout after 3 seconds for each D-Bus call
+
     let timeout_dur = Duration::from_secs(3);
 
     let ids: Vec<String> = timeout(timeout_dur, proxy.call("GetInitialResultSet", &(terms,)))
@@ -444,7 +444,7 @@ fn build_result(
     let name = take_str(&mut meta, "name").unwrap_or_else(|| id.clone());
     let description = take_str(&mut meta, "description").unwrap_or_default();
 
-    // Try to parse the result-specific icon; fall through to None if absent.
+
     let icon = meta.get("icon").and_then(parse_icon_variant);
 
     Some(SearchResult {
@@ -463,9 +463,9 @@ fn take_str(meta: &mut HashMap<String, OwnedValue>, key: &str) -> Option<String>
     String::try_from(val).ok()
 }
 
-// ---------------------------------------------------------------------------
-// Activation
-// ---------------------------------------------------------------------------
+
+
+
 
 pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms: &[String]) {
     let bus_name = bus_name.to_string();

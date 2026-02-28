@@ -17,7 +17,7 @@ mod imp {
     #[derive(Default)]
     pub struct ObsidianActionItem {
         pub action: RefCell<ObsidianAction>,
-        pub arg: RefCell<Option<String>>, // text to append for QuickNote
+        pub arg: RefCell<Option<String>>,
     }
 
     #[glib::object_subclass]

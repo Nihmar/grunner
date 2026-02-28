@@ -13,12 +13,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-// ---------------------------------------------------------------------------
-// Shared PATH-search helper
-// ---------------------------------------------------------------------------
-
-/// Returns `true` if `path` is a regular file with at least one executable bit set.
-/// On non-Unix platforms every regular file is considered executable.
 fn is_executable(path: &std::path::Path) -> bool {
     if !path.is_file() {
         return false;
@@ -34,7 +28,6 @@ fn is_executable(path: &std::path::Path) -> bool {
     true
 }
 
-/// Returns the first directory in `$PATH` that contains an executable named `prog`.
 fn which(prog: &str) -> Option<PathBuf> {
     let path_var = std::env::var_os("PATH")?;
     std::env::split_paths(&path_var)
@@ -100,9 +93,6 @@ pub fn launch_app(exec: &str, terminal: bool) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Power actions
-// ---------------------------------------------------------------------------
 pub fn power_action(action: &str) {
     let run_systemctl = |subcmd: &str| {
         if let Err(e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
@@ -152,9 +142,6 @@ fn logout_action() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
 pub fn open_settings() {
     let path = config::config_path();
 
@@ -164,7 +151,7 @@ pub fn open_settings() {
         }
     }
     if !path.exists() {
-        config::load(); // writes default file
+        config::load();
     }
 
     if let Err(e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
@@ -172,13 +159,9 @@ pub fn open_settings() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// File/line opener
-// ---------------------------------------------------------------------------
 static FILE_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+):(\d+):").unwrap());
 
 pub fn open_file_or_line(line: &str) {
-    // Try to match "file:line:content"
     let re = &*FILE_LINE_RE;
     if let Some(caps) = re.captures(line) {
         let file = caps.get(1).unwrap().as_str();
@@ -197,22 +180,17 @@ pub fn open_file_or_line(line: &str) {
         }
     }
 
-    // Otherwise treat the whole line as a file path
     if Path::new(line).exists() {
         if let Err(e) = std::process::Command::new("xdg-open").arg(line).spawn() {
             eprintln!("Failed to open file: {}", e);
         }
     } else {
-        // Fallback: copy to clipboard
         let display = gtk4::gdk::Display::default().expect("cannot get display");
         let clipboard = display.clipboard();
         clipboard.set_text(line);
     }
 }
 
-// ---------------------------------------------------------------------------
-// Obsidian actions
-// ---------------------------------------------------------------------------
 pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault);
     if !vault_path.exists() {
@@ -232,12 +210,10 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                 eprintln!("Cannot create folder {}: {}", folder.display(), e);
                 return;
             }
-            // Generate a filename with timestamp
             let now = Local::now();
             let filename = format!("New Note {}.md", now.format("%Y-%m-%d %H-%M-%S"));
             let path = folder.join(filename);
 
-            // Create the file and write text if provided
             let mut file = match File::create(&path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -267,8 +243,6 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             }
             let today = Local::now().format("%Y-%m-%d").to_string();
             let path = folder.join(format!("{}.md", today));
-            // create(true) + append(true) handles both "create if new" and "append if exists"
-            // in a single open — no need for a separate File::create step.
             let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -295,7 +269,6 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                     return;
                 }
             }
-            // Always append text if provided
             if let Some(t) = text {
                 if !t.is_empty() {
                     let mut file = fs::OpenOptions::new()
@@ -315,8 +288,6 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
     }
 }
 
-/// Open a specific vault file in Obsidian by its absolute path.
-/// Used when the user presses Enter on a search result in `:ob` file-search mode.
 pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault);
     if !vault_path.exists() {
@@ -327,8 +298,6 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
     open_uri(&uri);
 }
 
-/// Open a specific vault file at a given line number in Obsidian.
-/// Used when the user presses Enter on a search result in `:obg` grep mode.
 pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig) {
     let vault_path = expand_home(&cfg.vault);
     if !vault_path.exists() {
@@ -336,7 +305,6 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
         return;
     }
 
-    // Ensure we have an absolute path to pass to Obsidian
     let path = if file_path.starts_with('/') {
         PathBuf::from(file_path)
     } else {

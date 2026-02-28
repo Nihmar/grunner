@@ -1,8 +1,6 @@
 mod actions;
 mod app_item;
 mod app_mode;
-// mod calc_item;
-// mod calculator;
 mod cmd_item;
 mod config;
 mod launcher;

@@ -4,7 +4,7 @@ use crate::actions::{
 };
 use crate::app_item::AppItem;
 use crate::app_mode::AppMode;
-// use crate::calc_item::CalcItem;
+
 use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
@@ -15,7 +15,7 @@ use crate::power_bar::build_power_bar;
 use crate::search_result_item::SearchResultItem;
 use glib::clone;
 use gtk4::gdk::Key;
-// use gtk4::prelude::DisplayExt;
+
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, Image, ListView, Orientation,
@@ -26,13 +26,13 @@ use libadwaita::{Application, ApplicationWindow};
 use std::cell::Cell;
 use std::rc::Rc;
 
-// ---------------------------------------------------------------------------
-// Async app-list loader
-// ---------------------------------------------------------------------------
 
-/// Polls for the result of the background `load_apps` thread and calls
-/// `model.set_apps()` once it arrives. Uses the same idle-poll pattern as
-/// `run_subprocess` in list_model to stay on the GTK main thread.
+
+
+
+
+
+
 fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>, model: AppListModel) {
     match rx.try_recv() {
         Ok(apps) => {
@@ -45,13 +45,13 @@ fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>, model: Ap
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/// Opens an Obsidian file from a grep output line of the form
-/// `file_path:line_num:content`, falling back to just opening the file
-/// if no line number is present.
+
+
+
+
+
+
 fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
     if let Some((file_path, rest)) = line.split_once(':') {
         if let Some((line_num, _)) = rest.split_once(':') {
@@ -64,17 +64,17 @@ fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
     }
 }
 
-/// Activates the item at `obj`, performing the appropriate action based on its
-/// type and the current `AppMode`. Returns whether the window should be closed
-/// after activation.
+
+
+
 fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
     if let Some(app_item) = obj.downcast_ref::<AppItem>() {
         launch_app(&app_item.exec(), app_item.terminal());
-    // } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
-    //     let result = calc_item.result();
-    //     let number = result.strip_prefix("= ").unwrap_or(&result);
-    //     let display = gtk4::gdk::Display::default().expect("cannot get display");
-    //     display.clipboard().set_text(number);
+
+
+
+
+
     } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
         let line = cmd_item.line();
         match mode {
@@ -109,21 +109,21 @@ fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
     }
 }
 
-/// Moves the list selection to `pos` and scrolls it into view.
+
 fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
     model.selection.set_selected(pos);
     let _ = list_view.activate_action("list.scroll-to-item", Some(&pos.to_variant()));
 }
 
-// ---------------------------------------------------------------------------
-// UI
-// ---------------------------------------------------------------------------
+
+
+
 
 pub fn build_ui(app: &Application, cfg: &Config) {
-    // Obtain the display once and reuse throughout.
+
     let display = gtk4::gdk::Display::default().expect("Cannot connect to display");
 
-    // Load CSS
+
     let provider = CssProvider::new();
     provider.load_from_data(include_str!("style.css"));
     gtk4::style_context_add_provider_for_display(
@@ -132,19 +132,19 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    // Model starts empty; apps are loaded in a background thread below.
+
     let model = AppListModel::new(
         cfg.max_results,
-        // cfg.calculator,
+
         cfg.commands.clone(),
         cfg.obsidian.clone(),
         cfg.command_debounce_ms,
         cfg.search_provider_blacklist.clone(),
     );
 
-    // Shared, single source of truth for the current typing mode.
-    // Wrapped in Rc<Cell> so it can be captured by multiple closures on the
-    // GTK main thread without needing a Mutex.
+
+
+
     let current_mode: Rc<Cell<AppMode>> = Rc::new(Cell::new(AppMode::Normal));
 
     let window = ApplicationWindow::builder()
@@ -155,8 +155,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .decorated(false)
         .resizable(false)
         .build();
-    // Remove the "background" class only after realization — the pre-realize
-    // call would be a no-op since the style context isn't live yet.
+
+
     window.set_css_classes(&["launcher-window"]);
     window.connect_realize(|w| {
         w.remove_css_class("background");
@@ -166,7 +166,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     root.add_css_class("launcher-box");
     root.set_overflow(gtk4::Overflow::Hidden);
 
-    // --- Search bar ---
+
     let entry_box = GtkBox::new(Orientation::Horizontal, 6);
     entry_box.set_hexpand(true);
     entry_box.set_margin_start(12);
@@ -189,7 +189,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     root.append(&entry_box);
 
-    // --- Bars ---
+
     let obsidian_bar = build_obsidian_bar(&window, &entry, &model);
     let icon_theme = gtk4::IconTheme::for_display(&display);
     let power_bar = build_power_bar(&window, &entry, &icon_theme);
@@ -210,10 +210,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     root.append(&power_bar);
     window.set_content(Some(&root));
 
-    // Present only after the full widget tree is in place.
+
     window.present();
 
-    // --- Window show handler: reset all state ---
+
     window.connect_show(clone!(
         #[weak]
         entry,
@@ -235,16 +235,16 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         }
     ));
 
-    // Resolve the Obsidian icon name once — reused in connect_changed below.
+
     let obsidian_icon_name = ["obsidian", "md.obsidian.Obsidian", "text-x-markdown"]
         .iter()
         .find(|&&name| icon_theme.has_icon(name))
         .copied()
         .unwrap_or("text-x-markdown");
 
-    // --- Entry changed handler ---
-    // The mode is derived once from the text here and stored in `current_mode`
-    // so the key handler and click handler can read it without re-parsing.
+
+
+
     entry.connect_changed(clone!(
         #[strong]
         model,
@@ -271,14 +271,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 None => command_icon.set_visible(false),
             }
 
-            // Force a full repaint to avoid stale pixel artifacts left behind
-            // when text is deleted quickly (GTK4 doesn't always invalidate the
-            // full previously-painted area on its own).
+
+
+
             e.queue_draw();
         }
     ));
 
-    // --- Keyboard navigation + activation ---
+
     let key_ctrl = EventControllerKey::new();
     key_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
     key_ctrl.connect_key_pressed(clone!(
@@ -339,7 +339,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     ));
     entry.add_controller(key_ctrl);
 
-    // --- List-view click activation ---
+
     list_view.connect_activate(clone!(
         #[weak]
         window,
@@ -355,10 +355,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         }
     ));
 
-    // Kick off background app loading. The window is already visible and
-    // interactive at this point. When the thread finishes, poll_apps() calls
-    // model.set_apps() on the main thread, which re-runs the current query
-    // (empty on first open, or whatever the user has already typed).
+
+
+
+
     let dirs = cfg.app_dirs.clone();
     let model_poll = model.clone();
     let (tx, rx) = std::sync::mpsc::channel();

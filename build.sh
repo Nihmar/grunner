@@ -1,9 +1,9 @@
-#!/bin/bash
+
 set -euo pipefail
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
+
+
+
 
 APP_ID="org.nihmar.grunner"
 BIN_DIR="$HOME/.local/bin"
@@ -11,29 +11,29 @@ ICON_DIR_SVG="$HOME/.local/share/icons/hicolor/scalable/apps"
 ICON_DIR_PNG="$HOME/.local/share/icons/hicolor/256x256/apps"
 DESKTOP_DIR="$HOME/.local/share/applications"
 
-# ---------------------------------------------------------------------------
-# Build
-# ---------------------------------------------------------------------------
+
+
+
 
 echo "Building grunner in release mode..."
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 echo "Build successful."
 
-# ---------------------------------------------------------------------------
-# Install binary
-# ---------------------------------------------------------------------------
+
+
+
 
 mkdir -p "$BIN_DIR"
 cp "./target/release/grunner" "$BIN_DIR/grunner"
 echo "Binary installed to $BIN_DIR/grunner"
 
-# ---------------------------------------------------------------------------
-# Install icon
-#
-# Place your icon at one of these paths in the repo before running this script:
-#   assets/grunner.svg   (preferred — scales to any size)
-#   assets/grunner.png   (fallback — should be at least 256x256)
-# ---------------------------------------------------------------------------
+
+
+
+
+
+
+
 
 ICON_INSTALLED=0
 
@@ -53,17 +53,17 @@ else
 fi
 
 if [ "$ICON_INSTALLED" -eq 1 ]; then
-    # -f forces the update even if the cache appears up to date.
-    # -t skips the check for a writable index.theme (required for user-local dirs).
+    
+    
     gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 fi
 
-# ---------------------------------------------------------------------------
-# Install .desktop file
-#
-# The file must be named <APP_ID>.desktop so GNOME Shell can match the running
-# window (whose Wayland app-id is the GApplication ID) to this entry.
-# ---------------------------------------------------------------------------
+
+
+
+
+
+
 
 mkdir -p "$DESKTOP_DIR"
 cat > "$DESKTOP_DIR/${APP_ID}.desktop" << EOF
@@ -82,7 +82,7 @@ EOF
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 echo ".desktop file installed to $DESKTOP_DIR/${APP_ID}.desktop"
 
-# ---------------------------------------------------------------------------
+
 
 echo ""
 echo "Installation complete."

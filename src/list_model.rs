@@ -1,6 +1,4 @@
 use crate::app_item::AppItem;
-// use crate::calc_item::CalcItem;
-// use crate::calculator::{eval_expression, is_arithmetic_query};
 use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
 use crate::launcher::DesktopApp;
@@ -27,11 +25,6 @@ fn parse_colon_command(query: &str) -> (&str, &str) {
     }
 }
 
-// ── Active mode ───────────────────────────────────────────────────────────────
-
-/// Tracks which colon-command mode is currently active.  Replaces the
-/// previous `ObsidianMode` enum **and** the separate `search_provider_mode:
-/// Rc<Cell<bool>>` field with a single, explicit state machine.
 #[derive(Clone, Copy, Default, PartialEq)]
 enum ActiveMode {
     #[default]
@@ -42,16 +35,12 @@ enum ActiveMode {
     ObsidianGrep,
 }
 
-// ── Factory helpers ───────────────────────────────────────────────────────────
-
-/// Show or hide `label` based on whether `text` is non-empty.
 fn set_desc(label: &gtk4::Label, text: &str) {
     let visible = !text.is_empty();
     label.set_visible(visible);
     label.set_text(if visible { text } else { "" });
 }
 
-/// Return `path` relative to `vault`, falling back to the original value.
 fn relative_to_vault<'a>(path: &'a str, vault: &Option<String>) -> &'a str {
     vault
         .as_deref()
@@ -78,17 +67,6 @@ fn bind_app_item(
     set_desc(desc_label, &item.description());
 }
 
-// fn bind_calc_item(
-//     item: &CalcItem,
-//     image: &gtk4::Image,
-//     name_label: &gtk4::Label,
-//     desc_label: &gtk4::Label,
-// ) {
-//     image.set_icon_name(Some("accessories-calculator"));
-//     name_label.set_text(&item.result());
-//     set_desc(desc_label, "");
-// }
-
 fn bind_command_item(
     item: &CommandItem,
     image: &gtk4::Image,
@@ -114,7 +92,6 @@ fn bind_command_item(
 
     if line.starts_with('/') {
         if !line.contains(':') {
-            // Plain absolute path – either :ob (file) or a generic :f result.
             if mode == ActiveMode::ObsidianFile {
                 image.set_icon_name(Some(obsidian_icon));
                 let filename = std::path::Path::new(&line)
@@ -128,14 +105,12 @@ fn bind_command_item(
                     .and_then(|p| p.to_str())
                     .filter(|s| !s.is_empty())
                     .or_else(|| {
-                        // Fallback: absolute parent when outside vault.
                         std::path::Path::new(&line)
                             .parent()
                             .and_then(|p| p.to_str())
                     });
                 set_desc(desc_label, parent.unwrap_or(""));
             } else {
-                // Regular file (e.g. from :f).
                 let (ctype, _) = gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
                 image.set_from_gicon(&gio::content_type_get_icon(&ctype));
                 let filename = std::path::Path::new(&line)
@@ -302,19 +277,19 @@ impl ProviderSearchPoller {
     }
 }
 
-// ── Model ─────────────────────────────────────────────────────────────────────
+
 
 #[derive(Clone)]
 pub struct AppListModel {
     pub store: gio::ListStore,
     pub selection: SingleSelection,
-    /// Populated asynchronously after the window is shown.
+
     all_apps: Rc<RefCell<Vec<DesktopApp>>>,
-    /// The last query passed to `populate()`, so that `set_apps()` can
-    /// re-run it once the app list has been loaded.
+
+
     current_query: Rc<RefCell<String>>,
     max_results: usize,
-    // calculator_enabled: bool,
+
     commands: Rc<HashMap<String, String>>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
@@ -327,11 +302,11 @@ pub struct AppListModel {
 }
 
 impl AppListModel {
-    /// Create a model with an empty app list. Call `set_apps()` once the
-    /// background load has completed to populate and refresh the view.
+
+
     pub fn new(
         max_results: usize,
-        // calculator_enabled: bool,
+
         commands: HashMap<String, String>,
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
@@ -348,7 +323,7 @@ impl AppListModel {
             all_apps: Rc::new(RefCell::new(Vec::new())),
             current_query: Rc::new(RefCell::new(String::new())),
             max_results,
-            // calculator_enabled,
+
             commands: Rc::new(commands),
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
@@ -361,27 +336,27 @@ impl AppListModel {
         }
     }
 
-    // ── Public helpers ────────────────────────────────────────────────────────
 
-    /// Replace the app list and re-run the current query so the view updates
-    /// immediately without requiring any user interaction.
+
+
+
     pub fn set_apps(&self, apps: Vec<DesktopApp>) {
         *self.all_apps.borrow_mut() = apps;
         let query = self.current_query.borrow().clone();
         self.populate(&query);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
 
-    /// Cancel any pending debounced command.
+
+
     fn cancel_debounce(&self) {
         if let Some(source_id) = self.command_debounce.borrow_mut().take() {
             let _ = source_id.remove();
         }
     }
 
-    /// Schedule `f` to run after `delay_ms` milliseconds, cancelling any
-    /// previously-scheduled command first.
+
+
     fn schedule_command_with_delay<F>(&self, delay_ms: u32, f: F)
     where
         F: FnOnce() + 'static,
@@ -407,28 +382,28 @@ impl AppListModel {
         self.schedule_command_with_delay(self.command_debounce_ms, f);
     }
 
-    /// Increment the task-generation counter (used to discard stale results)
-    /// and return the new value.
+
+
     fn bump_task_gen(&self) -> u64 {
         let next_gen = self.task_gen.get() + 1;
         self.task_gen.set(next_gen);
         next_gen
     }
 
-    /// Clear the store, show a single informational/error message, and select it.
+
     fn show_error_item(&self, msg: impl Into<String>) {
         self.store.remove_all();
         self.store.append(&CommandItem::new(msg.into()));
         self.selection.set_selected(0);
     }
 
-    /// Clear the store and leave nothing selected.
+
     fn clear_store(&self) {
         self.store.remove_all();
         self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
     }
 
-    // ── Populate ──────────────────────────────────────────────────────────────
+
 
     pub fn populate(&self, query: &str) {
         *self.current_query.borrow_mut() = query.to_string();
@@ -440,15 +415,15 @@ impl AppListModel {
             return;
         }
 
-        // --- Non-colon query: show apps / calculator ---
+
         self.store.remove_all();
         self.bump_task_gen();
 
-        // if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
-        //     if let Some(result_str) = eval_expression(query) {
-        //         self.store.append(&CalcItem::new(result_str));
-        //     }
-        // }
+
+
+
+
+
 
         let apps = self.all_apps.borrow();
         if query.is_empty() {
@@ -488,7 +463,7 @@ impl AppListModel {
         }
     }
 
-    // ── Colon-command dispatch ────────────────────────────────────────────────
+
 
     fn handle_colon_command(&self, query: &str) {
         let (cmd_part, arg) = parse_colon_command(query);
@@ -526,8 +501,8 @@ impl AppListModel {
         });
     }
 
-    /// Resolve and validate the configured vault path, showing an error item
-    /// and returning `None` if anything is wrong.
+
+
     fn validated_vault_path(&self) -> Option<PathBuf> {
         let obs_cfg = match &self.obsidian_cfg {
             Some(c) => c.clone(),
@@ -608,7 +583,7 @@ impl AppListModel {
         });
     }
 
-    // ── Background workers ────────────────────────────────────────────────────
+
 
     fn run_subprocess(&self, mut cmd: std::process::Command) {
         let generation = self.task_gen.get();
@@ -703,7 +678,7 @@ impl AppListModel {
         self.run_subprocess(cmd);
     }
 
-    // ── Factory ───────────────────────────────────────────────────────────────
+
 
     pub fn create_factory(&self) -> SignalListItemFactory {
         let factory = SignalListItemFactory::new();
@@ -785,8 +760,8 @@ impl AppListModel {
 
             if let Some(app) = obj.downcast_ref::<AppItem>() {
                 bind_app_item(app, &image, &name_label, &desc_label);
-            // } else if let Some(calc) = obj.downcast_ref::<CalcItem>() {
-            //     bind_calc_item(calc, &image, &name_label, &desc_label);
+
+
             } else if let Some(cmd) = obj.downcast_ref::<CommandItem>() {
                 bind_command_item(
                     cmd,

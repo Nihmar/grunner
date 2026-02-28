@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-// Defaults
 pub const DEFAULT_WINDOW_WIDTH: i32 = 640;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 pub const DEFAULT_MAX_RESULTS: usize = 64;
@@ -20,7 +19,6 @@ pub fn default_app_dirs() -> Vec<String> {
     ]
 }
 
-// ---------- Obsidian configuration ----------
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ObsidianConfig {
     pub vault: String,
@@ -29,7 +27,6 @@ pub struct ObsidianConfig {
     pub quick_note: String,
 }
 
-// Main Config struct
 #[derive(Debug, Clone)]
 pub struct Config {
     pub window_width: i32,
@@ -72,7 +69,6 @@ impl Default for Config {
     }
 }
 
-// TOML structure
 #[derive(Deserialize, Serialize, Default)]
 struct TomlConfig {
     window: Option<WindowConfig>,
@@ -101,7 +97,6 @@ struct CalculatorConfig {
     enabled: Option<bool>,
 }
 
-// Config file path
 pub fn config_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
     PathBuf::from(home)
@@ -110,7 +105,6 @@ pub fn config_path() -> PathBuf {
         .join("grunner.toml")
 }
 
-// Load configuration
 pub fn load() -> Config {
     let path = config_path();
 
@@ -133,7 +127,6 @@ pub fn load() -> Config {
     apply_toml(&content)
 }
 
-// Apply TOML values
 fn apply_toml(content: &str) -> Config {
     let mut cfg = Config::default();
 
@@ -186,7 +179,6 @@ fn apply_toml(content: &str) -> Config {
     cfg
 }
 
-// Default TOML content (updated with new option)
 fn default_toml() -> String {
     let dirs = default_app_dirs()
         .iter()

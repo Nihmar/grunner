@@ -5,7 +5,7 @@ use gtk4::{Align, Box as GtkBox, Button, Entry, Image, Label, Orientation};
 use libadwaita::prelude::{AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, ApplicationWindow, ResponseAppearance};
 
-/// Creates a styled icon+label button for the power bar.
+
 fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::IconTheme) -> Button {
     let btn = Button::new();
     btn.add_css_class("power-button");
@@ -37,7 +37,7 @@ pub fn build_power_bar(
     power_bar.set_margin_start(12);
     power_bar.set_margin_end(12);
 
-    // Settings button
+
     {
         let btn = make_icon_button(
             "Settings",

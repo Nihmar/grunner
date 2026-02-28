@@ -1,4 +1,4 @@
-/// GObject wrapper around a GNOME Shell Search Provider result.
+
 use glib::subclass::prelude::*;
 
 mod imp {
@@ -10,14 +10,14 @@ mod imp {
         pub id: RefCell<String>,
         pub name: RefCell<String>,
         pub description: RefCell<String>,
-        /// Themed icon name (e.g. "text-x-generic"). Set if the provider
-        /// returned a GThemedIcon, or empty string.
+
+
         pub icon_themed: RefCell<String>,
-        /// Absolute filesystem path to an icon image. Set if the provider
-        /// returned a GFileIcon (e.g. a file thumbnail), or empty string.
+
+
         pub icon_file: RefCell<String>,
-        /// Icon name read from the provider's own .desktop file.
-        /// Used as fallback when both icon_themed and icon_file are empty.
+
+
         pub app_icon_name: RefCell<String>,
         pub bus_name: RefCell<String>,
         pub object_path: RefCell<String>,

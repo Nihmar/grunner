@@ -15,10 +15,6 @@ pub struct DesktopApp {
     pub terminal: bool,
 }
 
-// ---------------------------------------------------------------------------
-// Cache
-// ---------------------------------------------------------------------------
-
 fn cache_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
     PathBuf::from(home)
@@ -27,21 +23,18 @@ fn cache_path() -> PathBuf {
         .join("apps.bin")
 }
 
-/// Returns the most recent mtime across all directories that actually exist.
 fn dirs_max_mtime(dirs: &[PathBuf]) -> Option<SystemTime> {
     dirs.iter()
         .filter_map(|d| fs::metadata(d).ok()?.modified().ok())
         .max()
 }
 
-/// Returns the cached app list if it is still fresh (i.e. no app directory has
-/// been modified since the cache was written).
 fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
     let cache = cache_path();
     let cache_mtime = fs::metadata(&cache).ok()?.modified().ok()?;
     let dirs_mtime = dirs_max_mtime(dirs)?;
     if dirs_mtime > cache_mtime {
-        return None; // at least one directory is newer — rebuild
+        return None;
     }
     let bytes = fs::read(&cache).ok()?;
     bincode::deserialize(&bytes).ok()
@@ -65,13 +58,7 @@ fn save_cache(apps: &[DesktopApp]) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Scanning
-// ---------------------------------------------------------------------------
-
-/// Scans all directories in parallel, deduplicating by file path.
 fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
-    // First pass (parallel): collect all .desktop paths from each directory.
     let paths: Vec<PathBuf> = dirs
         .par_iter()
         .filter(|d| d.exists())
@@ -85,14 +72,12 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
         })
         .collect();
 
-    // Deduplicate sequentially using a fast hash set.
     let mut seen = FxHashSet::default();
     let unique_paths: Vec<PathBuf> = paths
         .into_iter()
         .filter(|p| seen.insert(p.clone()))
         .collect();
 
-    // Second pass (parallel): parse .desktop files.
     let mut apps: Vec<DesktopApp> = unique_paths
         .par_iter()
         .filter_map(|p| parse_desktop_file(p))
@@ -102,11 +87,6 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     apps
 }
 
-/// Loads all apps from the given list of directories.
-///
-/// On a cache hit the result is returned immediately from disk without any
-/// directory scanning. On a cache miss the directories are scanned in parallel
-/// and the result is written back to the cache before returning.
 pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     if let Some(cached) = try_load_cache(dirs) {
         return cached;
@@ -115,10 +95,6 @@ pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     save_cache(&apps);
     apps
 }
-
-// ---------------------------------------------------------------------------
-// .desktop file parser (unchanged)
-// ---------------------------------------------------------------------------
 
 fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     let content = fs::read_to_string(path).ok()?;
@@ -188,7 +164,6 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     })
 }
 
-/// Cleans up an Exec= value by removing field codes like %f %F %u %U …
 pub fn clean_exec(exec: &str) -> String {
     exec.split_whitespace()
         .filter(|token| {
