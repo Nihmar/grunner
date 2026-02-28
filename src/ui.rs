@@ -209,7 +209,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         #[weak]
         command_icon,
         move |e| {
-            let text = e.text();
+            let text = e.text().to_lowercase();
             model.populate(&text);
             obsidian_bar.set_visible(model.obsidian_action_mode() || model.obsidian_file_mode());
 
