@@ -261,6 +261,11 @@ impl AppListModel {
                     }
                     "obg" => {
                         self.obsidian_grep_mode.set(true);
+                        if arg.is_empty() {
+                            self.store.remove_all();
+                            self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
+                            return;
+                        }
                         self.task_gen.set(self.task_gen.get() + 1);
                         let vault_path = vault_path.to_string_lossy().to_string();
                         let arg = arg.to_string();
