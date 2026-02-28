@@ -20,6 +20,58 @@ use gtk4::{
 };
 use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
+use std::cell::Cell;
+use std::rc::Rc;
+
+// ---------------------------------------------------------------------------
+// App mode state machine
+// ---------------------------------------------------------------------------
+
+/// Represents which typing mode the launcher is currently in, derived entirely
+/// from the entry text prefix. This is the single source of truth for mode —
+/// no scattered `starts_with` checks elsewhere in the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppMode {
+    Normal,
+    FileSearch,     // :f
+    SearchProvider, // :s
+    Obsidian,       // :ob  (action mode — shows the obsidian button bar)
+    ObsidianGrep,   // :obg (grep mode — searches vault content)
+}
+
+impl AppMode {
+    /// Derives the current mode from the (already lowercased) entry text.
+    /// Order matters: `:obg` must be checked before `:ob`.
+    pub fn from_text(text: &str) -> Self {
+        if text.starts_with(":obg") {
+            Self::ObsidianGrep
+        } else if text.starts_with(":ob") {
+            Self::Obsidian
+        } else if text.starts_with(":f") {
+            Self::FileSearch
+        } else if text.starts_with(":s") {
+            Self::SearchProvider
+        } else {
+            Self::Normal
+        }
+    }
+
+    /// Returns the icon name to display in the command icon widget, or `None`
+    /// when no icon should be shown (Normal mode).
+    pub fn icon_name<'a>(&self, obsidian_icon: &'a str) -> Option<&'a str> {
+        match self {
+            Self::FileSearch => Some("text-x-generic"),
+            Self::SearchProvider => Some("system-search"),
+            Self::Obsidian | Self::ObsidianGrep => Some(obsidian_icon),
+            Self::Normal => None,
+        }
+    }
+
+    /// Whether the Obsidian quick-action button bar should be visible.
+    pub fn show_obsidian_bar(&self) -> bool {
+        matches!(self, Self::Obsidian | Self::ObsidianGrep)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Async app-list loader
@@ -66,8 +118,9 @@ fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
 }
 
 /// Activates the item at `obj`, performing the appropriate action based on its
-/// type. Returns whether the window should be closed after activation.
-fn activate_item(obj: &glib::Object, model: &AppListModel) {
+/// type and the current `AppMode`. Returns whether the window should be closed
+/// after activation.
+fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
     if let Some(app_item) = obj.downcast_ref::<AppItem>() {
         launch_app(&app_item.exec(), app_item.terminal());
     } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
@@ -77,16 +130,20 @@ fn activate_item(obj: &glib::Object, model: &AppListModel) {
         display.clipboard().set_text(number);
     } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
         let line = cmd_item.line();
-        if model.obsidian_grep_mode() || model.obsidian_file_mode() {
-            if let Some(cfg) = &model.obsidian_cfg {
-                if model.obsidian_grep_mode() {
+        match mode {
+            AppMode::ObsidianGrep => {
+                if let Some(cfg) = &model.obsidian_cfg {
                     open_obsidian_grep_line(&line, cfg);
-                } else {
+                }
+            }
+            AppMode::Obsidian | AppMode::FileSearch => {
+                if let Some(cfg) = &model.obsidian_cfg {
                     open_obsidian_file_path(&line, cfg);
                 }
             }
-        } else {
-            open_file_or_line(&line);
+            _ => {
+                open_file_or_line(&line);
+            }
         }
     } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
         if let Some(cfg) = &model.obsidian_cfg {
@@ -156,6 +213,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         cfg.command_debounce_ms,
         cfg.search_provider_blacklist.clone(),
     );
+
+    // Shared, single source of truth for the current typing mode.
+    // Wrapped in Rc<Cell> so it can be captured by multiple closures on the
+    // GTK main thread without needing a Mutex.
+    let current_mode: Rc<Cell<AppMode>> = Rc::new(Cell::new(AppMode::Normal));
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -272,9 +334,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         command_icon,
         #[strong]
         model,
+        #[strong]
+        current_mode,
         move |_| {
             entry.set_text("");
             model.populate("");
+            current_mode.set(AppMode::Normal);
             obsidian_bar.set_visible(false);
             command_icon.set_visible(false);
             entry.grab_focus();
@@ -289,35 +354,32 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .unwrap_or("text-x-markdown");
 
     // --- Entry changed handler ---
+    // The mode is derived once from the text here and stored in `current_mode`
+    // so the key handler and click handler can read it without re-parsing.
     entry.connect_changed(clone!(
         #[strong]
         model,
+        #[strong]
+        current_mode,
         #[weak]
         obsidian_bar,
         #[weak]
         command_icon,
         move |e| {
             let text = e.text().to_lowercase();
-            model.populate(&text);
-            obsidian_bar.set_visible(
-                model.obsidian_action_mode()
-                    || model.obsidian_file_mode()
-                    || model.obsidian_grep_mode(),
-            );
+            let mode = AppMode::from_text(&text);
+            current_mode.set(mode);
 
-            // Update command icon based on active prefix
-            if text.starts_with(":f") {
-                command_icon.set_icon_name(Some("text-x-generic"));
-                command_icon.set_visible(true);
-            } else if text.starts_with(":s") {
-                command_icon.set_icon_name(Some("system-search"));
-                command_icon.set_visible(true);
-            } else if text.starts_with(":ob") {
-                // ":obg" also starts with ":ob", so one check covers both
-                command_icon.set_icon_name(Some(obsidian_icon_name));
-                command_icon.set_visible(true);
-            } else {
-                command_icon.set_visible(false);
+            model.populate(&text);
+
+            obsidian_bar.set_visible(mode.show_obsidian_bar());
+
+            match mode.icon_name(obsidian_icon_name) {
+                Some(name) => {
+                    command_icon.set_icon_name(Some(name));
+                    command_icon.set_visible(true);
+                }
+                None => command_icon.set_visible(false),
             }
 
             // Force a full repaint to avoid stale pixel artifacts left behind
@@ -337,6 +399,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         window,
         #[strong]
         model,
+        #[strong]
+        current_mode,
         #[upgrade_or]
         glib::Propagation::Proceed,
         move |_, key, _, _| {
@@ -348,7 +412,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 Key::Return | Key::KP_Enter => {
                     let pos = model.selection.selected();
                     if let Some(obj) = model.store.item(pos) {
-                        activate_item(&obj, &model);
+                        activate_item(&obj, &model, current_mode.get());
                     }
                     window.close();
                     glib::Propagation::Stop
@@ -392,9 +456,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         window,
         #[strong]
         model,
+        #[strong]
+        current_mode,
         move |_, pos| {
             if let Some(obj) = model.store.item(pos) {
-                activate_item(&obj, &model);
+                activate_item(&obj, &model, current_mode.get());
             }
             window.close();
         }

@@ -102,18 +102,6 @@ impl AppListModel {
         self.populate(&query);
     }
 
-    pub fn obsidian_action_mode(&self) -> bool {
-        self.obsidian_mode.get() == ObsidianMode::Action
-    }
-
-    pub fn obsidian_file_mode(&self) -> bool {
-        self.obsidian_mode.get() == ObsidianMode::File
-    }
-
-    pub fn obsidian_grep_mode(&self) -> bool {
-        self.obsidian_mode.get() == ObsidianMode::Grep
-    }
-
     // ── Private helpers ───────────────────────────────────────────────────────
 
     /// Cancel any pending debounced command.
