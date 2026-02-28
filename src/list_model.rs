@@ -194,6 +194,114 @@ fn bind_search_result_item(
     set_desc(desc_label, &item.description());
 }
 
+// ── Pollers ───────────────────────────────────────────────────────────────────
+
+/// Drives the idle-poll loop for a plain subprocess result (`run_subprocess`).
+struct SubprocessPoller {
+    rx: std::sync::mpsc::Receiver<Vec<String>>,
+    model: AppListModel,
+    generation: u64,
+}
+
+impl SubprocessPoller {
+    fn poll(self) {
+        match self.rx.try_recv() {
+            Ok(lines) => {
+                if self.model.task_gen.get() == self.generation {
+                    self.model.store.remove_all();
+                    for line in lines {
+                        self.model.store.append(&CommandItem::new(line));
+                    }
+                    if self.model.store.n_items() > 0
+                        && self.model.selection.selected() == gtk4::INVALID_LIST_POSITION
+                    {
+                        self.model.selection.set_selected(0);
+                    }
+                }
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                glib::idle_add_local_once(move || self.poll());
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
+        }
+    }
+}
+
+/// Drives the idle-poll loop for a streaming search-provider query.
+struct ProviderSearchPoller {
+    rx: std::sync::mpsc::Receiver<Vec<search_provider::SearchResult>>,
+    model: AppListModel,
+    generation: u64,
+    terms: Vec<String>,
+    clear_timeout: Rc<RefCell<Option<glib::SourceId>>>,
+    first_batch: Rc<Cell<bool>>,
+}
+
+impl ProviderSearchPoller {
+    fn poll(self) {
+        if self.model.task_gen.get() != self.generation {
+            return;
+        }
+        // Consume all currently-available batches before yielding back to the
+        // main loop, so a fast provider doesn't stall behind repeated idles.
+        let this = self;
+        loop {
+            match this.rx.try_recv() {
+                Ok(results) => {
+                    if this.model.task_gen.get() != this.generation {
+                        return;
+                    }
+                    if let Some(id) = this.clear_timeout.borrow_mut().take() {
+                        id.remove();
+                    }
+
+                    let items: Vec<glib::Object> = results
+                        .into_iter()
+                        .map(|r| {
+                            let (icon_themed, icon_file) = match r.icon {
+                                Some(search_provider::IconData::Themed(n)) => (n, String::new()),
+                                Some(search_provider::IconData::File(p)) => (String::new(), p),
+                                None => (String::new(), String::new()),
+                            };
+                            SearchResultItem::new(
+                                r.id,
+                                r.name,
+                                r.description,
+                                icon_themed,
+                                icon_file,
+                                r.app_icon,
+                                r.bus_name,
+                                r.object_path,
+                                this.terms.clone(),
+                            )
+                            .upcast::<glib::Object>()
+                        })
+                        .collect();
+
+                    if !this.first_batch.get() {
+                        this.model.store.remove_all();
+                        this.first_batch.set(true);
+                    }
+                    this.model
+                        .store
+                        .splice(this.model.store.n_items(), 0, &items);
+
+                    if this.model.store.n_items() > 0
+                        && this.model.selection.selected() == gtk4::INVALID_LIST_POSITION
+                    {
+                        this.model.selection.set_selected(0);
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    glib::idle_add_local_once(move || this.poll());
+                    return;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+            }
+        }
+    }
+}
+
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -523,28 +631,12 @@ impl AppListModel {
             let _ = tx.send(lines);
         });
 
-        fn poll(rx: std::sync::mpsc::Receiver<Vec<String>>, model: AppListModel, generation: u64) {
-            match rx.try_recv() {
-                Ok(lines) => {
-                    if model.task_gen.get() == generation {
-                        model.store.remove_all();
-                        for line in lines {
-                            model.store.append(&CommandItem::new(line));
-                        }
-                        if model.store.n_items() > 0
-                            && model.selection.selected() == gtk4::INVALID_LIST_POSITION
-                        {
-                            model.selection.set_selected(0);
-                        }
-                    }
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    glib::idle_add_local_once(move || poll(rx, model, generation));
-                }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
-            }
-        }
-        glib::idle_add_local_once(move || poll(rx, model_clone, generation));
+        let poller = SubprocessPoller {
+            rx,
+            model: model_clone,
+            generation,
+        };
+        glib::idle_add_local_once(move || poller.poll());
     }
 
     fn run_provider_search(&self, providers: Vec<SearchProvider>, query: String, max: usize) {
@@ -573,86 +665,15 @@ impl AppListModel {
             search_provider::run_search_streaming(&providers, &query, max, tx);
         });
 
-        let first_batch = Rc::new(Cell::new(false));
-        fn poll(
-            rx: std::sync::mpsc::Receiver<Vec<search_provider::SearchResult>>,
-            model: AppListModel,
-            generation: u64,
-            terms: Vec<String>,
-            clear_timeout: Rc<RefCell<Option<glib::SourceId>>>,
-            first_batch: Rc<Cell<bool>>,
-        ) {
-            if model.task_gen.get() != generation {
-                return;
-            }
-            loop {
-                match rx.try_recv() {
-                    Ok(results) => {
-                        if model.task_gen.get() != generation {
-                            return;
-                        }
-                        if let Some(id) = clear_timeout.borrow_mut().take() {
-                            id.remove();
-                        }
-
-                        let items: Vec<glib::Object> = results
-                            .into_iter()
-                            .map(|r| {
-                                let (icon_themed, icon_file) = match r.icon {
-                                    Some(search_provider::IconData::Themed(n)) => {
-                                        (n, String::new())
-                                    }
-                                    Some(search_provider::IconData::File(p)) => (String::new(), p),
-                                    None => (String::new(), String::new()),
-                                };
-                                SearchResultItem::new(
-                                    r.id,
-                                    r.name,
-                                    r.description,
-                                    icon_themed,
-                                    icon_file,
-                                    r.app_icon,
-                                    r.bus_name,
-                                    r.object_path,
-                                    terms.clone(),
-                                )
-                                .upcast::<glib::Object>()
-                            })
-                            .collect();
-
-                        if !first_batch.get() {
-                            model.store.remove_all();
-                            first_batch.set(true);
-                        }
-                        model.store.splice(model.store.n_items(), 0, &items);
-
-                        if model.store.n_items() > 0
-                            && model.selection.selected() == gtk4::INVALID_LIST_POSITION
-                        {
-                            model.selection.set_selected(0);
-                        }
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Empty) => {
-                        glib::idle_add_local_once(move || {
-                            poll(rx, model, generation, terms, clear_timeout, first_batch)
-                        });
-                        return;
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
-                }
-            }
-        }
-
-        glib::idle_add_local_once(move || {
-            poll(
-                rx,
-                model_clone,
-                generation,
-                terms,
-                clear_timeout,
-                first_batch,
-            )
-        });
+        let poller = ProviderSearchPoller {
+            rx,
+            model: model_clone,
+            generation,
+            terms,
+            clear_timeout,
+            first_batch: Rc::new(Cell::new(false)),
+        };
+        glib::idle_add_local_once(move || poller.poll());
     }
 
     fn run_command(&self, _cmd_name: &str, template: &str, argument: &str) {
