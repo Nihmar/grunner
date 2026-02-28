@@ -1,6 +1,6 @@
 use crate::actions::{
-    launch_app, open_file_or_line, open_obsidian_file_line, open_obsidian_file_path, open_settings,
-    perform_obsidian_action, power_action,
+    launch_app, open_file_or_line, open_obsidian_file_line, open_obsidian_file_path,
+    perform_obsidian_action,
 };
 use crate::app_item::AppItem;
 use crate::app_mode::AppMode;
@@ -9,18 +9,20 @@ use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
 use crate::list_model::AppListModel;
-use crate::obsidian_item::{ObsidianAction, ObsidianActionItem};
+use crate::obsidian_bar::build_obsidian_bar;
+use crate::obsidian_item::ObsidianActionItem;
+use crate::power_bar::build_power_bar;
 use crate::search_result_item::SearchResultItem;
 use glib::clone;
 use gtk4::gdk::Key;
 use gtk4::prelude::DisplayExt;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, Image, Label, ListView,
-    Orientation, ScrolledWindow,
+    Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, Image, ListView, Orientation,
+    ScrolledWindow,
 };
-use libadwaita::prelude::{AdwApplicationWindowExt, AdwDialogExt, AlertDialogExt};
-use libadwaita::{AlertDialog, Application, ApplicationWindow, ResponseAppearance};
+use libadwaita::prelude::AdwApplicationWindowExt;
+use libadwaita::{Application, ApplicationWindow};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -46,12 +48,6 @@ fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>, model: Ap
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Extracts the argument following ":ob " from the search entry text.
-/// Returns an empty string if none is present.
-fn extract_obsidian_arg(text: &str) -> &str {
-    text.strip_prefix(":ob ").map(str::trim).unwrap_or("")
-}
 
 /// Opens an Obsidian file from a grep output line of the form
 /// `file_path:line_num:content`, falling back to just opening the file
@@ -111,25 +107,6 @@ fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
             crate::search_provider::activate_result(&bus, &path, &id, &terms);
         });
     }
-}
-
-/// Creates a styled icon+label button for the power bar.
-fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::IconTheme) -> Button {
-    let btn = Button::new();
-    btn.add_css_class("power-button");
-
-    let btn_box = GtkBox::new(Orientation::Horizontal, 6);
-    btn_box.set_halign(Align::Center);
-
-    if let Some(&icon_name) = icon_candidates.iter().find(|&&n| icon_theme.has_icon(n)) {
-        let image = Image::from_icon_name(icon_name);
-        image.set_pixel_size(16);
-        btn_box.append(&image);
-    }
-
-    btn_box.append(&Label::new(Some(label)));
-    btn.set_child(Some(&btn_box));
-    btn
 }
 
 /// Moves the list selection to `pos` and scrolls it into view.
@@ -212,48 +189,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     root.append(&entry_box);
 
-    // --- Obsidian action button bar ---
-    let obsidian_bar = GtkBox::new(Orientation::Horizontal, 8);
-    obsidian_bar.set_halign(Align::Center);
-    obsidian_bar.set_margin_top(6);
-    obsidian_bar.set_margin_bottom(6);
-    obsidian_bar.set_visible(false);
-
-    let obsidian_actions = [
-        ("Open Vault", ObsidianAction::OpenVault),
-        ("New Note", ObsidianAction::NewNote),
-        ("Daily Note", ObsidianAction::DailyNote),
-        ("Quick Note", ObsidianAction::QuickNote),
-    ];
-
-    for (label, action) in obsidian_actions {
-        let btn = Button::with_label(label);
-        btn.add_css_class("power-button");
-
-        btn.connect_clicked(clone!(
-            #[strong]
-            model,
-            #[weak]
-            window,
-            #[weak]
-            entry,
-            move |_| {
-                let current_text = entry.text();
-                let arg = extract_obsidian_arg(&current_text);
-                let arg_opt = (!arg.is_empty()).then_some(arg);
-
-                if let Some(cfg) = &model.obsidian_cfg {
-                    perform_obsidian_action(action, arg_opt, cfg);
-                }
-                window.close();
-            }
-        ));
-        obsidian_bar.append(&btn);
-    }
-
-    // Resolve the icon theme once — shared by power bar and obsidian icon below.
+    // --- Bars ---
+    let obsidian_bar = build_obsidian_bar(&window, &entry, &model);
     let icon_theme = gtk4::IconTheme::for_display(&display);
-
     let power_bar = build_power_bar(&window, &entry, &icon_theme);
 
     let factory = model.create_factory();
@@ -428,118 +366,4 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         let _ = tx.send(launcher::load_apps(&dirs));
     });
     glib::idle_add_local_once(move || poll_apps(rx, model_poll));
-}
-
-// ---------------------------------------------------------------------------
-// Power bar
-// ---------------------------------------------------------------------------
-
-fn build_power_bar(
-    window: &ApplicationWindow,
-    entry: &Entry,
-    icon_theme: &gtk4::IconTheme,
-) -> GtkBox {
-    let power_bar = GtkBox::new(Orientation::Horizontal, 8);
-    power_bar.add_css_class("power-bar");
-    power_bar.set_hexpand(true);
-    power_bar.set_margin_top(4);
-    power_bar.set_margin_bottom(8);
-    power_bar.set_margin_start(12);
-    power_bar.set_margin_end(12);
-
-    // Settings button
-    {
-        let btn = make_icon_button(
-            "Settings",
-            &["preferences-system", "emblem-system", "settings-configure"],
-            icon_theme,
-        );
-        btn.connect_clicked(clone!(
-            #[weak]
-            window,
-            move |_| {
-                open_settings();
-                window.close();
-            }
-        ));
-        power_bar.append(&btn);
-    }
-
-    let spacer = GtkBox::new(Orientation::Horizontal, 0);
-    spacer.set_hexpand(true);
-    power_bar.append(&spacer);
-
-    for (label, icon_candidates, action) in [
-        (
-            "Suspend",
-            &[
-                "system-suspend",
-                "system-suspend-hibernate",
-                "media-playback-pause",
-            ][..],
-            "suspend",
-        ),
-        (
-            "Restart",
-            &["system-restart", "system-reboot", "view-refresh"][..],
-            "reboot",
-        ),
-        (
-            "Power off",
-            &["system-shutdown", "system-power-off"][..],
-            "poweroff",
-        ),
-        (
-            "Log out",
-            &["system-log-out", "application-exit"][..],
-            "logout",
-        ),
-    ] {
-        let btn = make_icon_button(label, icon_candidates, icon_theme);
-
-        let action = action.to_string();
-        let label_str = label.to_string();
-        btn.connect_clicked(clone!(
-            #[weak]
-            window,
-            #[weak]
-            entry,
-            move |_| {
-                let dialog = AlertDialog::builder()
-                    .heading(format!("{}?", label_str))
-                    .body(format!(
-                        "Are you sure you want to {}?",
-                        label_str.to_lowercase()
-                    ))
-                    .default_response("cancel")
-                    .close_response("cancel")
-                    .build();
-                dialog.add_response("cancel", "Cancel");
-                dialog.add_response("confirm", &label_str);
-                dialog.set_response_appearance("confirm", ResponseAppearance::Destructive);
-                let action = action.clone();
-                dialog.connect_response(
-                    None,
-                    clone!(
-                        #[weak]
-                        window,
-                        #[weak]
-                        entry,
-                        move |_, response| {
-                            if response == "confirm" {
-                                window.close();
-                                power_action(&action);
-                            } else {
-                                entry.grab_focus();
-                            }
-                        }
-                    ),
-                );
-                dialog.present(Some(&window));
-            }
-        ));
-        power_bar.append(&btn);
-    }
-
-    power_bar
 }
