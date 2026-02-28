@@ -19,6 +19,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+fn parse_colon_command(query: &str) -> (&str, &str) {
+    let rest = &query[1..];
+    match rest.split_once(' ') {
+        Some((cmd, arg)) => (cmd, arg.trim()),
+        None => (rest, ""),
+    }
+}
+
 // ── Obsidian mode ─────────────────────────────────────────────────────────────
 
 /// Replaces three separate `Rc<Cell<bool>>` fields with a single enum.
@@ -223,12 +231,7 @@ impl AppListModel {
     // ── Colon-command dispatch ────────────────────────────────────────────────
 
     fn handle_colon_command(&self, query: &str) {
-        let (cmd_part, arg) = query[1..]
-            .splitn(2, ' ')
-            .collect::<Vec<_>>()
-            .split_first()
-            .map(|(cmd, rest)| (*cmd, rest.first().copied().unwrap_or("").trim()))
-            .unwrap_or((&query[1..], ""));
+        let (cmd_part, arg) = parse_colon_command(query);
 
         match cmd_part {
             "s" => self.handle_search_provider(arg),
@@ -318,6 +321,12 @@ impl AppListModel {
         let Some(template) = self.commands.get(cmd_name) else {
             return;
         };
+
+        if arg.is_empty() {
+            self.clear_store();
+            return;
+        };
+
         self.bump_task_gen();
         let template = template.clone();
         let arg = arg.to_string();
