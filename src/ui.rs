@@ -83,7 +83,7 @@ fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
                     open_obsidian_grep_line(&line, cfg);
                 }
             }
-            AppMode::Obsidian | AppMode::FileSearch => {
+            AppMode::Obsidian => {
                 if let Some(cfg) = &model.obsidian_cfg {
                     open_obsidian_file_path(&line, cfg);
                 }

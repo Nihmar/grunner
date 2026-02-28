@@ -418,55 +418,66 @@ impl AppListModel {
         });
     }
 
-    fn handle_obsidian(&self, cmd_name: &str, arg: &str) {
+    /// Resolve and validate the configured vault path, showing an error item
+    /// and returning `None` if anything is wrong.
+    fn validated_vault_path(&self) -> Option<PathBuf> {
         let obs_cfg = match &self.obsidian_cfg {
             Some(c) => c.clone(),
             None => {
-                self.show_error_item("Obsidian not configured – edit config");
-                return;
+                self.show_error_item("Obsidian not configured - edit config");
+                return None;
             }
         };
-
         let vault_path = expand_home(&obs_cfg.vault);
         if !vault_path.exists() {
             self.show_error_item(format!(
                 "Vault path does not exist: {}",
                 vault_path.display()
             ));
-            return;
+            return None;
         }
+        Some(vault_path)
+    }
 
-        match cmd_name {
-            "ob" if arg.is_empty() => {
+    fn handle_obsidian(&self, cmd_name: &str, arg: &str) {
+        let Some(vault_path) = self.validated_vault_path() else {
+            return;
+        };
+        let vault_str = vault_path.to_string_lossy().into_owned();
+
+        let (mode, runner): (ActiveMode, Box<dyn FnOnce()>) = match (cmd_name, arg.is_empty()) {
+            ("ob", true) => {
                 self.active_mode.set(ActiveMode::ObsidianAction);
                 self.clear_store();
+                return;
             }
-            "ob" => {
-                self.active_mode.set(ActiveMode::ObsidianFile);
-                self.bump_task_gen();
-                let vault_str = vault_path.to_string_lossy().into_owned();
-                let arg = arg.to_string();
-                let model_clone = self.clone();
-                self.schedule_command(move || {
-                    model_clone.run_find_in_vault(PathBuf::from(vault_str), &arg);
-                });
-            }
-            "obg" if arg.is_empty() => {
+            ("obg", true) => {
                 self.active_mode.set(ActiveMode::ObsidianGrep);
                 self.clear_store();
+                return;
             }
-            "obg" => {
-                self.active_mode.set(ActiveMode::ObsidianGrep);
-                self.bump_task_gen();
-                let vault_str = vault_path.to_string_lossy().into_owned();
+            ("ob", false) => {
                 let arg = arg.to_string();
                 let model_clone = self.clone();
-                self.schedule_command(move || {
-                    model_clone.run_rg_in_vault(PathBuf::from(vault_str), &arg);
-                });
+                (
+                    ActiveMode::ObsidianFile,
+                    Box::new(move || model_clone.run_find_in_vault(PathBuf::from(vault_str), &arg)),
+                )
+            }
+            ("obg", false) => {
+                let arg = arg.to_string();
+                let model_clone = self.clone();
+                (
+                    ActiveMode::ObsidianGrep,
+                    Box::new(move || model_clone.run_rg_in_vault(PathBuf::from(vault_str), &arg)),
+                )
             }
             _ => unreachable!(),
-        }
+        };
+
+        self.active_mode.set(mode);
+        self.bump_task_gen();
+        self.schedule_command(runner);
     }
 
     fn handle_custom_command(&self, cmd_name: &str, arg: &str) {
