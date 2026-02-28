@@ -42,6 +42,158 @@ enum ActiveMode {
     ObsidianGrep,
 }
 
+// ── Factory helpers ───────────────────────────────────────────────────────────
+
+/// Show or hide `label` based on whether `text` is non-empty.
+fn set_desc(label: &gtk4::Label, text: &str) {
+    let visible = !text.is_empty();
+    label.set_visible(visible);
+    label.set_text(if visible { text } else { "" });
+}
+
+/// Return `path` relative to `vault`, falling back to the original value.
+fn relative_to_vault<'a>(path: &'a str, vault: &Option<String>) -> &'a str {
+    vault
+        .as_deref()
+        .and_then(|v| path.strip_prefix(v))
+        .map(|s| s.trim_start_matches('/'))
+        .unwrap_or(path)
+}
+
+fn bind_app_item(
+    item: &AppItem,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+) {
+    let icon = item.icon();
+    if icon.is_empty() {
+        image.set_icon_name(Some("application-x-executable"));
+    } else if icon.starts_with('/') {
+        image.set_from_file(Some(&icon));
+    } else {
+        image.set_icon_name(Some(&icon));
+    }
+    name_label.set_text(&item.name());
+    set_desc(desc_label, &item.description());
+}
+
+fn bind_calc_item(
+    item: &CalcItem,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+) {
+    image.set_icon_name(Some("accessories-calculator"));
+    name_label.set_text(&item.result());
+    set_desc(desc_label, "");
+}
+
+fn bind_command_item(
+    item: &CommandItem,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+    mode: ActiveMode,
+    vault_path: &Option<String>,
+    obsidian_icon: &str,
+) {
+    let line = item.line();
+
+    if mode == ActiveMode::ObsidianGrep {
+        image.set_icon_name(Some(obsidian_icon));
+        if let Some((file_path, rest)) = line.split_once(':') {
+            name_label.set_text(relative_to_vault(file_path, vault_path));
+            set_desc(desc_label, rest);
+        } else {
+            name_label.set_text(&line);
+            set_desc(desc_label, "");
+        }
+        return;
+    }
+
+    if line.starts_with('/') {
+        if !line.contains(':') {
+            // Plain absolute path – either :ob (file) or a generic :f result.
+            if mode == ActiveMode::ObsidianFile {
+                image.set_icon_name(Some(obsidian_icon));
+                let filename = std::path::Path::new(&line)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&line);
+                name_label.set_text(filename);
+                let relative = relative_to_vault(&line, vault_path);
+                let parent = std::path::Path::new(relative)
+                    .parent()
+                    .and_then(|p| p.to_str())
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| {
+                        // Fallback: absolute parent when outside vault.
+                        std::path::Path::new(&line)
+                            .parent()
+                            .and_then(|p| p.to_str())
+                    });
+                set_desc(desc_label, parent.unwrap_or(""));
+            } else {
+                // Regular file (e.g. from :f).
+                let (ctype, _) = gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
+                image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+                let filename = std::path::Path::new(&line)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&line);
+                name_label.set_text(filename);
+                let parent = std::path::Path::new(&line)
+                    .parent()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("");
+                set_desc(desc_label, parent);
+            }
+            return;
+        }
+
+        // Absolute path with colon – grep output from :fg.
+        if let Some((file_path, rest)) = line.split_once(':') {
+            let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
+            image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+            let filename = std::path::Path::new(file_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(file_path);
+            name_label.set_text(filename);
+            set_desc(desc_label, rest);
+            return;
+        }
+    }
+
+    // Fallback for any other lines.
+    image.set_icon_name(Some("system-search"));
+    name_label.set_text(&line);
+    set_desc(desc_label, "");
+}
+
+fn bind_search_result_item(
+    item: &SearchResultItem,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+) {
+    let icon_file = item.icon_file();
+    let icon_themed = item.icon_themed();
+    let app_icon = item.app_icon_name();
+    if !icon_file.is_empty() {
+        image.set_from_file(Some(&icon_file));
+    } else if !icon_themed.is_empty() {
+        image.set_icon_name(Some(&icon_themed));
+    } else if !app_icon.is_empty() {
+        image.set_icon_name(Some(&app_icon));
+    } else {
+        image.set_icon_name(Some("system-search"));
+    }
+    name_label.set_text(&item.name());
+    set_desc(desc_label, &item.description());
+}
+
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -599,128 +751,22 @@ impl AppListModel {
                 .and_then(|c| c.downcast::<gtk4::Label>().ok())
                 .expect("missing desc_label");
 
-            /// Show or hide `desc_label` based on whether `text` is non-empty.
-            fn set_desc(label: &gtk4::Label, text: &str) {
-                let visible = !text.is_empty();
-                label.set_visible(visible);
-                label.set_text(if visible { text } else { "" });
-            }
-
-            /// Compute a path relative to `vault`, falling back to absolute.
-            fn relative_to_vault<'a>(path: &'a str, vault: &Option<String>) -> &'a str {
-                vault
-                    .as_deref()
-                    .and_then(|v| path.strip_prefix(v))
-                    .map(|s| s.trim_start_matches('/'))
-                    .unwrap_or(path)
-            }
-
-            if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-                let icon = app_item.icon();
-                if icon.is_empty() {
-                    image.set_icon_name(Some("application-x-executable"));
-                } else if icon.starts_with('/') {
-                    image.set_from_file(Some(&icon));
-                } else {
-                    image.set_icon_name(Some(&icon));
-                }
-                name_label.set_text(&app_item.name());
-                set_desc(&desc_label, &app_item.description());
-            } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
-                image.set_icon_name(Some("accessories-calculator"));
-                name_label.set_text(&calc_item.result());
-                set_desc(&desc_label, "");
-            } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-                let line = cmd_item.line();
-                let mode = active_mode.get();
-
-                if mode == ActiveMode::ObsidianGrep {
-                    image.set_icon_name(Some(&obsidian_icon));
-                    if let Some((file_path, rest)) = line.split_once(':') {
-                        let display = relative_to_vault(file_path, &vault_path);
-                        name_label.set_text(display);
-                        set_desc(&desc_label, rest);
-                    } else {
-                        name_label.set_text(&line);
-                        set_desc(&desc_label, "");
-                    }
-                    return;
-                }
-
-                if line.starts_with('/') {
-                    if !line.contains(':') {
-                        // Plain absolute path (e.g. from :ob find)
-                        if mode == ActiveMode::ObsidianFile {
-                            image.set_icon_name(Some(&obsidian_icon));
-                            let filename = std::path::Path::new(&line)
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or(&line);
-                            name_label.set_text(filename);
-                            let relative = relative_to_vault(&line, &vault_path);
-                            let parent = std::path::Path::new(relative)
-                                .parent()
-                                .and_then(|p| p.to_str())
-                                .filter(|s| !s.is_empty())
-                                .or_else(|| {
-                                    // Fallback: absolute parent when outside vault
-                                    std::path::Path::new(&line)
-                                        .parent()
-                                        .and_then(|p| p.to_str())
-                                });
-                            set_desc(&desc_label, parent.unwrap_or(""));
-                        } else {
-                            // Regular file (e.g. from :f)
-                            let (ctype, _) =
-                                gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
-                            image.set_from_gicon(&gio::content_type_get_icon(&ctype));
-                            let filename = std::path::Path::new(&line)
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or(&line);
-                            name_label.set_text(filename);
-                            let parent = std::path::Path::new(&line)
-                                .parent()
-                                .and_then(|p| p.to_str())
-                                .unwrap_or("");
-                            set_desc(&desc_label, parent);
-                        }
-                        return;
-                    }
-
-                    // Line is absolute path with colon – grep output from :fg
-                    if let Some((file_path, rest)) = line.split_once(':') {
-                        let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
-                        image.set_from_gicon(&gio::content_type_get_icon(&ctype));
-                        let filename = std::path::Path::new(file_path)
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or(file_path);
-                        name_label.set_text(filename);
-                        set_desc(&desc_label, rest);
-                        return;
-                    }
-                }
-
-                // Fallback for any other lines
-                image.set_icon_name(Some("system-search"));
-                name_label.set_text(&line);
-                set_desc(&desc_label, "");
-            } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
-                let icon_file = sr_item.icon_file();
-                let icon_themed = sr_item.icon_themed();
-                let app_icon = sr_item.app_icon_name();
-                if !icon_file.is_empty() {
-                    image.set_from_file(Some(&icon_file));
-                } else if !icon_themed.is_empty() {
-                    image.set_icon_name(Some(&icon_themed));
-                } else if !app_icon.is_empty() {
-                    image.set_icon_name(Some(&app_icon));
-                } else {
-                    image.set_icon_name(Some("system-search"));
-                }
-                name_label.set_text(&sr_item.name());
-                set_desc(&desc_label, &sr_item.description());
+            if let Some(app) = obj.downcast_ref::<AppItem>() {
+                bind_app_item(app, &image, &name_label, &desc_label);
+            } else if let Some(calc) = obj.downcast_ref::<CalcItem>() {
+                bind_calc_item(calc, &image, &name_label, &desc_label);
+            } else if let Some(cmd) = obj.downcast_ref::<CommandItem>() {
+                bind_command_item(
+                    cmd,
+                    &image,
+                    &name_label,
+                    &desc_label,
+                    active_mode.get(),
+                    &vault_path,
+                    &obsidian_icon,
+                );
+            } else if let Some(sr) = obj.downcast_ref::<SearchResultItem>() {
+                bind_search_result_item(sr, &image, &name_label, &desc_label);
             } else {
                 name_label.set_text("?");
                 set_desc(&desc_label, "");
