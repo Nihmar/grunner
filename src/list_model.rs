@@ -1,6 +1,6 @@
 use crate::app_item::AppItem;
-use crate::calc_item::CalcItem;
-use crate::calculator::{eval_expression, is_arithmetic_query};
+// use crate::calc_item::CalcItem;
+// use crate::calculator::{eval_expression, is_arithmetic_query};
 use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
 use crate::launcher::DesktopApp;
@@ -78,16 +78,16 @@ fn bind_app_item(
     set_desc(desc_label, &item.description());
 }
 
-fn bind_calc_item(
-    item: &CalcItem,
-    image: &gtk4::Image,
-    name_label: &gtk4::Label,
-    desc_label: &gtk4::Label,
-) {
-    image.set_icon_name(Some("accessories-calculator"));
-    name_label.set_text(&item.result());
-    set_desc(desc_label, "");
-}
+// fn bind_calc_item(
+//     item: &CalcItem,
+//     image: &gtk4::Image,
+//     name_label: &gtk4::Label,
+//     desc_label: &gtk4::Label,
+// ) {
+//     image.set_icon_name(Some("accessories-calculator"));
+//     name_label.set_text(&item.result());
+//     set_desc(desc_label, "");
+// }
 
 fn bind_command_item(
     item: &CommandItem,
@@ -314,7 +314,7 @@ pub struct AppListModel {
     /// re-run it once the app list has been loaded.
     current_query: Rc<RefCell<String>>,
     max_results: usize,
-    calculator_enabled: bool,
+    // calculator_enabled: bool,
     commands: Rc<HashMap<String, String>>,
     task_gen: Rc<Cell<u64>>,
     pub obsidian_cfg: Option<ObsidianConfig>,
@@ -331,7 +331,7 @@ impl AppListModel {
     /// background load has completed to populate and refresh the view.
     pub fn new(
         max_results: usize,
-        calculator_enabled: bool,
+        // calculator_enabled: bool,
         commands: HashMap<String, String>,
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
@@ -348,7 +348,7 @@ impl AppListModel {
             all_apps: Rc::new(RefCell::new(Vec::new())),
             current_query: Rc::new(RefCell::new(String::new())),
             max_results,
-            calculator_enabled,
+            // calculator_enabled,
             commands: Rc::new(commands),
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
@@ -444,11 +444,11 @@ impl AppListModel {
         self.store.remove_all();
         self.bump_task_gen();
 
-        if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
-            if let Some(result_str) = eval_expression(query) {
-                self.store.append(&CalcItem::new(result_str));
-            }
-        }
+        // if self.calculator_enabled && !query.is_empty() && is_arithmetic_query(query) {
+        //     if let Some(result_str) = eval_expression(query) {
+        //         self.store.append(&CalcItem::new(result_str));
+        //     }
+        // }
 
         let apps = self.all_apps.borrow();
         if query.is_empty() {
@@ -785,8 +785,8 @@ impl AppListModel {
 
             if let Some(app) = obj.downcast_ref::<AppItem>() {
                 bind_app_item(app, &image, &name_label, &desc_label);
-            } else if let Some(calc) = obj.downcast_ref::<CalcItem>() {
-                bind_calc_item(calc, &image, &name_label, &desc_label);
+            // } else if let Some(calc) = obj.downcast_ref::<CalcItem>() {
+            //     bind_calc_item(calc, &image, &name_label, &desc_label);
             } else if let Some(cmd) = obj.downcast_ref::<CommandItem>() {
                 bind_command_item(
                     cmd,

@@ -4,7 +4,7 @@ use crate::actions::{
 };
 use crate::app_item::AppItem;
 use crate::app_mode::AppMode;
-use crate::calc_item::CalcItem;
+// use crate::calc_item::CalcItem;
 use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
@@ -15,7 +15,7 @@ use crate::power_bar::build_power_bar;
 use crate::search_result_item::SearchResultItem;
 use glib::clone;
 use gtk4::gdk::Key;
-use gtk4::prelude::DisplayExt;
+// use gtk4::prelude::DisplayExt;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, Image, ListView, Orientation,
@@ -70,11 +70,11 @@ fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
 fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
     if let Some(app_item) = obj.downcast_ref::<AppItem>() {
         launch_app(&app_item.exec(), app_item.terminal());
-    } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
-        let result = calc_item.result();
-        let number = result.strip_prefix("= ").unwrap_or(&result);
-        let display = gtk4::gdk::Display::default().expect("cannot get display");
-        display.clipboard().set_text(number);
+    // } else if let Some(calc_item) = obj.downcast_ref::<CalcItem>() {
+    //     let result = calc_item.result();
+    //     let number = result.strip_prefix("= ").unwrap_or(&result);
+    //     let display = gtk4::gdk::Display::default().expect("cannot get display");
+    //     display.clipboard().set_text(number);
     } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
         let line = cmd_item.line();
         match mode {
@@ -135,7 +135,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // Model starts empty; apps are loaded in a background thread below.
     let model = AppListModel::new(
         cfg.max_results,
-        cfg.calculator,
+        // cfg.calculator,
         cfg.commands.clone(),
         cfg.obsidian.clone(),
         cfg.command_debounce_ms,
