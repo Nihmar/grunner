@@ -37,7 +37,6 @@ fn main() -> glib::ExitCode
 pub struct Config {
     pub window: WindowConfig,
     pub search: SearchConfig,
-    pub calculator: CalculatorConfig,
     pub commands: HashMap<String, String>,
     pub obsidian: Option<ObsidianConfig>,
 }
@@ -53,9 +52,7 @@ pub struct SearchConfig {
     pub app_dirs: Vec<String>,
 }
 
-pub struct CalculatorConfig {
-    pub enabled: bool,
-}
+
 
 pub struct ObsidianConfig {
     pub vault: String,
@@ -84,7 +81,6 @@ pub fn default_app_dirs() -> Vec<String>
 - `DEFAULT_WINDOW_WIDTH: i32 = 640`
 - `DEFAULT_WINDOW_HEIGHT: i32 = 480`
 - `DEFAULT_MAX_RESULTS: usize = 64`
-- `DEFAULT_CALCULATOR: bool = false`
 - `DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300`
 
 #### ui.rs
@@ -122,7 +118,6 @@ pub struct ListModel {
 
 pub enum AppMode {
     AppSearch(String),
-    Calculator(String),
     Command(String, Option<String>),
     Obsidian(String),
 }
@@ -191,33 +186,7 @@ pub fn get_all_apps(&self) -> &[AppEntry]
 - Returns all loaded applications
 - Used for debugging and testing
 
-#### calculator.rs
-**Purpose**: Arithmetic expression evaluation.
 
-**Key Functions**:
-```rust
-pub fn evaluate(expression: &str) -> Result<f64, CalculatorError>
-```
-- Evaluates arithmetic expression
-- Returns `Result<f64, CalculatorError>`
-- Handles integer-to-float promotion
-- Supports: `+ - * / % ^ ( )`
-
-```rust
-pub fn is_arithmetic_expression(text: &str) -> bool
-```
-- Checks if text appears to be an arithmetic expression
-- Returns `bool` for mode detection
-
-**Error Types**:
-```rust
-pub enum CalculatorError {
-    ParseError(String),
-    EvaluationError(String),
-    DivisionByZero,
-    InvalidExpression,
-}
-```
 
 #### search_provider.rs
 **Purpose**: GNOME Shell search provider integration.
@@ -342,12 +311,7 @@ SearchConfig {
 }
 ```
 
-**Calculator Configuration**:
-```rust
-CalculatorConfig {
-    enabled: bool,  // Enable inline calculator (default: false)
-}
-```
+
 
 **Obsidian Configuration**:
 ```rust
@@ -390,13 +354,7 @@ impl Config {
 1. If query starts with `:` → Command mode
    - Parse command and optional argument
    - Special handling for `:ob` (Obsidian) and `:s` (GNOME Shell)
-2. Else if query matches arithmetic pattern → Calculator mode
-3. Else → Application search mode
-
-**Arithmetic Pattern**:
-```regex
-^[0-9\s\.\+\-\*\/\%\^\(\)]+$
-```
+2. Else → Application search mode
 
 ### Search Backends
 
@@ -413,11 +371,7 @@ impl Config {
 **Output Parsing**: Line-by-line parsing, each line becomes a result
 **Error Handling**: Silent failure (results empty on error)
 
-#### Calculator Search
-**Backend**: `calculator::evaluate()`
-**Evaluation**: Safe expression evaluation via `evalexpr`
-**Type Promotion**: Integer division promotes to float
-**Error Display**: Shows error message as result on failure
+
 
 #### GNOME Shell Search
 **Backend**: `search_provider::SearchProvider`
@@ -447,14 +401,7 @@ pub struct CmdItem {
 }
 ```
 
-**Calculator Result** (`calc_item.rs`):
-```rust
-pub struct CalcItem {
-    pub expression: String,
-    pub result: f64,
-    pub error: Option<String>,
-}
-```
+
 
 **Obsidian Result** (`obsidian_item.rs`):
 ```rust

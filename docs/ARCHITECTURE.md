@@ -57,10 +57,10 @@ Grunner follows a layered architecture with clear separation between UI, busines
 │  Central dispatcher, mode switching, result aggregation    │
 ├─────────────────────────────────────────────────────────────┤
 │                    Specialized Modules                      │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐          │
-│  │launcher │ │calculator│ │search   │ │actions │          │
-│  │         │ │         │ │provider │ │        │          │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘          │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                      │
+│  │launcher │ │search   │ │actions │                      │
+│  │         │ │provider │ │        │                      │
+│  └─────────┘ └─────────┘ └─────────┘                      │
 │  ┌─────────┐ ┌─────────┐ ┌─────────┐                      │
 │  │config   │ │utils    │ │app_mode │                      │
 │  │         │ │         │ │         │                      │
@@ -85,7 +85,6 @@ ui.rs
 
 list_model.rs
 ├── launcher.rs (application search)
-├── calculator.rs (expression evaluation)
 ├── search_provider.rs (GNOME search)
 ├── actions.rs (command execution)
 └── app_mode.rs (mode enumeration)
@@ -133,7 +132,7 @@ actions.rs
   - Manage search state and history
   - Coordinate async operations
 - **Key Algorithms**:
-  - Mode detection (command vs calculator vs app search)
+  - Mode detection (command vs app search)
   - Result ranking and filtering
   - Async command execution with debouncing
 
@@ -162,17 +161,7 @@ actions.rs
   - Application deduplication by executable path
   - Fuzzy matching with `fuzzy-matcher` crate
 
-#### calculator.rs
-- **Purpose**: Inline arithmetic expression evaluation
-- **Responsibilities**:
-  - Validate arithmetic expressions
-  - Evaluate expressions with proper operator precedence
-  - Handle integer-to-float promotion
-  - Format results for display
-- **Key Features**:
-  - Safe expression evaluation via `evalexpr`
-  - Automatic type promotion for division
-  - Error handling for invalid expressions
+
 
 #### search_provider.rs
 - **Purpose**: GNOME Shell search provider integration
@@ -323,10 +312,6 @@ fn detect_mode(query: &str) -> AppMode {
         return AppMode::Command(cmd.into(), arg);
     }
     
-    if is_arithmetic_expression(query) {
-        return AppMode::Calculator(query.into());
-    }
-    
     AppMode::AppSearch(query.into())
 }
 ```
@@ -381,9 +366,6 @@ app_dirs = [
     "/usr/share/applications",
     "~/.local/share/applications",
 ]
-
-[calculator]
-enabled = false
 
 [commands]
 f = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"

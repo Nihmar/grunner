@@ -21,21 +21,20 @@ Take a quick look at grunner in action:
 | **Obsidian actions** (`:ob`) – vault, new note, daily note, quick note | ![Obsidian](screenshots/obsidian.png) |
 | **Obsidian file search** (`:ob` with file list) | ![Obsidian locate](screenshots/obsidian_locate.png) |
 | **Obsidian vault grep** (`:obg`) | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png) |
-| **GNOME Shell search providers** (`:s`) – files, calculator, etc. | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
+| **GNOME Shell search providers** (`:s`) – files, calendar, contacts, etc. | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
 
 ---
 
 ## Features
 
 - **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
-- **Inline calculator** — evaluate arithmetic expressions directly in the search bar; press Enter to copy the result to the clipboard
 - **Colon commands** — extensible command system for file search, full-text grep, GNOME Shell search providers, and Obsidian integration
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
-- **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, Calculator, GNOME Calendar, etc.) via `:s`
+- **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) via `:s`
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings shortcut** — opens your config file with `xdg-open` for quick editing
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
-- **Configurable** — a single TOML file controls window size, search directories, result limits, calculator toggle, custom commands, debounce timing, and Obsidian paths
+- **Configurable** — a single TOML file controls window size, search directories, result limits, custom commands, debounce timing, and Obsidian paths
 
 ---
 
@@ -137,17 +136,6 @@ Launch `grunner`. The window appears with a search bar focused and ready for inp
 
 Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row.
 
-### Calculator mode
-
-Enabled via `calculator.enabled = true` in your config. When the search query consists entirely of arithmetic characters (`0–9 . + - * / % ^ ( )`), grunner evaluates the expression live and shows the result as the first item. Press `Enter` to copy the numeric result to the clipboard.
-
-```
-7/3         →   = 2.333333
-(12 + 8)*5  →   = 100
-```
-
-Integer literals are automatically promoted to floats so that `7/2` yields `3.5`, not `3`. Partial expressions are evaluated as you type.
-
 ### Colon commands
 
 Type `:` followed by a command name and an optional argument:
@@ -227,8 +215,6 @@ All keys are optional; missing keys fall back to built-in defaults.
 ### Full example
 
 ```toml
-# grunner configuration
-
 [window]
 # Width and height of the launcher window in pixels.
 width  = 640
@@ -251,10 +237,6 @@ app_dirs = [
     "/var/lib/flatpak/exports/share/applications",
     "~/.local/share/flatpak/exports/share/applications",
 ]
-
-[calculator]
-# Enable inline expression evaluation.
-enabled = false
 
 [commands]
 # Built-in defaults (shown here for reference; override freely).
@@ -281,7 +263,6 @@ quick_note = "Quick.md"
 | `search.max_results` | integer | `64` | Maximum results displayed |
 | `search.command_debounce_ms` | integer | `300` | Debounce delay for colon commands (ms) |
 | `search.app_dirs` | array of strings | (see above) | Directories to scan for `.desktop` files |
-| `calculator.enabled` | boolean | `false` | Enable inline calculator |
 | `commands.<name>` | string | (see above) | Shell command for a custom colon command |
 | `obsidian.vault` | string | — | Path to Obsidian vault root |
 | `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |
@@ -316,12 +297,11 @@ Comprehensive documentation is available in the `docs/` directory:
 | `ui.rs` | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
 | `list_model.rs` | Central search model; dispatches queries to the correct mode and populates the `ListStore` |
 | `launcher.rs` | Scans `.desktop` files, parses them, and deduplicates entries |
-| `calculator.rs` | Arithmetic expression evaluator (wraps `evalexpr`); handles integer-to-float promotion |
+
 | `search_provider.rs` | D-Bus client for GNOME Shell search providers (discovery + query + activation) |
 | `actions.rs` | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs |
 | `config.rs` | TOML config loading with defaults and `~` expansion |
 | `app_item.rs` | GObject wrapper for application entries |
-| `calc_item.rs` | GObject wrapper for calculator results |
 | `cmd_item.rs` | GObject wrapper for command output lines |
 | `obsidian_item.rs` | GObject wrapper for Obsidian action entries |
 | `search_result_item.rs` | GObject wrapper for GNOME Shell search provider results |

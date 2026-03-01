@@ -23,7 +23,6 @@ Grunner is a fast, keyboard-driven application launcher for GNOME and other Linu
 
 ### Key Features
 - **Fuzzy application search** with instant results
-- **Inline calculator** for quick calculations
 - **Colon command system** for file search, content grep, and more
 - **Obsidian integration** for note management
 - **GNOME Shell search provider** support

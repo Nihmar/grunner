@@ -18,7 +18,6 @@ Grunner is a fast, keyboard-driven application launcher for GNOME and other Linu
 
 ### Key Features
 - **Fuzzy application search** with instant results
-- **Inline calculator** for quick calculations
 - **Colon command system** for file search, content grep, and more
 - **Obsidian integration** for note management
 - **GNOME Shell search provider** support
@@ -116,15 +115,11 @@ When you first launch Grunner:
 **Example:**
 - Type `fir` to find Firefox
 - Type `ter` to find Terminal
-- Type `calc` to find Calculator
-
 ### Quick Actions
 - **Escape**: Close Grunner
 - **Enter**: Launch selected item
 - **Up/Down Arrow**: Navigate results
 - **Page Up/Page Down**: Jump 10 items
-- **Ctrl+C**: Copy calculator result (when in calculator mode)
-
 ## Search Modes
 
 Grunner supports multiple search modes that activate automatically based on your input.
@@ -143,30 +138,7 @@ The default mode searches all installed applications using fuzzy matching.
 - `term` → GNOME Terminal, Konsole, etc.
 - `image` → Image Viewer, GIMP, etc.
 
-### 2. Calculator Mode
-When you type a mathematical expression, Grunner automatically switches to calculator mode.
-
-**Supported Operations:**
-- Basic: `+ - * /`
-- Modulo: `%`
-- Exponentiation: `^`
-- Parentheses: `( )`
-- Decimal numbers: `.`
-
-**Examples:**
-```
-7/3              → = 2.333333
-(12 + 8) * 5     → = 100
-2^8              → = 256
-15 % 4           → = 3
-```
-
-**Features:**
-- Live evaluation as you type
-- Integer-to-float promotion (7/2 = 3.5, not 3)
-- Copy result to clipboard with `Enter`
-
-### 3. Colon Commands
+### 2. Colon Commands
 Type `:` followed by a command name to access specialized search modes.
 
 #### Available Commands:
@@ -210,14 +182,12 @@ Queries GNOME Shell search providers.
 
 **Supported Providers:**
 - Files (document search)
-- Calculator
 - GNOME Calendar
 - GNOME Contacts
 - And any other installed providers
 
 **Examples:**
 - `:s meeting notes` → Search documents
-- `:s 2+2` → Use calculator
 - `:s john` → Search contacts
 
 ##### `:ob` - Obsidian Actions
@@ -278,7 +248,6 @@ aur = "yay -Ss \"$1\" 2>/dev/null | head -20"
 |-----|--------|
 | `Enter` | Launch selected application/action |
 | `Escape` | Close Grunner |
-| `Ctrl+C` | Copy calculator result |
 | `Ctrl+Q` | Quit application (when focused) |
 
 ### Search Shortcuts
@@ -335,12 +304,7 @@ app_dirs = [
 ]
 ```
 
-#### Calculator Configuration
-```toml
-[calculator]
-# Enable or disable the inline calculator
-enabled = true
-```
+
 
 #### Command Configuration
 ```toml
@@ -366,8 +330,6 @@ ddg = "curl -s 'https://api.duckduckgo.com/?q=$1&format=json&pretty=1' | jq -r '
 width = 800
 height = 600
 
-[calculator]
-enabled = true
 ```
 
 #### Advanced Configuration
@@ -383,9 +345,6 @@ app_dirs = [
     "/usr/share/applications",
     "~/.local/share/applications",
 ]
-
-[calculator]
-enabled = true
 
 [commands]
 # Faster file search with fd

@@ -211,11 +211,9 @@ src/
 ├── list_model.rs       # Central search engine
 ├── config.rs           # Configuration management
 ├── launcher.rs         # Application scanning
-├── calculator.rs       # Arithmetic evaluation
 ├── search_provider.rs  # GNOME Shell integration
 ├── actions.rs          # System actions
 ├── app_item.rs         # Application result wrapper
-├── calc_item.rs        # Calculator result wrapper
 ├── cmd_item.rs         # Command result wrapper
 ├── obsidian_item.rs    # Obsidian action wrapper
 ├── obsidian_bar.rs     # Obsidian UI component
@@ -300,9 +298,10 @@ mod tests {
     }
 
     #[test]
-    fn test_calculator_evaluation() {
-        assert_eq!(evaluate("2 + 2").unwrap(), 4.0);
-        assert_eq!(evaluate("7 / 2").unwrap(), 3.5);
+    fn test_config_loading() {
+        let config = Config::default();
+        assert_eq!(config.window.width, DEFAULT_WINDOW_WIDTH);
+        assert_eq!(config.window.height, DEFAULT_WINDOW_HEIGHT);
     }
 }
 ```

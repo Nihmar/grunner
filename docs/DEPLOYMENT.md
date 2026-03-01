@@ -221,8 +221,8 @@ Depends: libgtk-4-1, libadwaita-1-0, libglib2.0-0
 Maintainer: Your Name <email@example.com>
 Description: Fast keyboard-driven application launcher for GNOME
  A rofi-like application launcher built with Rust and GTK4/libadwaita.
- Features fuzzy application search, inline calculator, file search,
- content grep, Obsidian integration, and power management controls.
+ Features fuzzy application search, file search, content grep,
+ Obsidian integration, and power management controls.
 EOF
 
 # Build package
@@ -245,8 +245,8 @@ Requires: gtk4 libadwaita glib2
 
 %description
 A rofi-like application launcher built with Rust and GTK4/libadwaita.
-Features fuzzy application search, inline calculator, file search,
-content grep, Obsidian integration, and power management controls.
+Features fuzzy application search, file search, content grep,
+Obsidian integration, and power management controls.
 
 %prep
 %autosetup
@@ -364,8 +364,7 @@ height = 600
 max_results = 100  # Show more results for testing
 command_debounce_ms = 100  # Faster response
 
-[calculator]
-enabled = true
+
 ```
 
 **Production Environment:**
@@ -379,8 +378,7 @@ height = 480
 max_results = 50  # Conservative limit
 command_debounce_ms = 300  # Reduce UI flicker
 
-[calculator]
-enabled = false  # Disable if not needed
+
 ```
 
 ## System Integration

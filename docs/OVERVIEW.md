@@ -60,10 +60,10 @@ Grunner is designed with several key principles in mind:
 │  └─────────────────────────────────────────────────────┘   │
 ├─────────────────────────────────────────────────────────────┤
 │                    Specialized Modules                     │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐        │
-│  │launcher │ │calculator│ │search   │ │actions │        │
-│  │         │ │         │ │provider │ │        │        │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘        │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                     │
+│  │launcher │ │search   │ │actions │                     │
+│  │         │ │provider │ │        │                     │
+│  └─────────┘ └─────────┘ └─────────┘                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -77,7 +77,6 @@ Grunner is designed with several key principles in mind:
 
 ### 2. Search Modes
 - **Default mode**: Application fuzzy search
-- **Calculator mode**: Inline arithmetic expression evaluation
 - **Colon commands**: Extensible command system with custom shell commands
 - **File search**: Integration with `plocate` for fast file finding
 - **Content search**: Integration with `ripgrep` for full-text search
@@ -120,9 +119,6 @@ Grunner is designed with several key principles in mind:
 - **tokio**: Asynchronous runtime for concurrent operations
 - **urlencoding**: URL encoding for Obsidian URI generation
 
-### Evaluation
-- **evalexpr**: Arithmetic expression evaluation for calculator mode
-
 ## Project Structure
 
 ### Source Code Organization
@@ -133,11 +129,9 @@ src/
 ├── list_model.rs       # Central search model and query routing
 ├── config.rs           # Configuration loading and management
 ├── launcher.rs         # Application scanning and indexing
-├── calculator.rs       # Arithmetic expression evaluation
 ├── search_provider.rs  # GNOME Shell search provider integration
 ├── actions.rs          # System actions (launch, open, power)
 ├── app_item.rs         # Application entry GObject wrapper
-├── calc_item.rs        # Calculator result GObject wrapper
 ├── cmd_item.rs         # Command output GObject wrapper
 ├── obsidian_item.rs    # Obsidian action GObject wrapper
 ├── obsidian_bar.rs     # Obsidian action bar UI
@@ -190,8 +184,7 @@ grunner/
 ### Configuration Sections
 1. **Window**: Dimensions and display settings
 2. **Search**: Result limits, debounce timing, application directories
-3. **Calculator**: Inline calculator enable/disable
-4. **Commands**: Custom shell commands for colon commands
+3. **Commands**: Custom shell commands for colon commands
 5. **Obsidian**: Vault paths and note management settings
 
 ### Default Values
@@ -206,8 +199,7 @@ User Input → Mode Detection → Query Routing → Backend Execution → Result
 
 ### Mode Detection Logic
 1. Check for colon prefix (`:`) → Command mode
-2. Check for arithmetic expression → Calculator mode
-3. Default → Application search mode
+2. Default → Application search mode
 
 ### Result Ranking
 - **Application search**: Fuzzy match score based on name and description
