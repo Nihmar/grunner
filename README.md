@@ -4,6 +4,8 @@ A fast, keyboard-driven application launcher for GNOME and other Linux desktops,
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
+**📚 [Comprehensive Documentation](docs/README.md) available in the `docs/` directory**
+
 ---
 
 ## Gallery
@@ -285,6 +287,24 @@ quick_note = "Quick.md"
 | `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |
 | `obsidian.new_notes_folder` | string | — | New notes subfolder |
 | `obsidian.quick_note` | string | — | Quick-note file path (relative to vault) |
+
+---
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+### For Users
+- **[User Guide](docs/USER_GUIDE.md)** - Installation, configuration, and usage instructions
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - System requirements and deployment options
+
+### For Developers
+- **[Architecture Documentation](docs/ARCHITECTURE.md)** - System design and module dependencies
+- **[API Reference](docs/API.md)** - Complete API documentation for all modules
+- **[Development Guide](docs/DEVELOPMENT.md)** - Development environment setup and contribution guidelines
+
+### Overview
+- **[Project Overview](docs/OVERVIEW.md)** - High-level project summary and technology stack
 
 ---
 
