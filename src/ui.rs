@@ -1,10 +1,25 @@
+//! Main UI construction module for Grunner
+//!
+//! This module is responsible for building the complete GTK user interface for
+//! Grunner, including window setup, search entry, results list, action bars,
+//! and all event handling. It serves as the central coordination point between
+//! the data model (`AppListModel`) and the GTK widgets.
+//!
+//! Key responsibilities:
+//! - Window creation and styling with CSS
+//! - Search entry with real-time query processing
+//! - Results list view with custom item rendering
+//! - Obsidian and power action bars
+//! - Keyboard navigation and selection handling
+//! - Application lifecycle and focus management
+//! - Background application loading with threading
+
 use crate::actions::{
     launch_app, open_file_or_line, open_obsidian_file_line, open_obsidian_file_path,
     perform_obsidian_action,
 };
 use crate::app_item::AppItem;
 use crate::app_mode::AppMode;
-
 use crate::cmd_item::CommandItem;
 use crate::config::Config;
 use crate::launcher;
@@ -15,7 +30,6 @@ use crate::power_bar::build_power_bar;
 use crate::search_result_item::SearchResultItem;
 use glib::clone;
 use gtk4::gdk::Key;
-
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, Image, ListView, Orientation,
@@ -26,104 +40,161 @@ use libadwaita::{Application, ApplicationWindow};
 use std::cell::Cell;
 use std::rc::Rc;
 
+// ---------------------------------------------------------------------------
+// Helper functions for background processing and item activation
+// ---------------------------------------------------------------------------
 
-
-
-
-
-
-
+/// Poll for application loading results from background thread
+///
+/// This function checks a channel for the results of desktop application
+/// scanning and updates the list model when apps are ready. It uses
+/// GLib's idle callbacks to avoid blocking the UI thread.
+///
+/// # Arguments
+/// * `rx` - Channel receiver for desktop application vector
+/// * `model` - The AppListModel to update with loaded applications
 fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>, model: AppListModel) {
     match rx.try_recv() {
         Ok(apps) => {
+            // Apps loaded successfully - update the model
             model.set_apps(apps);
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => {
+            // No data yet - reschedule polling on next idle
             glib::idle_add_local_once(move || poll_apps(rx, model));
         }
-        Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+            // Thread finished (shouldn't happen without sending data)
+        }
     }
 }
 
-
-
-
-
-
-
-
+/// Parse and open an Obsidian grep result line
+///
+/// Obsidian grep results follow the format "file:line:content". This function
+/// extracts the file path and line number to open the file at the correct
+/// location in Obsidian using the obsidian:// URI scheme.
+///
+/// # Arguments
+/// * `line` - Grep output line in "file:line:content" format
+/// * `cfg` - Obsidian configuration for vault location
 fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
     if let Some((file_path, rest)) = line.split_once(':') {
         if let Some((line_num, _)) = rest.split_once(':') {
+            // File with line number: open at specific line
             open_obsidian_file_line(file_path, line_num, cfg);
         } else {
+            // File without line number: open file
             open_obsidian_file_path(file_path, cfg);
         }
     } else {
+        // Not a grep format line: try to open as plain file
         open_obsidian_file_path(line, cfg);
     }
 }
 
-
-
-
+/// Activate a selected item based on its type and current mode
+///
+/// This is the central dispatch function that handles user selection
+/// of any item in the results list. It determines the item type and
+/// performs the appropriate action:
+/// - Desktop applications: launch with optional terminal
+/// - Command results: open files or execute commands
+/// - Obsidian actions: perform Obsidian-specific operations
+/// - Search provider results: activate via D-Bus
+///
+/// # Arguments
+/// * `obj` - The GTK object representing the selected item
+/// * `model` - The application list model for configuration access
+/// * `mode` - Current application mode (determines action behavior)
 fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
+    // Handle desktop application items
     if let Some(app_item) = obj.downcast_ref::<AppItem>() {
         launch_app(&app_item.exec(), app_item.terminal());
-
-
-
-
-
-    } else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
+    }
+    // Handle command line items (file paths, grep results, etc.)
+    else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
         let line = cmd_item.line();
         match mode {
+            // Obsidian grep mode: open grep results in Obsidian
             AppMode::ObsidianGrep => {
                 if let Some(cfg) = &model.obsidian_cfg {
                     open_obsidian_grep_line(&line, cfg);
                 }
             }
+            // Obsidian file mode: open files in Obsidian
             AppMode::Obsidian => {
                 if let Some(cfg) = &model.obsidian_cfg {
                     open_obsidian_file_path(&line, cfg);
                 }
             }
+            // Other modes: open files or execute commands
             _ => {
                 open_file_or_line(&line);
             }
         }
-    } else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
+    }
+    // Handle Obsidian action items (vault open, new note, etc.)
+    else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
         if let Some(cfg) = &model.obsidian_cfg {
             perform_obsidian_action(obs_item.action(), obs_item.arg().as_deref(), cfg);
         }
-    } else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
+    }
+    // Handle GNOME Shell search provider results
+    else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
         let (bus, path, id, terms) = (
             sr_item.bus_name(),
             sr_item.object_path(),
             sr_item.id(),
             sr_item.terms(),
         );
+        // Activate search result in background thread to avoid blocking UI
         std::thread::spawn(move || {
             crate::search_provider::activate_result(&bus, &path, &id, &terms);
         });
     }
 }
 
-
+/// Scroll the list view to ensure a selected item is visible
+///
+/// This function updates the selection model and triggers GTK's
+/// built-in scrolling action to bring the selected item into view.
+/// It's used for keyboard navigation (arrow keys, page up/down).
+///
+/// # Arguments
+/// * `model` - The application list model containing selection state
+/// * `list_view` - The GTK ListView widget to scroll
+/// * `pos` - Position (index) of the item to select and scroll to
 fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
+    // Update selection model
     model.selection.set_selected(pos);
+    // Trigger GTK's scroll-to-item action
     let _ = list_view.activate_action("list.scroll-to-item", Some(&pos.to_variant()));
 }
 
+// ---------------------------------------------------------------------------
+// Main UI construction function
+// ---------------------------------------------------------------------------
 
-
-
-
+/// Build and display the complete Grunner user interface
+///
+/// This is the main entry point for UI construction. It creates all
+/// GTK widgets, sets up event handlers, loads CSS styling, and
+/// initializes the application state. The function is called when
+/// the GTK application is activated.
+///
+/// # Arguments
+/// * `app` - The GTK Application instance
+/// * `cfg` - Application configuration loaded from file or defaults
 pub fn build_ui(app: &Application, cfg: &Config) {
+    // -----------------------------------------------------------------------
+    // 1. Display and CSS Setup
+    // -----------------------------------------------------------------------
 
+    // Get default display connection (required for CSS theming)
     let display = gtk4::gdk::Display::default().expect("Cannot connect to display");
 
-
+    // Load and apply CSS stylesheet for custom widget styling
     let provider = CssProvider::new();
     provider.load_from_data(include_str!("style.css"));
     gtk4::style_context_add_provider_for_display(
@@ -132,41 +203,57 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
+    // -----------------------------------------------------------------------
+    // 2. Data Model Initialization
+    // -----------------------------------------------------------------------
 
+    // Create the main data model that manages search results and state
     let model = AppListModel::new(
         cfg.max_results,
-
         cfg.commands.clone(),
         cfg.obsidian.clone(),
         cfg.command_debounce_ms,
         cfg.search_provider_blacklist.clone(),
     );
 
-
-
-
+    // Track current application mode for UI rendering and action handling
     let current_mode: Rc<Cell<AppMode>> = Rc::new(Cell::new(AppMode::Normal));
 
+    // -----------------------------------------------------------------------
+    // 3. Window Creation and Configuration
+    // -----------------------------------------------------------------------
+
+    // Create the main application window with minimal chrome
     let window = ApplicationWindow::builder()
         .application(app)
         .title("grunner")
         .default_width(cfg.window_width)
         .default_height(cfg.window_height)
-        .decorated(false)
-        .resizable(false)
+        .decorated(false) // No window decorations (title bar, borders)
+        .resizable(false) // Fixed size launcher window
         .build();
 
-
+    // Apply custom CSS class for window styling
     window.set_css_classes(&["launcher-window"]);
+    // Remove default background class on realize for clean appearance
     window.connect_realize(|w| {
         w.remove_css_class("background");
     });
 
+    // -----------------------------------------------------------------------
+    // 4. Main Layout Container
+    // -----------------------------------------------------------------------
+
+    // Create vertical box as root container for all UI elements
     let root = GtkBox::new(Orientation::Vertical, 0);
     root.add_css_class("launcher-box");
-    root.set_overflow(gtk4::Overflow::Hidden);
+    root.set_overflow(gtk4::Overflow::Hidden); // Prevent scrolling of entire window
 
+    // -----------------------------------------------------------------------
+    // 5. Search Entry Area
+    // -----------------------------------------------------------------------
 
+    // Horizontal container for search icon and entry field
     let entry_box = GtkBox::new(Orientation::Horizontal, 6);
     entry_box.set_hexpand(true);
     entry_box.set_margin_start(12);
@@ -174,12 +261,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry_box.set_margin_top(12);
     entry_box.set_margin_bottom(0);
 
+    // Mode indicator icon (shows for special modes like :ob, :f, etc.)
     let command_icon = Image::new();
     command_icon.set_pixel_size(24);
     command_icon.set_valign(Align::Center);
-    command_icon.set_visible(false);
+    command_icon.set_visible(false); // Hidden by default, shown for special modes
     entry_box.append(&command_icon);
 
+    // Main search entry field
     let entry = Entry::builder()
         .placeholder_text("Search applications…")
         .hexpand(true)
@@ -189,31 +278,49 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     root.append(&entry_box);
 
+    // -----------------------------------------------------------------------
+    // 6. Action Bars and Results List
+    // -----------------------------------------------------------------------
 
+    // Build Obsidian action bar (shown when in Obsidian mode)
     let obsidian_bar = build_obsidian_bar(&window, &entry, &model);
+
+    // Get current icon theme for button icons
     let icon_theme = gtk4::IconTheme::for_display(&display);
+
+    // Build power/settings action bar (always visible at bottom)
     let power_bar = build_power_bar(&window, &entry, &icon_theme);
 
+    // Create list view factory for rendering result items
     let factory = model.create_factory();
+    // Create list view with selection model and custom factory
     let list_view = ListView::new(Some(model.selection.clone()), Some(factory));
-    list_view.set_single_click_activate(false);
+    list_view.set_single_click_activate(false); // Require double-click/Enter to activate
     list_view.add_css_class("app-list");
-    list_view.set_can_focus(false);
+    list_view.set_can_focus(false); // Keep focus on search entry
 
+    // Wrap list view in scrolled window for vertical scrolling
     let scrolled = ScrolledWindow::builder()
         .vexpand(true)
         .child(&list_view)
         .build();
 
+    // Assemble all UI components in order
     root.append(&scrolled);
     root.append(&obsidian_bar);
     root.append(&power_bar);
+
+    // Set root container as window content
     window.set_content(Some(&root));
 
-
+    // Display the window
     window.present();
 
+    // -----------------------------------------------------------------------
+    // 7. Window Lifecycle and Initial State
+    // -----------------------------------------------------------------------
 
+    // Reset UI state each time window is shown
     window.connect_show(clone!(
         #[weak]
         entry,
@@ -226,25 +333,36 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         #[strong]
         current_mode,
         move |_| {
+            // Clear search text and results
             entry.set_text("");
             model.populate("");
             current_mode.set(AppMode::Normal);
+
+            // Hide special UI elements
             obsidian_bar.set_visible(false);
             command_icon.set_visible(false);
+
+            // Focus search entry for immediate typing
             entry.grab_focus();
         }
     ));
 
+    // -----------------------------------------------------------------------
+    // 8. Icon Theme Configuration
+    // -----------------------------------------------------------------------
 
+    // Determine Obsidian icon name based on available icons in theme
     let obsidian_icon_name = ["obsidian", "md.obsidian.Obsidian", "text-x-markdown"]
         .iter()
         .find(|&&name| icon_theme.has_icon(name))
         .copied()
         .unwrap_or("text-x-markdown");
 
+    // -----------------------------------------------------------------------
+    // 9. Search Entry Event Handlers
+    // -----------------------------------------------------------------------
 
-
-
+    // Handle text changes in search entry (main search functionality)
     entry.connect_changed(clone!(
         #[strong]
         model,
@@ -259,10 +377,13 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             let mode = AppMode::from_text(&text);
             current_mode.set(mode);
 
+            // Update search results based on current text
             model.populate(&text);
 
+            // Show/hide Obsidian action bar based on mode
             obsidian_bar.set_visible(mode.show_obsidian_bar());
 
+            // Update mode indicator icon
             match mode.icon_name(obsidian_icon_name) {
                 Some(name) => {
                     command_icon.set_icon_name(Some(name));
@@ -271,16 +392,19 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 None => command_icon.set_visible(false),
             }
 
-
-
-
+            // Force UI redraw to reflect changes
             e.queue_draw();
         }
     ));
 
+    // -----------------------------------------------------------------------
+    // 10. Keyboard Navigation and Shortcuts
+    // -----------------------------------------------------------------------
 
+    // Set up keyboard event controller for search entry
     let key_ctrl = EventControllerKey::new();
-    key_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    key_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture); // Intercept before default handlers
+
     key_ctrl.connect_key_pressed(clone!(
         #[weak]
         list_view,
@@ -294,10 +418,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         glib::Propagation::Proceed,
         move |_, key, _, _| {
             match key {
+                // Escape: close window
                 Key::Escape => {
                     window.close();
                     glib::Propagation::Stop
                 }
+                // Enter: activate selected item
                 Key::Return | Key::KP_Enter => {
                     let pos = model.selection.selected();
                     if let Some(obj) = model.store.item(pos) {
@@ -306,6 +432,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     window.close();
                     glib::Propagation::Stop
                 }
+                // Down arrow: move selection down
                 Key::Down | Key::KP_Down => {
                     let pos = model.selection.selected();
                     let n = model.store.n_items();
@@ -314,6 +441,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     }
                     glib::Propagation::Stop
                 }
+                // Up arrow: move selection up
                 Key::Up | Key::KP_Up => {
                     let pos = model.selection.selected();
                     if pos > 0 {
@@ -321,6 +449,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     }
                     glib::Propagation::Stop
                 }
+                // Page down: jump 10 items down
                 Key::Page_Down => {
                     let pos = model.selection.selected();
                     let n = model.store.n_items();
@@ -328,18 +457,24 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     scroll_selection_to(&model, &list_view, next);
                     glib::Propagation::Stop
                 }
+                // Page up: jump 10 items up
                 Key::Page_Up => {
                     let pos = model.selection.selected();
                     scroll_selection_to(&model, &list_view, pos.saturating_sub(10));
                     glib::Propagation::Stop
                 }
+                // Other keys: allow default processing
                 _ => glib::Propagation::Proceed,
             }
         }
     ));
     entry.add_controller(key_ctrl);
 
+    // -----------------------------------------------------------------------
+    // 11. List View Activation (Mouse Double-Click)
+    // -----------------------------------------------------------------------
 
+    // Handle item activation via mouse double-click
     list_view.connect_activate(clone!(
         #[weak]
         window,
@@ -355,15 +490,20 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         }
     ));
 
+    // -----------------------------------------------------------------------
+    // 12. Background Application Loading
+    // -----------------------------------------------------------------------
 
-
-
-
+    // Load desktop applications in background thread to avoid UI freeze
     let dirs = cfg.app_dirs.clone();
     let model_poll = model.clone();
     let (tx, rx) = std::sync::mpsc::channel();
+
+    // Spawn background thread for application scanning
     std::thread::spawn(move || {
         let _ = tx.send(launcher::load_apps(&dirs));
     });
+
+    // Start polling for application loading results
     glib::idle_add_local_once(move || poll_apps(rx, model_poll));
 }
