@@ -301,6 +301,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
             // Force UI redraw to reflect changes
             e.queue_draw();
+            e.quese_resize();
         }
     ));
 

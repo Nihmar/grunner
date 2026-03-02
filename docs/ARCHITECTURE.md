@@ -17,19 +17,19 @@ Grunner follows a layered architecture with clear separation between UI, busines
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Presentation Layer                        │
+│                    Presentation Layer                       │
 │  • GTK4/libadwaita widgets                                  │
 │  • CSS styling                                              │
 │  • User input handling                                      │
 │  • Result display                                           │
 ├─────────────────────────────────────────────────────────────┤
-│                    Application Layer                         │
+│                    Application Layer                        │
 │  • Search logic and routing                                 │
 │  • Mode management                                          │
 │  • Command execution                                        │
 │  • Action handling                                          │
 ├─────────────────────────────────────────────────────────────┤
-│                    Data Access Layer                         │
+│                    Data Access Layer                        │
 │  • .desktop file parsing                                    │
 │  • File system access                                       │
 │  • D-Bus communication                                      │
@@ -44,27 +44,27 @@ Grunner follows a layered architecture with clear separation between UI, busines
 │  Entry point, app lifecycle, config loading                 │
 ├─────────────────────────────────────────────────────────────┤
 │                         ui.rs                               │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
-│  │   Window    │ │ SearchEntry │ │ ListView    │          │
-│  │             │ │             │ │             │          │
-│  └─────────────┘ └─────────────┘ └─────────────┘          │
-│  ┌─────────────┐ ┌─────────────┐                          │
-│  │ ObsidianBar │ │ PowerBar    │                          │
-│  │             │ │             │                          │
-│  └─────────────┘ └─────────────┘                          │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐            │
+│  │   Window    │ │ SearchEntry │ │ ListView    │            │
+│  │             │ │             │ │             │            │
+│  └─────────────┘ └─────────────┘ └─────────────┘            │
+│  ┌─────────────┐ ┌─────────────┐                            │
+│  │ ObsidianBar │ │ PowerBar    │                            │
+│  │             │ │             │                            │
+│  └─────────────┘ └─────────────┘                            │
 ├─────────────────────────────────────────────────────────────┤
-│                     list_model.rs                          │
-│  Central dispatcher, mode switching, result aggregation    │
+│                     list_model.rs                           │
+│  Central dispatcher, mode switching, result aggregation     │
 ├─────────────────────────────────────────────────────────────┤
 │                    Specialized Modules                      │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐                      │
-│  │launcher │ │search   │ │actions │                      │
-│  │         │ │provider │ │        │                      │
-│  └─────────┘ └─────────┘ └─────────┘                      │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐                      │
-│  │config   │ │utils    │ │app_mode │                      │
-│  │         │ │         │ │         │                      │
-│  └─────────┘ └─────────┘ └─────────┘                      │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                        │
+│  │launcher │ │search   │ │actions  │                         │
+│  │         │ │provider │ │         │                         │
+│  └─────────┘ └─────────┘ └─────────┘                        │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                        │
+│  │config   │ │utils    │ │app_mode │                        │
+│  │         │ │         │ │         │                        │
+│  └─────────┘ └─────────┘ └─────────┘                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
