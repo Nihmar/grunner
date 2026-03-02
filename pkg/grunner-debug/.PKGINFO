@@ -6,7 +6,7 @@ xdata = pkgtype=debug
 pkgver = 1.0.0-1
 pkgdesc = Detached debugging symbols for grunner
 url = https://github.com/Nihmar/grunner
-builddate = 1772486338
+builddate = 1772487213
 packager = Unknown Packager
 size = 3432
 arch = x86_64
