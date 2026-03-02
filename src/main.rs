@@ -3,6 +3,7 @@ mod app_item;
 mod app_mode;
 mod cmd_item;
 mod config;
+mod item_activation;
 mod launcher;
 mod list_model;
 mod obsidian_bar;

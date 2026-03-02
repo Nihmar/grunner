@@ -14,20 +14,13 @@
 //! - Application lifecycle and focus management
 //! - Background application loading with threading
 
-use crate::actions::{
-    launch_app, open_file_or_line, open_obsidian_file_line, open_obsidian_file_path,
-    perform_obsidian_action,
-};
-use crate::app_item::AppItem;
 use crate::app_mode::AppMode;
-use crate::cmd_item::CommandItem;
 use crate::config::Config;
+use crate::item_activation::{activate_item, open_obsidian_grep_line};
 use crate::launcher;
 use crate::list_model::AppListModel;
 use crate::obsidian_bar::build_obsidian_bar;
-use crate::obsidian_item::ObsidianActionItem;
 use crate::power_bar::build_power_bar;
-use crate::search_result_item::SearchResultItem;
 use glib::clone;
 use gtk4::gdk::Key;
 use gtk4::prelude::*;
@@ -41,7 +34,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 // ---------------------------------------------------------------------------
-// Helper functions for background processing and item activation
+// Helper functions for background processing
 // ---------------------------------------------------------------------------
 
 /// Poll for application loading results from background thread
@@ -66,92 +59,6 @@ fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>, model: Ap
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
             // Thread finished (shouldn't happen without sending data)
         }
-    }
-}
-
-/// Parse and open an Obsidian grep result line
-///
-/// Obsidian grep results follow the format "file:line:content". This function
-/// extracts the file path and line number to open the file at the correct
-/// location in Obsidian using the obsidian:// URI scheme.
-///
-/// # Arguments
-/// * `line` - Grep output line in "file:line:content" format
-/// * `cfg` - Obsidian configuration for vault location
-fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
-    if let Some((file_path, rest)) = line.split_once(':') {
-        if let Some((line_num, _)) = rest.split_once(':') {
-            // File with line number: open at specific line
-            open_obsidian_file_line(file_path, line_num, cfg);
-        } else {
-            // File without line number: open file
-            open_obsidian_file_path(file_path, cfg);
-        }
-    } else {
-        // Not a grep format line: try to open as plain file
-        open_obsidian_file_path(line, cfg);
-    }
-}
-
-/// Activate a selected item based on its type and current mode
-///
-/// This is the central dispatch function that handles user selection
-/// of any item in the results list. It determines the item type and
-/// performs the appropriate action:
-/// - Desktop applications: launch with optional terminal
-/// - Command results: open files or execute commands
-/// - Obsidian actions: perform Obsidian-specific operations
-/// - Search provider results: activate via D-Bus
-///
-/// # Arguments
-/// * `obj` - The GTK object representing the selected item
-/// * `model` - The application list model for configuration access
-/// * `mode` - Current application mode (determines action behavior)
-fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
-    // Handle desktop application items
-    if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-        launch_app(&app_item.exec(), app_item.terminal());
-    }
-    // Handle command line items (file paths, grep results, etc.)
-    else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
-        let line = cmd_item.line();
-        match mode {
-            // Obsidian grep mode: open grep results in Obsidian
-            AppMode::ObsidianGrep => {
-                if let Some(cfg) = &model.obsidian_cfg {
-                    open_obsidian_grep_line(&line, cfg);
-                }
-            }
-            // Obsidian file mode: open files in Obsidian
-            AppMode::Obsidian => {
-                if let Some(cfg) = &model.obsidian_cfg {
-                    open_obsidian_file_path(&line, cfg);
-                }
-            }
-            // Other modes: open files or execute commands
-            _ => {
-                open_file_or_line(&line);
-            }
-        }
-    }
-    // Handle Obsidian action items (vault open, new note, etc.)
-    else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
-        if let Some(cfg) = &model.obsidian_cfg {
-            perform_obsidian_action(obs_item.action(), obs_item.arg().as_deref(), cfg);
-        }
-    }
-    // Handle GNOME Shell search provider results
-    else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
-        let (bus, path, id, terms) = (
-            sr_item.bus_name(),
-            sr_item.object_path(),
-            sr_item.id(),
-            sr_item.terms(),
-        );
-        // Activate search result in background thread to avoid blocking UI
-        std::thread::spawn(move || {
-            crate::search_provider::activate_result(&bus, &path, &id, &terms);
-        });
     }
 }
 
