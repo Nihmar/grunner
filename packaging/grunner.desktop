@@ -2,6 +2,6 @@
 Name=grunner
 Comment=A fast, keyboard-driven application launcher for GNOME
 Exec=grunner
-Icon=grunner.svg
+Icon=grunner
 Type=Application
 Categories=Utility;
