@@ -84,7 +84,7 @@ sudo systemctl enable --now plocate-updatedb.timer
 
 ## Installation
 
-### Build from source
+### Using Cargo (Recommended for developers)
 
 ```bash
 git clone https://github.com/Nihmar/grunner.git
@@ -92,17 +92,52 @@ cd grunner
 cargo build --release
 ```
 
-The compiled binary will be at `target/release/grunner`.
-
-### Install to `~/.local/bin`
-
-A convenience script is included:
+The compiled binary will be at `target/release/grunner`. You can run it directly from there or install it system-wide:
 
 ```bash
-bash build.sh
+# Install to ~/.cargo/bin (if it's in your PATH)
+cargo install --path .
+
+# Or copy to ~/.local/bin
+cp target/release/grunner ~/.local/bin/
 ```
 
-This runs `cargo build --release` and copies the binary to `~/.local/bin/grunner`. Make sure `~/.local/bin` is on your `$PATH`.
+### Using makepkg (Arch Linux)
+
+For Arch Linux users, you can build and install using the provided PKGBUILD:
+
+```bash
+# Build the package
+makepkg -si
+
+# Or just build without installing
+makepkg
+```
+
+Pre-built packages (`.pkg.tar.zst` files) are also available on the [GitHub Releases](https://github.com/Nihmar/grunner/releases) page. Download and install with:
+```bash
+sudo pacman -U grunner-*.pkg.tar.zst
+```
+
+### Using Flatpak
+
+#### Option 1: Install from GitHub Releases
+Flatpak packages are available on the [GitHub Releases](https://github.com/Nihmar/grunner/releases) page. Download the `.flatpak` file and install it with:
+
+```bash
+flatpak install grunner.flatpak
+```
+
+#### Option 2: Build from source using flatpak-builder
+You can also build and install from source using the provided flatpak manifest:
+
+```bash
+# Install flatpak and flatpak-builder
+sudo flatpak install org.gnome.Platform//49 org.gnome.Sdk//49
+
+# Build and install
+flatpak-builder --user --install build-dir packaging/flatpak/org.nihmar.grunner.yml
+```
 
 ### Bind to a keyboard shortcut
 
@@ -110,7 +145,7 @@ In GNOME Settings → Keyboard → Custom Shortcuts, add:
 
 | Name | Command | Suggested shortcut |
 |---|---|---|
-| grunner | `/home/<user>/.local/bin/grunner/grunner` | `Super+Space` or `Alt+F2` |
+| grunner | `grunner` | `Super+Space` or `Alt+F2` |
 
 ---
 

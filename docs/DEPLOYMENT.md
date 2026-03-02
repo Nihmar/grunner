@@ -113,25 +113,25 @@ sudo pacman -S rust cargo pkg-config
 
 ## Installation Methods
 
-### Method 1: Automated Installation Script (Recommended)
+### Method 1: Build from Source (Recommended)
 
-The `build.sh` script provides a complete installation:
+Build and install grunner from source using Cargo:
 
 ```bash
 # Clone repository
 git clone https://github.com/Nihmar/grunner.git
 cd grunner
 
-# Run installation script
-./build.sh
+# Build and install
+cargo build --release
+cp target/release/grunner ~/.local/bin/
 ```
 
-**What the script does:**
+**What this does:**
 1. Builds the application with release optimizations
-2. Installs binary to `~/.local/bin/grunner`
-3. Installs icons to appropriate directories
-4. Creates desktop entry file
-5. Updates icon cache and desktop database
+2. Copies the binary to `~/.local/bin/grunner`
+
+For complete desktop integration (icons and .desktop file), see "Package Installation" methods below.
 
 ### Method 2: Manual Installation from Source
 

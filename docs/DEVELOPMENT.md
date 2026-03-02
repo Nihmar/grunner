@@ -178,10 +178,11 @@ cargo build --release
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 ```
 
-**Installation script:**
+**Installation:**
 ```bash
-./build.sh
-# Installs to ~/.local/bin/grunner
+cargo build --release
+cp target/release/grunner ~/.local/bin/
+# Or use cargo install --path .
 ```
 
 ### Cross-Compilation

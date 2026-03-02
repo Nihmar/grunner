@@ -154,7 +154,7 @@ grunner/
 ├── Cargo.lock         # Dependency lock file
 ├── README.md          # User documentation
 ├── LICENSE            # MIT License
-├── build.sh           # Installation script
+├── PKGBUILD          # Arch Linux package build script
 └── .gitignore         # Git ignore patterns
 ```
 
@@ -171,8 +171,9 @@ grunner/
 
 ### Installation
 - **Manual**: `cargo build --release`
-- **Script**: `./build.sh` for automated installation to `~/.local/bin`
-- **Desktop integration**: Automatic `.desktop` file generation
+- **Package**: `makepkg -si` for Arch Linux (PKGBUILD provided)
+- **Flatpak**: Download from GitHub Releases
+- **Desktop integration**: `.desktop` files provided in packaging directory
 
 ## Configuration Management
 

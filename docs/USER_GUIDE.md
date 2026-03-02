@@ -39,17 +39,32 @@ Grunner is a fast, keyboard-driven application launcher for GNOME and other Linu
 git clone https://github.com/Nihmar/grunner.git
 cd grunner
 
-# Build and install
-bash build.sh
+# Build and install using Cargo
+cargo build --release
+cp target/release/grunner ~/.local/bin/
 ```
 
-The `build.sh` script will:
+This will:
 1. Build the application in release mode
-2. Install the binary to `~/.local/bin/grunner`
-3. Install icons to `~/.local/share/icons/`
-4. Create a `.desktop` file for GNOME Shell integration
+2. Copy the binary to `~/.local/bin/grunner`
 
-#### Method 2: Manual Build
+For a complete installation with desktop integration, see the "Package Installation" section below.
+
+#### Method 2: Package Installation
+
+**Arch Linux (using PKGBUILD):**
+```bash
+# Build and install the package
+makepkg -si
+```
+
+**Flatpak:**
+Download the `.flatpak` file from [GitHub Releases](https://github.com/Nihmar/grunner/releases) and install with:
+```bash
+flatpak install grunner.flatpak
+```
+
+**Manual Build (Alternative):**
 ```bash
 # Build the application
 cargo build --release

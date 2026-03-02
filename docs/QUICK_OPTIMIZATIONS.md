@@ -328,11 +328,10 @@ Add more aggressive optimization flags.
 
 ### Implementation
 
-**File: `build.sh`**
+**File: `Cargo.toml` or command line**
 
 ```bash
-# Add to build command
-echo "Building grunner in release mode with optimizations..."
+# Build with optimization flags
 RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C lto=thin" \
 cargo build --release
 ```
