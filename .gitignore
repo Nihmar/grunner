@@ -24,3 +24,4 @@ target
 packaging/flatpak/build-dir/
 packaging/flatpak/flatpak-repo/
 *.flatpak
+pkg
