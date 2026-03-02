@@ -1,0 +1,33 @@
+app-id: org.nihmar.grunner
+runtime: org.gnome.Platform
+runtime-version: "49"
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: grunner
+
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/grunner/cargo
+
+modules:
+  - name: grunner
+    buildsystem: simple
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      - cargo --offline build --release --verbose
+      - install -Dm755 target/release/grunner /app/bin/grunner
+      - install -Dm644 assets/org.nihmar.grunner.svg /app/share/icons/hicolor/scalable/apps/org.nihmar.grunner.svg
+      - install -Dm644 packaging/org.nihmar.grunner.desktop /app/share/applications/org.nihmar.grunner.desktop
+    sources:
+      - type: git
+        url: https://github.com/Nihmar/grunner.git
+        branch: main
+      - generated-sources.json
