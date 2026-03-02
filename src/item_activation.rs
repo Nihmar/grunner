@@ -14,6 +14,7 @@ use crate::cmd_item::CommandItem;
 use crate::list_model::AppListModel;
 use crate::obsidian_item::ObsidianActionItem;
 use crate::search_result_item::SearchResultItem;
+use gtk4::prelude::Cast;
 
 /// Parse and open Obsidian grep result lines
 ///
@@ -50,11 +51,11 @@ pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) 
 /// * `mode` - The current application mode (Normal, Obsidian, FileSearch, etc.)
 pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
     // Handle desktop application items
-    if let Some(app_item) = obj.downcast_ref::<AppItem>() {
+    if let Ok(app_item) = obj.clone().downcast::<AppItem>() {
         launch_app(&app_item.exec(), app_item.terminal());
     }
     // Handle command line items (file paths, grep results, etc.)
-    else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
+    else if let Ok(cmd_item) = obj.clone().downcast::<CommandItem>() {
         let line = cmd_item.line();
         match mode {
             // Obsidian grep mode: open grep results in Obsidian
@@ -76,13 +77,13 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
         }
     }
     // Handle Obsidian action items (vault open, new note, etc.)
-    else if let Some(obs_item) = obj.downcast_ref::<ObsidianActionItem>() {
+    else if let Ok(obs_item) = obj.clone().downcast::<ObsidianActionItem>() {
         if let Some(cfg) = &model.obsidian_cfg {
             perform_obsidian_action(obs_item.action(), obs_item.arg().as_deref(), cfg);
         }
     }
     // Handle GNOME Shell search provider results
-    else if let Some(sr_item) = obj.downcast_ref::<SearchResultItem>() {
+    else if let Ok(sr_item) = obj.clone().downcast::<SearchResultItem>() {
         let (bus, path, id, terms) = (
             sr_item.bus_name(),
             sr_item.object_path(),

@@ -386,12 +386,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "evalexpr"
-version = "8.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6aed2b80295745e5fed7a9e869bb8b592961584379df6fddcf0922877206974e"
-
-[[package]]
 name = "event-listener"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -730,7 +724,6 @@ version = "0.7.0"
 dependencies = [
  "bincode",
  "chrono",
- "evalexpr",
  "futures",
  "fuzzy-matcher",
  "glib",

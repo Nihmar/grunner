@@ -16,7 +16,7 @@
 
 use crate::app_mode::AppMode;
 use crate::config::Config;
-use crate::item_activation::{activate_item, open_obsidian_grep_line};
+use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::list_model::AppListModel;
 use crate::obsidian_bar::build_obsidian_bar;
@@ -301,7 +301,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
             // Force UI redraw to reflect changes
             e.queue_draw();
-            e.quese_resize();
+            e.queue_resize();
         }
     ));
 

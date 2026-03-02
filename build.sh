@@ -1,4 +1,3 @@
-
 set -euo pipefail
 
 
@@ -18,6 +17,7 @@ DESKTOP_DIR="$HOME/.local/share/applications"
 echo "Building grunner in release mode..."
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 echo "Build successful."
+echo "Binary size: $(du -sh ./target/release/grunner | cut -f1)"
 
 
 
@@ -53,8 +53,8 @@ else
 fi
 
 if [ "$ICON_INSTALLED" -eq 1 ]; then
-    
-    
+
+
     gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 fi
 
