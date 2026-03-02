@@ -1,0 +1,82 @@
+grunner/flatpak/grunner.appdata.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop">
+  <id>org.nihmar.grunner.desktop</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>grunner</name>
+  <summary>A fast, keyboard-driven application launcher for GNOME</summary>
+  <description>
+    <p>
+      grunner is a rofi-like application launcher for GNOME and other Linux desktops,
+      written in Rust. Built on GTK4 and libadwaita, it follows your system's light/dark
+      theme and accent color automatically.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Fuzzy application search with fuzzy matching</li>
+      <li>Colon commands for file search (:f), full-text grep (:fg), GNOME Shell search providers (:s), and Obsidian integration (:ob, :obg)</li>
+      <li>Obsidian integration: open vault, create notes, daily notes, quick notes</li>
+      <li>GNOME Shell search providers: query any installed GNOME Shell search provider</li>
+      <li>Power bar: suspend, restart, power off, and log out with confirmation</li>
+      <li>Themeable using libadwaita CSS custom properties</li>
+      <li>Configurable via TOML file</li>
+    </ul>
+  </description>
+  <developer_name>Nihmar</developer_name>
+  <url type="homepage">https://github.com/Nihmar/grunner</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main window – fuzzy application search</caption>
+      <image>https://github.com/Nihmar/grunner/raw/main/screenshots/main_view.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Application filtering</caption>
+      <image>https://github.com/Nihmar/grunner/raw/main/screenshots/app_filter.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>File search (:f) with fallback support</caption>
+      <image>https://github.com/Nihmar/grunner/raw/main/screenshots/locate.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Full‑text grep (:fg) with fallback support</caption>
+      <image>https://github.com/Nihmar/grunner/raw/main/screenshots/ripgrep.png</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>launcher</keyword>
+    <keyword>rofi</keyword>
+    <keyword>search</keyword>
+    <keyword>fuzzy</keyword>
+    <keyword>application</keyword>
+    <keyword>gnome</keyword>
+  </keywords>
+  <releases>
+    <release version="0.7.0" date="2025-03-02"/>
+  </releases>
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">none</content_attribute>
+    <content_attribute id="violence-fantasy">none</content_attribute>
+    <content_attribute id="violence-realistic">none</content_attribute>
+    <content_attribute id="violence-bloodshed">none</content_attribute>
+    <content_attribute id="violence-sexual">none</content_attribute>
+    <content_attribute id="drugs-alcohol">none</content_attribute>
+    <content_attribute id="drugs-narcotics">none</content_attribute>
+    <content_attribute id="drugs-tobacco">none</content_attribute>
+    <content_attribute id="sex-nudity">none</content_attribute>
+    <content_attribute id="sex-themes">none</content_attribute>
+    <content_attribute id="language-profanity">none</content_attribute>
+    <content_attribute id="language-humor">none</content_attribute>
+    <content_attribute id="language-discrimination">none</content_attribute>
+    <content_attribute id="social-chat">none</content_attribute>
+    <content_attribute id="social-info">none</content_attribute>
+    <content_attribute id="social-audio">none</content_attribute>
+    <content_attribute id="social-location">none</content_attribute>
+    <content_attribute id="social-contacts">none</content_attribute>
+    <content_attribute id="money-purchasing">none</content_attribute>
+    <content_attribute id="money-gambling">none</content_attribute>
+  </content_rating>
+</component>

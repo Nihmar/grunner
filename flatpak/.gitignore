@@ -1,0 +1,10 @@
+build/
+repo/
+*.flatpak
+*.flatpakref
+*.flatpakrepo
+.flatpak-builder/
+.cache/
+*.log
+*~
+.DS_Store
