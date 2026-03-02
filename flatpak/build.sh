@@ -28,9 +28,9 @@ if ! command -v flatpak-builder &> /dev/null; then
 fi
 
 # Check if required runtimes are installed
-if ! flatpak info org.gnome.Platform//48 &> /dev/null; then
-    echo -e "${YELLOW}GNOME Platform 48 runtime not found. Installing...${NC}"
-    flatpak install flathub org.gnome.Platform//48 org.gnome.Sdk//48 -y
+if ! flatpak info org.gnome.Platform//49 &> /dev/null; then
+    echo -e "${YELLOW}GNOME Platform 49 runtime not found. Installing...${NC}"
+    flatpak install flathub org.gnome.Platform//49 org.gnome.Sdk//49 -y
 fi
 
 # Clean previous build
