@@ -24,32 +24,40 @@ use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
-use once_cell::sync::Lazy;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 // Command templates for built-in colon commands with fallback support
 // - File search: uses plocate if available, falls back to find
 // - File grep: uses ripgrep (rg) if available, falls back to grep
-static FILE_SEARCH_CMD: Lazy<String> = Lazy::new(|| {
-    if which("plocate").is_some() {
-        "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string()
-    } else {
-        "find \"$HOME\" -type f -ipath \"*$1*\" 2>/dev/null | head -20".to_string()
-    }
-});
+static FILE_SEARCH_CMD: OnceLock<String> = OnceLock::new();
 
-static FILE_GREP_CMD: Lazy<String> = Lazy::new(|| {
-    if which("rg").is_some() {
-        "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
-            .to_string()
-    } else {
-        "grep -r -i -n -I -H -- \"$1\" \"$HOME\" 2>/dev/null | head -20".to_string()
-    }
-});
+fn file_search_cmd() -> &'static str {
+    FILE_SEARCH_CMD.get_or_init(|| {
+        if which("plocate").is_some() {
+            "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string()
+        } else {
+            "find \"$HOME\" -type f -ipath \"*$1*\" 2>/dev/null | head -20".to_string()
+        }
+    })
+}
+
+static FILE_GREP_CMD: OnceLock<String> = OnceLock::new();
+
+fn file_grep_cmd() -> &'static str {
+    FILE_GREP_CMD.get_or_init(|| {
+        if which("rg").is_some() {
+            "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
+                .to_string()
+        } else {
+            "grep -r -i -n -I -H -- \"$1\" \"$HOME\" 2>/dev/null | head -20".to_string()
+        }
+    })
+}
 
 /// Parse a colon-prefixed command into command name and argument
 ///
@@ -812,7 +820,7 @@ impl AppListModel {
         let arg = arg.to_string();
         let model_clone = self.clone();
         self.schedule_command(move || {
-            model_clone.run_command("f", &*FILE_SEARCH_CMD, &arg);
+            model_clone.run_command("f", file_search_cmd(), &arg);
         });
     }
 
@@ -826,7 +834,7 @@ impl AppListModel {
         let arg = arg.to_string();
         let model_clone = self.clone();
         self.schedule_command(move || {
-            model_clone.run_command("fg", &*FILE_GREP_CMD, &arg);
+            model_clone.run_command("fg", file_grep_cmd(), &arg);
         });
     }
 

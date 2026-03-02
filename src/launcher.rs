@@ -12,8 +12,8 @@
 
 use jwalk::WalkDir;
 use rayon::prelude::*;
-use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -159,7 +159,7 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
         .collect();
 
     // Remove duplicate paths using a hash set for deduplication
-    let mut seen = FxHashSet::default();
+    let mut seen = HashSet::new();
     let unique_paths: Vec<PathBuf> = paths
         .into_iter()
         .filter(|p| seen.insert(p.clone()))

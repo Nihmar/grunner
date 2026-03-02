@@ -14,13 +14,13 @@ use crate::obsidian_item::ObsidianAction;
 use crate::utils::expand_home;
 use chrono::Local;
 use gtk4::prelude::DisplayExt;
-use once_cell::sync::Lazy;
-use regex::Regex;
+
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 /// Check if a file at the given path is executable
 ///
@@ -56,7 +56,11 @@ pub fn which(prog: &str) -> Option<PathBuf> {
 ///
 /// This is computed once and reused throughout the application lifetime.
 /// It searches for available terminal emulators in a specific order of preference.
-pub static TERMINAL: Lazy<Option<String>> = Lazy::new(find_terminal_impl);
+pub static TERMINAL: OnceLock<Option<String>> = OnceLock::new();
+
+fn terminal() -> &'static Option<String> {
+    TERMINAL.get_or_init(|| find_terminal_impl())
+}
 
 /// Implementation of terminal emulator discovery
 ///
@@ -86,7 +90,7 @@ fn find_terminal_impl() -> Option<String> {
 ///
 /// Returns the cached terminal emulator found at startup.
 fn find_terminal() -> Option<String> {
-    TERMINAL.clone()
+    terminal().clone()
 }
 
 /// Launch an application with optional terminal
@@ -226,27 +230,44 @@ pub fn open_settings() {
     }
 }
 
-/// Regular expression for parsing file:line format
+/// Parse a file:line:content pattern (like grep -n output)
 ///
-/// Matches patterns like "file/path:123:" or "file/path:456"
-static FILE_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+):(\d+):").unwrap());
+/// Returns (file_path, line_number) if the input matches "path:line:" format
+/// where line_number is a positive integer.
+fn parse_file_line(line: &str) -> Option<(&str, u32)> {
+    // Find the first colon that separates file path from line number
+    // We look for pattern: file_path:line_number:rest
+    // file_path cannot contain colon on Unix systems
+    let mut parts = line.splitn(3, ':');
+    let file = parts.next()?;
+    if file.is_empty() {
+        return None; // File path cannot be empty
+    }
+    let line_str = parts.next()?;
+    // There must be a third part (the content after second colon)
+    parts.next()?;
+
+    // Parse line number
+    let line_num = line_str.parse::<u32>().ok()?;
+    if line_num == 0 {
+        return None; // Line numbers start at 1
+    }
+
+    Some((file, line_num))
+}
 
 /// Open a file or file:line combination
 ///
 /// # Arguments
 /// * `line` - Either a file path or "file:line" format
 ///
-/// If the input matches "file:line" format, opens the file at the specified line
-/// using the system EDITOR or xdg-open. If it's just a file path, opens the file.
+/// If the input matches "file:line:content" format (like grep output),
+/// opens the file at the specified line using the system EDITOR or xdg-open.
+/// If it's just a file path, opens the file.
 /// If the path doesn't exist, copies the text to clipboard as a fallback.
 pub fn open_file_or_line(line: &str) {
-    let re = &*FILE_LINE_RE;
-
-    // Check if input matches "file:line" pattern
-    if let Some(caps) = re.captures(line) {
-        let file = caps.get(1).unwrap().as_str();
-        let line_num = caps.get(2).unwrap().as_str();
-
+    // Check if input matches "file:line:content" pattern (like grep -n output)
+    if let Some((file, line_num)) = parse_file_line(line) {
         // Verify file exists before attempting to open
         if Path::new(file).exists() {
             let editor = std::env::var("EDITOR").unwrap_or_else(|_| "xdg-open".to_string());
