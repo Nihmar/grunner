@@ -552,12 +552,12 @@ impl AppListModel {
     }
 
     /// Optimized search that uses prefix matching for simple queries
-    fn search_apps_optimized(
+    fn search_apps_optimized<'a>(
         &self,
         query: &str,
-        apps: &[DesktopApp],
+        apps: &'a [DesktopApp],
         max_results: usize,
-    ) -> Vec<&DesktopApp> {
+    ) -> Vec<&'a DesktopApp> {
         // Fast path: empty query returns first N apps
         if query.is_empty() {
             return apps.iter().take(max_results).collect();
