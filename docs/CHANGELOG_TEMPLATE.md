@@ -31,8 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release of Grunner
 - Fuzzy application search with fuzzy-matcher
 - Colon command system for extended functionality
-- File search integration with plocate (`:f` command)
-- Content search integration with ripgrep (`:fg` command)
+- File search integration with plocate (falls back to find) (`:f` command)
+- Content search integration with ripgrep (falls back to grep) (`:fg` command)
 - GNOME Shell search provider integration (`:s` command)
 - Obsidian vault integration (`:ob` and `:obg` commands)
 - Power management controls (suspend, restart, power off, logout)

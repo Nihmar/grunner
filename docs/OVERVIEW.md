@@ -78,8 +78,8 @@ Grunner is designed with several key principles in mind:
 ### 2. Search Modes
 - **Default mode**: Application fuzzy search
 - **Colon commands**: Extensible command system with custom shell commands
-- **File search**: Integration with `plocate` for fast file finding
-- **Content search**: Integration with `ripgrep` for full-text search
+- **File search**: Integration with `plocate` for fast file finding (falls back to `find` if not available)
+- **Content search**: Integration with `ripgrep` for full-text search (falls back to `grep` if not available)
 - **GNOME Shell search**: Integration with GNOME Shell search providers
 - **Obsidian integration**: Vault management and note operations
 
@@ -203,8 +203,8 @@ User Input → Mode Detection → Query Routing → Backend Execution → Result
 
 ### Result Ranking
 - **Application search**: Fuzzy match score based on name and description
-- **File search**: `plocate` relevance scoring
-- **Content search**: `ripgrep` match quality
+- **File search**: `plocate` relevance scoring (or `find` substring matching as fallback)
+- **Content search**: `ripgrep` match quality (or `grep` as fallback)
 - **Search providers**: GNOME Shell provider ranking
 
 ## UI Architecture
@@ -332,8 +332,8 @@ ApplicationWindow
 - **Rust** 1.70+
 - **GTK4** 4.6+
 - **libadwaita** 1.6+
-- **plocate** (optional, for file search)
-- **ripgrep** (optional, for content search)
+- **plocate** (optional, for file search - falls back to `find`)
+- **ripgrep** (optional, for content search - falls back to `grep`)
 - **Obsidian** (optional, for vault integration)
 
 ## Development Workflow

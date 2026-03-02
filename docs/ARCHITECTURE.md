@@ -324,14 +324,18 @@ fn detect_mode(query: &str) -> AppMode {
 - **Ranking**: Match score based on name and description
 - **Caching**: Application list cached between searches
 
-#### File Search (plocate integration)
-- **Command**: `plocate -i -- "$1" 2>/dev/null`
-- **Filtering**: Limited to home directory
+#### File Search (with fallback support)
+- **Primary Command**: `plocate -i -- "$1" 2>/dev/null | grep "^$HOME/" | head -20`
+- **Fallback Command**: `find "$HOME" -type f -ipath "*$1*" 2>/dev/null | head -20`
+- **Detection**: Automatically uses `plocate` if available, falls back to `find` otherwise
+- **Filtering**: Limited to home directory for privacy
 - **Results**: 20 most relevant files
 - **Opening**: `xdg-open` or `$EDITOR` for text files
 
-#### Content Search (ripgrep integration)
-- **Command**: `rg --with-filename --line-number --no-heading -S "$1" ~`
+#### Content Search (with fallback support)
+- **Primary Command**: `rg --with-filename --line-number --no-heading -S "$1" ~ 2>/dev/null | head -20`
+- **Fallback Command**: `grep -r -i -n -I -H -- "$1" "$HOME" 2>/dev/null | head -20`
+- **Detection**: Automatically uses `ripgrep` if available, falls back to `grep` otherwise
 - **Scope**: Recursive home directory search
 - **Format**: `file:line:content` display
 - **Opening**: `$EDITOR` at specific line
@@ -367,9 +371,13 @@ app_dirs = [
     "~/.local/share/applications",
 ]
 
+# Note: The :f and :fg commands are built-in with automatic fallback support.
+# They dynamically choose between plocate/find and ripgrep/grep based on availability.
+# These commands cannot be overridden in user configuration.
+
 [commands]
-f = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
-fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
+# Example custom command (not built-in):
+# gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
 
 [obsidian]
 vault = "~/Documents/Obsidian/MyVault"

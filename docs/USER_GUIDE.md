@@ -146,7 +146,7 @@ Type `:` followed by a command name to access specialized search modes.
 The following commands are built-in fixed commands and cannot be overridden: `:f`, `:fg`, `:s`, `:ob`, `:obg`.
 
 ##### `:f` - File Search (built-in fixed command)
-Searches for files in your home directory using `plocate`.
+Searches for files in your home directory using `plocate` if available, falling back to `find` otherwise.
 
 **Usage:** `:f search_term`
 
@@ -162,7 +162,7 @@ Searches for files in your home directory using `plocate`.
 - For text files: opens at specific line if available
 
 ##### `:fg` - Full-Text Grep (built-in fixed command)
-Searches file contents using `ripgrep`.
+Searches file contents using `ripgrep` if available, falling back to `grep` otherwise.
 
 **Usage:** `:fg search_pattern`
 
@@ -215,7 +215,7 @@ Searches content within your Obsidian vault.
 
 **Features:**
 - Searches all Markdown files in vault
-- Uses `ripgrep` for fast searching
+- Uses `ripgrep` for fast searching (falls back to `grep` if not available)
 - Opens matches directly in Obsidian
 
 ### 4. Custom Commands
@@ -480,18 +480,18 @@ Usage: `:obl project` → Find files linking to `[[project]]`
 **Solutions:**
 1. Check if required tools are installed:
    ```bash
-   which plocate rg
+   which plocate rg  # Optional: grunner will fall back to find/grep if not installed
    ```
 2. Install missing tools:
    ```bash
    # Ubuntu/Debian
-   sudo apt install plocate ripgrep
+   sudo apt install plocate ripgrep  # Optional for optimal performance
    
    # Fedora
-   sudo dnf install plocate ripgrep
+   sudo dnf install plocate ripgrep  # Optional for optimal performance
    
    # Arch
-   sudo pacman -S plocate ripgrep
+   sudo pacman -S plocate ripgrep  # Optional for optimal performance
    ```
 3. Update `plocate` database:
    ```bash

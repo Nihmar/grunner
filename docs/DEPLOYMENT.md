@@ -59,8 +59,8 @@ glib2 >= 2.74.0
 
 #### Optional Dependencies (for full functionality)
 ```
-plocate    # File search (:f built-in command)
-ripgrep    # Content search (:fg built-in command)
+plocate    # File search (:f built-in command) - optional, falls back to find
+ripgrep    # Content search (:fg built-in command) - optional, falls back to grep
 obsidian   # Obsidian integration (:ob, :obg built-in commands)
 systemd    # Power management features
 ```
@@ -80,7 +80,7 @@ make
 # Required
 sudo apt install libgtk-4-1 libadwaita-1-0 libglib2.0-0
 
-# Optional
+# Optional (for optimal performance)
 sudo apt install plocate ripgrep obsidian
 
 # Development
@@ -92,7 +92,7 @@ sudo apt install rustc cargo pkg-config libgtk-4-dev libadwaita-1-dev
 # Required
 sudo dnf install gtk4 libadwaita glib2
 
-# Optional
+# Optional (for optimal performance)
 sudo dnf install plocate ripgrep obsidian
 
 # Development
@@ -104,7 +104,7 @@ sudo dnf install rust cargo pkg-config gtk4-devel libadwaita-devel
 # Required
 sudo pacman -S gtk4 libadwaita glib2
 
-# Optional
+# Optional (for optimal performance)
 sudo pacman -S plocate ripgrep obsidian
 
 # Development

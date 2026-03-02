@@ -16,8 +16,8 @@ Take a quick look at grunner in action:
 |---|---|
 | **Main window** – fuzzy application search | ![Main view](screenshots/main_view.png) |
 | **Application filtering** | ![App filter](screenshots/app_filter.png) |
-| **File search** (`:f`) using plocate | ![Locate](screenshots/locate.png) |
-| **Full‑text grep** (`:fg`) using ripgrep | ![Ripgrep](screenshots/ripgrep.png) |
+| **File search** (`:f`) with fallback support | ![Locate](screenshots/locate.png) |
+| **Full‑text grep** (`:fg`) with fallback support | ![Ripgrep](screenshots/ripgrep.png) |
 | **Obsidian actions** (`:ob`) – vault, new note, daily note, quick note | ![Obsidian](screenshots/obsidian.png) |
 | **Obsidian file search** (`:ob` with file list) | ![Obsidian locate](screenshots/obsidian_locate.png) |
 | **Obsidian vault grep** (`:obg`) | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png) |
@@ -50,20 +50,20 @@ Install them on your distribution:
 
 **Fedora**
 ```bash
-sudo dnf install rust gtk4-devel libadwaita-devel plocate
+sudo dnf install rust gtk4-devel libadwaita-devel
 ```
 
 **Ubuntu / Debian**
 ```bash
-sudo apt install rustc cargo libgtk-4-dev libadwaita-1-dev plocate
+sudo apt install rustc cargo libgtk-4-dev libadwaita-1-dev
 ```
 
 **Arch Linux**
 ```bash
-sudo pacman -S rust gtk4 libadwaita plocate
+sudo pacman -S rust gtk4 libadwaita
 ```
 
-After installing `plocate`, enable its index auto-update so that `:f` searches stay current:
+For optimal performance with `:f` file search, install `plocate` and enable its index auto-update (falls back to `find` if not available):
 
 ```bash
 sudo updatedb
@@ -74,8 +74,8 @@ sudo systemctl enable --now plocate-updatedb.timer
 
 | Tool | Used by | Notes |
 |---|---|---|
-| `plocate` | `:f` file search | Index must be populated via `updatedb` (built-in command) |
-| `rg` (ripgrep) | `:fg` full-text grep, `:obg` vault grep | (built-in command for :fg) |
+| `plocate` | `:f` file search | Preferred tool; falls back to `find` if not available. Index must be populated via `updatedb` for best performance. |
+| `rg` (ripgrep) | `:fg` full-text grep, `:obg` vault grep | Preferred tool; falls back to `grep` if not available. |
 | Terminal emulator | Apps with `Terminal=true` | Auto-detected in order: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm` |
 | `obsidian` | `:ob` / `:obg` commands | Must be launchable via `xdg-open obsidian://…` |
 | `systemctl` / `loginctl` | Power bar (suspend, reboot, poweroff, logout) | Standard on systemd-based distros |
@@ -146,7 +146,7 @@ Type `:` followed by a command name and an optional argument:
 
 #### `:f <pattern>` — file search (built-in fixed command)
 
-Searches your home directory using `plocate` (case-insensitive). Results are displayed with the filename as the title and the parent directory as the subtitle. Press `Enter` to open the file with `xdg-open` or, for text files, with `$EDITOR` at the matched line.
+Searches your home directory using `plocate` if available, falling back to `find` otherwise (case-insensitive). Results are displayed with the filename as the title and the parent directory as the subtitle. Press `Enter` to open the file with `xdg-open` or, for text files, with `$EDITOR` at the matched line.
 
 ```
 :f invoice 2024
@@ -154,7 +154,7 @@ Searches your home directory using `plocate` (case-insensitive). Results are dis
 
 #### `:fg <pattern>` — full-text grep (built-in fixed command)
 
-Searches file contents recursively under `~` using `ripgrep`. Results are displayed in `file:line:content` format with the filename as the title. Press `Enter` to open the file at the matching line in `$EDITOR`.
+Searches file contents recursively under `~` using `ripgrep` if available, falling back to `grep` otherwise. Results are displayed in `file:line:content` format with the filename as the title. Press `Enter` to open the file at the matching line in `$EDITOR`.
 
 ```
 :fg TODO fixme
@@ -187,7 +187,7 @@ Selecting a result from the list opens that vault file directly in Obsidian.
 
 #### `:obg <pattern>` — Obsidian vault grep (built-in fixed command)
 
-Searches the content of all Markdown files in your vault using `rg`. Results show the matching line. Press `Enter` to open the file at that line in Obsidian.
+Searches the content of all Markdown files in your vault using `rg` if available, falling back to `grep` otherwise. Results show the matching line. Press `Enter` to open the file at that line in Obsidian.
 
 ```
 :obg project alpha

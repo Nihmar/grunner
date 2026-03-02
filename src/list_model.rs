@@ -10,6 +10,7 @@
 //! The `AppListModel` struct is the central coordinator that manages
 //! all search modes, executes commands, and updates the GTK list store.
 
+use crate::actions::which;
 use crate::app_item::AppItem;
 use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
@@ -23,16 +24,32 @@ use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
+use once_cell::sync::Lazy;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
-// Fixed command templates for built-in colon commands
-const FILE_SEARCH_CMD: &str = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20";
-const FILE_GREP_CMD: &str =
-    "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20";
+// Command templates for built-in colon commands with fallback support
+// - File search: uses plocate if available, falls back to find
+// - File grep: uses ripgrep (rg) if available, falls back to grep
+static FILE_SEARCH_CMD: Lazy<String> = Lazy::new(|| {
+    if which("plocate").is_some() {
+        "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string()
+    } else {
+        "find \"$HOME\" -type f -ipath \"*$1*\" 2>/dev/null | head -20".to_string()
+    }
+});
+
+static FILE_GREP_CMD: Lazy<String> = Lazy::new(|| {
+    if which("rg").is_some() {
+        "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
+            .to_string()
+    } else {
+        "grep -r -i -n -I -H -- \"$1\" \"$HOME\" 2>/dev/null | head -20".to_string()
+    }
+});
 
 /// Parse a colon-prefixed command into command name and argument
 ///
@@ -68,7 +85,7 @@ enum ActiveMode {
     ObsidianAction,
     /// Obsidian file search results
     ObsidianFile,
-    /// Obsidian grep (ripgrep) search results
+    /// Obsidian grep (ripgrep with grep fallback) search results
     ObsidianGrep,
 }
 
@@ -748,7 +765,7 @@ impl AppListModel {
                 )
             }
             ("obg", false) => {
-                // :obg with argument - ripgrep search in vault
+                // :obg with argument - ripgrep (with grep fallback) search in vault
                 let arg = arg.to_string();
                 let model_clone = self.clone();
                 (
@@ -795,7 +812,7 @@ impl AppListModel {
         let arg = arg.to_string();
         let model_clone = self.clone();
         self.schedule_command(move || {
-            model_clone.run_command("f", FILE_SEARCH_CMD, &arg);
+            model_clone.run_command("f", &*FILE_SEARCH_CMD, &arg);
         });
     }
 
@@ -809,7 +826,7 @@ impl AppListModel {
         let arg = arg.to_string();
         let model_clone = self.clone();
         self.schedule_command(move || {
-            model_clone.run_command("fg", FILE_GREP_CMD, &arg);
+            model_clone.run_command("fg", &*FILE_GREP_CMD, &arg);
         });
     }
 
@@ -909,16 +926,29 @@ impl AppListModel {
         self.run_subprocess(cmd);
     }
 
-    /// Run `rg` (ripgrep) command to search file contents in Obsidian vault
+    /// Run `rg` (ripgrep with grep fallback) command to search file contents in Obsidian vault
     fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
-        let mut cmd = std::process::Command::new("rg");
-        cmd.arg("--with-filename")
-            .arg("--line-number")
-            .arg("--no-heading")
-            .arg("--color=never")
-            .arg(pattern)
-            .arg(&vault_path);
-        self.run_subprocess(cmd);
+        if which("rg").is_some() {
+            let mut cmd = std::process::Command::new("rg");
+            cmd.arg("--with-filename")
+                .arg("--line-number")
+                .arg("--no-heading")
+                .arg("--color=never")
+                .arg(pattern)
+                .arg(&vault_path);
+            self.run_subprocess(cmd);
+        } else {
+            let mut cmd = std::process::Command::new("grep");
+            cmd.arg("-r")
+                .arg("-n")
+                .arg("-I")
+                .arg("-H")
+                .arg("--color=never")
+                .arg("--")
+                .arg(pattern)
+                .arg(&vault_path);
+            self.run_subprocess(cmd);
+        }
     }
 
     /// Create a GTK SignalListItemFactory for rendering list items

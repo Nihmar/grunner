@@ -45,7 +45,7 @@ fn is_executable(path: &std::path::Path) -> bool {
 ///
 /// Searches through directories in the PATH environment variable
 /// and returns the first path where the executable is found.
-fn which(prog: &str) -> Option<PathBuf> {
+pub fn which(prog: &str) -> Option<PathBuf> {
     let path_var = std::env::var_os("PATH")?;
     std::env::split_paths(&path_var)
         .map(|dir| dir.join(prog))
