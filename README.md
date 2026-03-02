@@ -28,13 +28,13 @@ Take a quick look at grunner in action:
 ## Features
 
 - **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
-- **Colon commands** — extensible command system for file search, full-text grep, GNOME Shell search providers, and Obsidian integration
+- **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), GNOME Shell search providers (:s), and Obsidian integration (:ob, :obg), plus custom user-defined commands
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
 - **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) via `:s`
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings shortcut** — opens your config file with `xdg-open` for quick editing
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
-- **Configurable** — a single TOML file controls window size, search directories, result limits, custom commands, debounce timing, and Obsidian paths
+- **Configurable** — a single TOML file controls window size, search directories, result limits, user-defined custom commands, debounce timing, and Obsidian paths
 
 ---
 
@@ -74,8 +74,8 @@ sudo systemctl enable --now plocate-updatedb.timer
 
 | Tool | Used by | Notes |
 |---|---|---|
-| `plocate` | `:f` file search | Index must be populated via `updatedb` |
-| `rg` (ripgrep) | `:fg` full-text grep, `:obg` vault grep | |
+| `plocate` | `:f` file search | Index must be populated via `updatedb` (built-in command) |
+| `rg` (ripgrep) | `:fg` full-text grep, `:obg` vault grep | (built-in command for :fg) |
 | Terminal emulator | Apps with `Terminal=true` | Auto-detected in order: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm` |
 | `obsidian` | `:ob` / `:obg` commands | Must be launchable via `xdg-open obsidian://…` |
 | `systemctl` / `loginctl` | Power bar (suspend, reboot, poweroff, logout) | Standard on systemd-based distros |
@@ -144,7 +144,7 @@ Type `:` followed by a command name and an optional argument:
 :<command> [argument]
 ```
 
-#### `:f <pattern>` — file search
+#### `:f <pattern>` — file search (built-in fixed command)
 
 Searches your home directory using `plocate` (case-insensitive). Results are displayed with the filename as the title and the parent directory as the subtitle. Press `Enter` to open the file with `xdg-open` or, for text files, with `$EDITOR` at the matched line.
 
@@ -152,7 +152,7 @@ Searches your home directory using `plocate` (case-insensitive). Results are dis
 :f invoice 2024
 ```
 
-#### `:fg <pattern>` — full-text grep
+#### `:fg <pattern>` — full-text grep (built-in fixed command)
 
 Searches file contents recursively under `~` using `ripgrep`. Results are displayed in `file:line:content` format with the filename as the title. Press `Enter` to open the file at the matching line in `$EDITOR`.
 
@@ -160,7 +160,7 @@ Searches file contents recursively under `~` using `ripgrep`. Results are displa
 :fg TODO fixme
 ```
 
-#### `:s <query>` — GNOME Shell search providers
+#### `:s <query>` — GNOME Shell search providers (built-in fixed command)
 
 Queries all installed and enabled GNOME Shell search providers in parallel (e.g., GNOME Files, GNOME Calendar, GNOME Contacts). Results from all providers are merged and displayed with the provider's icon. Press `Enter` to activate the result through the provider's D-Bus interface.
 
@@ -168,7 +168,7 @@ Queries all installed and enabled GNOME Shell search providers in parallel (e.g.
 :s meeting notes
 ```
 
-#### `:ob [text]` — Obsidian actions
+#### `:ob [text]` — Obsidian actions (built-in fixed command)
 
 Requires `[obsidian]` to be configured (see [Configuration](#configuration)). Displays an action bar with four buttons:
 
@@ -185,7 +185,7 @@ Requires `[obsidian]` to be configured (see [Configuration](#configuration)). Di
 
 Selecting a result from the list opens that vault file directly in Obsidian.
 
-#### `:obg <pattern>` — Obsidian vault grep
+#### `:obg <pattern>` — Obsidian vault grep (built-in fixed command)
 
 Searches the content of all Markdown files in your vault using `rg`. Results show the matching line. Press `Enter` to open the file at that line in Obsidian.
 
@@ -195,7 +195,7 @@ Searches the content of all Markdown files in your vault using `rg`. Results sho
 
 #### Custom commands
 
-You can define your own colon commands in the config file. Each command receives the argument after the command name as `$1` in a shell invocation. Output lines are shown in the results list; selecting a line attempts to open it as a file or copy it to the clipboard.
+The following colon commands are built-in and cannot be overridden: `:f`, `:fg`, `:s`, `:ob`, `:obg`. You can define additional custom colon commands in the config file. Each command receives the argument after the command name as `$1` in a shell invocation. Output lines are shown in the results list; selecting a line attempts to open it as a file or copy it to the clipboard.
 
 ```toml
 [commands]
@@ -239,9 +239,9 @@ app_dirs = [
 ]
 
 [commands]
-# Built-in defaults (shown here for reference; override freely).
-f  = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
-fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
+# Define additional custom colon commands. Built-in commands (:f, :fg, :s, :ob, :obg) cannot be overridden.
+# Example:
+# gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
 
 [obsidian]
 # Absolute or ~ path to the root of your Obsidian vault.
@@ -263,7 +263,7 @@ quick_note = "Quick.md"
 | `search.max_results` | integer | `64` | Maximum results displayed |
 | `search.command_debounce_ms` | integer | `300` | Debounce delay for colon commands (ms) |
 | `search.app_dirs` | array of strings | (see above) | Directories to scan for `.desktop` files |
-| `commands.<name>` | string | (see above) | Shell command for a custom colon command |
+| `commands.<name>` | string | — | Shell command for additional custom colon commands (built-in :f, :fg, :s, :ob, :obg cannot be overridden) |
 | `obsidian.vault` | string | — | Path to Obsidian vault root |
 | `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |
 | `obsidian.new_notes_folder` | string | — | New notes subfolder |

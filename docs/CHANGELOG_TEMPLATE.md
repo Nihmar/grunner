@@ -11,13 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 
 
 ### Changed
-- 
+- Made `:f` and `:fg` commands built-in fixed commands (cannot be overridden in config)
 
 ### Deprecated
 - 
 
 ### Removed
-- 
+- Removed ability to override `:f` and `:fg` commands via configuration
 
 ### Fixed
 - 

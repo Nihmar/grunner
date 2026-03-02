@@ -143,7 +143,9 @@ Type `:` followed by a command name to access specialized search modes.
 
 #### Available Commands:
 
-##### `:f` - File Search
+The following commands are built-in fixed commands and cannot be overridden: `:f`, `:fg`, `:s`, `:ob`, `:obg`.
+
+##### `:f` - File Search (built-in fixed command)
 Searches for files in your home directory using `plocate`.
 
 **Usage:** `:f search_term`
@@ -159,7 +161,7 @@ Searches for files in your home directory using `plocate`.
 - Opens files with appropriate application
 - For text files: opens at specific line if available
 
-##### `:fg` - Full-Text Grep
+##### `:fg` - Full-Text Grep (built-in fixed command)
 Searches file contents using `ripgrep`.
 
 **Usage:** `:fg search_pattern`
@@ -175,7 +177,7 @@ Searches file contents using `ripgrep`.
 - Shows file:line:content format
 - Opens in `$EDITOR` at matching line
 
-##### `:s` - GNOME Shell Search
+##### `:s` - GNOME Shell Search (built-in fixed command)
 Queries GNOME Shell search providers.
 
 **Usage:** `:s search_query`
@@ -190,7 +192,7 @@ Queries GNOME Shell search providers.
 - `:s meeting notes` → Search documents
 - `:s john` → Search contacts
 
-##### `:ob` - Obsidian Actions
+##### `:ob` - Obsidian Actions (built-in fixed command)
 Provides quick access to Obsidian vault operations.
 
 **Usage:** `:ob` or `:ob note text`
@@ -206,7 +208,7 @@ Provides quick access to Obsidian vault operations.
 - `:ob buy milk` → Create note with "buy milk"
 - Select from file list to open specific note
 
-##### `:obg` - Obsidian Vault Grep
+##### `:obg` - Obsidian Vault Grep (built-in fixed command)
 Searches content within your Obsidian vault.
 
 **Usage:** `:obg search_pattern`
@@ -217,7 +219,7 @@ Searches content within your Obsidian vault.
 - Opens matches directly in Obsidian
 
 ### 4. Custom Commands
-You can define your own colon commands in the configuration file.
+You can define additional colon commands beyond the built-in fixed commands (:f, :fg, :s, :ob, :obg) in the configuration file.
 
 **Example Configuration:**
 ```toml
@@ -309,14 +311,9 @@ app_dirs = [
 #### Command Configuration
 ```toml
 [commands]
-# Override or add custom colon commands
-# $1 is replaced with the user's argument
-
-# Default file search (can be overridden)
-f = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
-
-# Default content search (can be overridden)
-fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
+# Define additional custom colon commands.
+# $1 is replaced with the user's argument.
+# Note: :f, :fg, :s, :ob, and :obg are built-in fixed commands and cannot be overridden.
 
 # Custom command example: search DuckDuckGo
 ddg = "curl -s 'https://api.duckduckgo.com/?q=$1&format=json&pretty=1' | jq -r '.Abstract' 2>/dev/null | head -5"
@@ -347,14 +344,12 @@ app_dirs = [
 ]
 
 [commands]
-# Faster file search with fd
-f = "fd --type f \"$1\" ~ --max-results 20"
-
-# Case-sensitive grep
-fg = "rg --with-filename --line-number --no-heading \"$1\" ~ 2>/dev/null | head -20"
-
+# Custom command examples (note: :f and :fg are built-in and cannot be overridden)
 # Dictionary lookup
 dict = "dict -d gcide \"$1\" 2>/dev/null | head -10"
+
+# Web search example
+web = "echo 'Searching for: $1'"
 
 [obsidian]
 vault = "~/Documents/Obsidian/Personal"

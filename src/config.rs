@@ -96,21 +96,12 @@ impl Default for Config {
     /// - Standard window dimensions
     /// - Default search result limit
     /// - Common application directories
-    /// - Built-in file search commands
+    /// - Fixed colon commands (:s, :ob, :obg, :f, :fg)
     /// - Disabled calculator
     /// - Empty Obsidian configuration
     fn default() -> Self {
-        // Initialize default shell commands for file search modes
-        let mut commands = HashMap::new();
-        commands.insert(
-            "f".to_string(),
-            "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string(),
-        );
-        commands.insert(
-            "fg".to_string(),
-            "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
-                .to_string(),
-        );
+        // Initialize empty commands map (f and fg are now fixed commands like :s, :ob, :obg)
+        let commands = HashMap::new();
 
         Self {
             window_width: DEFAULT_WINDOW_WIDTH,
@@ -322,7 +313,7 @@ height = {height}
 # Maximum number of fuzzy-search results shown (only when a query is active).
 max_results = {max}
 
-# Delay in milliseconds before executing a colon command (e.g. :f, :ob) after you stop typing.
+# Delay in milliseconds before executing a colon command (e.g. :s, :ob, :obg, :f, :fg) after you stop typing.
 # Lower values feel more responsive but may cause flickering if your command is very fast.
 command_debounce_ms = 300
 
@@ -344,11 +335,10 @@ app_dirs = [
 enabled = false
 
 [commands]
-# Define colon commands. The key is the command name (without the leading ':').
+# Define custom colon commands. The key is the command name (without the leading ':').
 # The value is a shell command that will be executed with 'sh -c'.
 # Use "$1" for the argument typed after the command.
-# f  = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20"
-# fg = "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
+# Note: :s, :ob, :obg, :f, and :fg are built-in commands and cannot be overridden.
 
 # [obsidian]
 # Uncomment and fill in to enable Obsidian integration.

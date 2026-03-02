@@ -29,6 +29,11 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+// Fixed command templates for built-in colon commands
+const FILE_SEARCH_CMD: &str = "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20";
+const FILE_GREP_CMD: &str =
+    "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20";
+
 /// Parse a colon-prefixed command into command name and argument
 ///
 /// Colon commands follow the format ":command argument" where:
@@ -655,6 +660,8 @@ impl AppListModel {
         match cmd_part {
             "s" => self.handle_search_provider(arg),
             "ob" | "obg" => self.handle_obsidian(cmd_part, arg),
+            "f" => self.handle_file_search(arg),
+            "fg" => self.handle_file_grep(arg),
             cmd_name => self.handle_custom_command(cmd_name, arg),
         }
     }
@@ -775,6 +782,34 @@ impl AppListModel {
         let model_clone = self.clone();
         self.schedule_command(move || {
             model_clone.run_command(&cmd_name, &template, &arg);
+        });
+    }
+
+    fn handle_file_search(&self, arg: &str) {
+        if arg.is_empty() {
+            self.clear_store();
+            return;
+        }
+
+        self.bump_task_gen();
+        let arg = arg.to_string();
+        let model_clone = self.clone();
+        self.schedule_command(move || {
+            model_clone.run_command("f", FILE_SEARCH_CMD, &arg);
+        });
+    }
+
+    fn handle_file_grep(&self, arg: &str) {
+        if arg.is_empty() {
+            self.clear_store();
+            return;
+        }
+
+        self.bump_task_gen();
+        let arg = arg.to_string();
+        let model_clone = self.clone();
+        self.schedule_command(move || {
+            model_clone.run_command("fg", FILE_GREP_CMD, &arg);
         });
     }
 

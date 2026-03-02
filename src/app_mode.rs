@@ -37,7 +37,7 @@ impl AppMode {
     /// # Mode Triggers
     /// - `:obg` prefix → `ObsidianGrep` (grep search within Obsidian notes)
     /// - `:ob` prefix → `Obsidian` (simple Obsidian note search)
-    /// - `:f` prefix → `FileSearch` (file system search)
+    /// - `:f` or `:fg` prefix → `FileSearch` (file system search or content grep)
     /// - `:s` prefix → `SearchProvider` (external search provider)
     /// - No prefix or unrecognized prefix → `Normal` (default application search)
     ///

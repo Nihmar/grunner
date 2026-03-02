@@ -59,9 +59,9 @@ glib2 >= 2.74.0
 
 #### Optional Dependencies (for full functionality)
 ```
-plocate    # File search (:f command)
-ripgrep    # Content search (:fg command)
-obsidian   # Obsidian integration (:ob command)
+plocate    # File search (:f built-in command)
+ripgrep    # Content search (:fg built-in command)
+obsidian   # Obsidian integration (:ob, :obg built-in commands)
 systemd    # Power management features
 ```
 
