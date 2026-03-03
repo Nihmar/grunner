@@ -103,41 +103,26 @@ cargo install --path .
 cp target/release/grunner ~/.local/bin/
 ```
 
-### Using makepkg (Arch Linux)
+### Using AUR (Arch Linux)
 
-For Arch Linux users, you can build and install using the provided PKGBUILD:
+For Arch Linux users, you can install from the AUR: [grunner-git](https://aur.archlinux.org/packages/grunner-git)
+
+Using your preferred AUR helper:
 
 ```bash
-# Build the package
+# Using yay
+yay -S grunner-git
+
+# Using paru
+paru -S grunner-git
+```
+
+Or manually build and install from the AUR:
+
+```bash
+git clone https://aur.archlinux.org/grunner-git.git
+cd grunner-git
 makepkg -si
-
-# Or just build without installing
-makepkg
-```
-
-Pre-built packages (`.pkg.tar.zst` files) are also available on the [GitHub Releases](https://github.com/Nihmar/grunner/releases) page. Download and install with:
-```bash
-sudo pacman -U grunner-*.pkg.tar.zst
-```
-
-### Using Flatpak
-
-#### Option 1: Install from GitHub Releases
-Flatpak packages are available on the [GitHub Releases](https://github.com/Nihmar/grunner/releases) page. Download the `.flatpak` file and install it with:
-
-```bash
-flatpak install grunner.flatpak
-```
-
-#### Option 2: Build from source using flatpak-builder
-You can also build and install from source using the provided flatpak manifest:
-
-```bash
-# Install flatpak and flatpak-builder
-sudo flatpak install org.gnome.Platform//49 org.gnome.Sdk//49
-
-# Build and install
-flatpak-builder --user --install build-dir packaging/flatpak/grunner.yml
 ```
 
 ### Bind to a keyboard shortcut

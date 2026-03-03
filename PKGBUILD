@@ -7,6 +7,8 @@ url="https://github.com/Nihmar/grunner"
 license=('MIT')
 depends=('gtk4')
 makedepends=('rust' 'cargo')
+provides=('grunner')
+conflicts=('grunner-git')
 
 _srcdir="$PWD"
 
