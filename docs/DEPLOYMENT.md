@@ -515,9 +515,18 @@ Grunner can act as a search provider for GNOME Shell:
 ### Logging Configuration
 
 #### Environment Variables for Logging
+
+Grunner includes a comprehensive logging system with multiple backend support. For complete documentation, see [ERROR_LOGGING.md](ERROR_LOGGING.md).
+
 ```bash
-# Enable Rust logging
-export RUST_LOG=grunner=info
+# Log destination (journal, syslog, file, stderr, none)
+export GRUNNER_LOG=journal
+
+# Log level (error, warn, info, debug, trace)
+export GRUNNER_LOG_LEVEL=info
+
+# Custom log file path (for file logging)
+export GRUNNER_LOG_FILE=~/grunner.log
 
 # Enable GTK debug messages
 export G_MESSAGES_DEBUG=all
@@ -525,8 +534,8 @@ export G_MESSAGES_DEBUG=all
 # Enable GLib debug
 export G_DEBUG=fatal_warnings
 
-# Run with logging
-RUST_LOG=debug ~/.local/bin/grunner 2>&1 | tee ~/grunner.log
+# Run with debug logging
+GRUNNER_LOG_LEVEL=debug ~/.local/bin/grunner
 ```
 
 #### Log Levels
@@ -537,11 +546,34 @@ RUST_LOG=debug ~/.local/bin/grunner 2>&1 | tee ~/grunner.log
 - **trace**: Very verbose tracing information
 
 #### Log File Locations
+
+Grunner's logging system supports multiple destinations:
+
+**Systemd Journal (journald)** - Default on systemd systems:
+```bash
+journalctl --user -f -u grunner
+journalctl --user -u grunner --priority=err
 ```
-Application Logs:  Standard output/error (when launched from terminal)
-System Logs:       journalctl --user -u gnome-session
-GTK Logs:          ~/.cache/gdk-log
-GLib Logs:         G_MESSAGES_DEBUG environment variable
+
+**File Logging** - When configured via `GRUNNER_LOG=file`:
+```bash
+tail -f ~/.cache/grunner/grunner.log  # Default location
+tail -f ~/grunner.log                 # Custom location via GRUNNER_LOG_FILE
+```
+
+**Syslog** - Traditional syslog on non-systemd systems:
+```bash
+tail -f /var/log/syslog | grep grunner
+```
+
+**Standard Error** - For development (`GRUNNER_LOG=stderr`):
+```bash
+GRUNNER_LOG=stderr GRUNNER_LOG_LEVEL=debug ~/.local/bin/grunner 2>&1 | tee debug.log
+```
+
+**GNOME Shell Integration** - For troubleshooting GNOME Shell issues:
+```bash
+journalctl --user -u gnome-session | grep -i grunner
 ```
 
 ### Performance Monitoring

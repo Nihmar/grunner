@@ -271,7 +271,7 @@ ApplicationWindow
 ### Error Recovery
 - **Graceful degradation**: Features disabled rather than crashing
 - **User feedback**: Error messages in UI where appropriate
-- **Logging**: Debug information for troubleshooting
+- **Logging**: Comprehensive system-based logging with journald, syslog, and file backends (see [ERROR_LOGGING.md](ERROR_LOGGING.md))
 - **Default fallbacks**: Sensible defaults when configuration is invalid
 
 ## Performance Considerations

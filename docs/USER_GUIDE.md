@@ -543,22 +543,55 @@ Usage: `:obl project` → Find files linking to `[[project]]`
 
 ### Debug Mode
 
-Enable debug logging to troubleshoot issues:
+Grunner includes a comprehensive logging system that supports multiple destinations and log levels. Use these environment variables to enable debug logging:
 
 ```bash
-# Run with debug output
-RUST_LOG=debug ~/.local/bin/grunner 2>&1 | tee grunner.log
+# Enable debug logging to journald (systemd systems - default)
+GRUNNER_LOG_LEVEL=debug ~/.local/bin/grunner
 
-# Check specific component
-RUST_LOG=grunner::config=debug,grunner::launcher=debug ~/.local/bin/grunner
+# Log to file with trace level for maximum detail
+GRUNNER_LOG=file GRUNNER_LOG_LEVEL=trace GRUNNER_LOG_FILE=~/grunner-debug.log ~/.local/bin/grunner
+
+# Log to stderr for immediate viewing (development)
+GRUNNER_LOG=stderr GRUNNER_LOG_LEVEL=debug ~/.local/bin/grunner 2>&1 | tee grunner.log
+
+# Disable logging entirely
+GRUNNER_LOG=none ~/.local/bin/grunner
 ```
+
+For complete logging documentation, see [ERROR_LOGGING.md](ERROR_LOGGING.md).
 
 ### Log Files
 
-Grunner logs to:
-- **Application logs**: Check terminal output when launched from command line
-- **System logs**: `journalctl --user -u gnome-session` (for GNOME Shell issues)
-- **Cache files**: `~/.cache/grunner/` (application cache)
+Grunner's logging system supports multiple destinations:
+
+- **Systemd Journal (journald)**: Default on systemd systems
+  ```bash
+  journalctl --user -f -u grunner
+  journalctl --user -u grunner --priority=err  # errors only
+  ```
+
+- **File Logging**: When configured via `GRUNNER_LOG=file`
+  ```bash
+  tail -f ~/.cache/grunner/grunner.log  # default location
+  tail -f ~/grunner-debug.log           # custom location
+  ```
+
+- **Syslog**: Traditional syslog on non-systemd systems
+  ```bash
+  tail -f /var/log/syslog | grep grunner
+  ```
+
+- **Cache Files**: Application cache and data
+  ```bash
+  ls -la ~/.cache/grunner/  # cache directory
+  cat ~/.cache/grunner/apps.bin  # application cache (binary)
+  ```
+
+For troubleshooting GNOME Shell integration issues, also check:
+```bash
+journalctl --user -u gnome-session | grep -i grunner
+```
 
 ## FAQ
 

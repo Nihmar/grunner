@@ -456,6 +456,18 @@ fn load_config() -> Config {
 }
 ```
 
+### Logging System Implementation
+
+For a comprehensive guide to the error logging system, including implementation details, configuration options, and usage examples, refer to the **[ERROR_LOGGING.md](ERROR_LOGGING.md)** documentation. The logging system provides:
+
+- **Multiple backend support**: journald (systemd), syslog, file-based, and stderr logging
+- **Environment-based configuration**: Control via `GRUNNER_LOG` and `GRUNNER_LOG_LEVEL` variables
+- **Panic capture**: Automatic logging of application panics for post-mortem analysis
+- **Performance optimization**: Minimal impact with compile-time log level filtering
+- **User privacy**: Logs remain local to the user's system
+
+The system integrates seamlessly with existing error handling patterns while providing developers with essential debugging capabilities.
+
 ## Performance Considerations
 
 ### Optimizations Implemented

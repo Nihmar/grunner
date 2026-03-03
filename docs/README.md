@@ -7,6 +7,7 @@ Welcome to the Grunner documentation! This directory contains comprehensive tech
 ### Core Documentation
 - **[OVERVIEW.md](OVERVIEW.md)** - High-level project overview, architecture, and technology stack
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture, module dependencies, and data flow
+- **[ERROR_LOGGING.md](ERROR_LOGGING.md)** - Comprehensive error logging system implementation guide
 - **[API.md](API.md)** - Complete API reference for all modules and functions
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development environment setup, testing, and contribution guidelines
 - **[USER_GUIDE.md](USER_GUIDE.md)** - User-focused guide for installation, configuration, and usage

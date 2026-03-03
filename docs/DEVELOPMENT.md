@@ -362,29 +362,57 @@ cargo bench
 
 ### Logging
 
-**Environment Variables:**
-```bash
-# Enable GTK debug logging
-export G_MESSAGES_DEBUG=all
+Grunner includes a comprehensive error logging system that integrates with standard Linux logging infrastructure. For complete documentation on the logging system architecture, configuration options, and advanced usage, see **[ERROR_LOGGING.md](ERROR_LOGGING.md)**.
 
-# Enable Rust logging
-export RUST_LOG=debug
+#### Basic Usage
 
-# Run with logging enabled
-RUST_LOG=debug cargo run
-```
-
-**Custom Logging Macros:**
+**Standard Log Macros:**
+Grunner uses the standard `log` crate macros for all logging operations:
 ```rust
-#[macro_export]
-macro_rules! debug {
-    ($($arg:tt)*) => {
-        if cfg!(debug_assertions) {
-            eprintln!($($arg)*);
-        }
-    };
-}
+error!("Failed to load configuration: {}", e);
+warn!("Feature {} is deprecated", old_feature);
+info!("Application started successfully");
+debug!("Search completed in {:?}", duration);
+trace!("Entering function with params: {:?}", params);
 ```
+
+**Environment Variables:**
+Control logging behavior with these environment variables:
+```bash
+# Log destination (journal, syslog, file, stderr, none)
+export GRUNNER_LOG=journal
+
+# Log level (error, warn, info, debug, trace)
+export GRUNNER_LOG_LEVEL=debug
+
+# Custom log file path (for file logging)
+export GRUNNER_LOG_FILE=~/grunner-debug.log
+
+# Run with debug logging enabled
+GRUNNER_LOG_LEVEL=debug cargo run
+```
+
+#### Viewing Logs
+
+```bash
+# Journald (systemd systems - recommended)
+journalctl -f -u grunner
+
+# File logs (default location)
+tail -f ~/.cache/grunner/grunner.log
+
+# Debug mode with full trace logging
+GRUNNER_LOG=stderr GRUNNER_LOG_LEVEL=trace cargo run 2>&1 | tee debug.log
+```
+
+#### Logging Best Practices
+
+1. **Include Context**: Always provide relevant context with error messages
+2. **Use Appropriate Levels**: Reserve `error!()` for actual errors, `debug!()` for development-only information
+3. **Performance Considerations**: Use `log::log_enabled!()` macro for expensive debug computations
+4. **Structured Logging**: Include relevant metadata like user IDs, file paths, or operation types
+
+For detailed implementation guides and troubleshooting, refer to the **[ERROR_LOGGING.md](ERROR_LOGGING.md)** documentation.
 
 ### Debug Builds
 
