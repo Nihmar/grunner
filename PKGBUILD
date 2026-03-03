@@ -22,7 +22,7 @@ package() {
     install -Dm755 "target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
 
     # Icon
-    install -Dm644 "assets/$pkgname.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/$pkgname.png"
+    install -Dm644 "assets/$pkgname.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/$pkgname.svg"
 
     # Desktop entry (see below)
     install -Dm644 "packaging/$pkgname.desktop" "$pkgdir/usr/share/applications/$pkgname.desktop"

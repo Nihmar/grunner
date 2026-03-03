@@ -19,7 +19,7 @@ use libadwaita::Application;
 use std::env;
 
 /// Application ID for D-Bus and GNOME Shell integration
-const APP_ID: &str = "org.nihmar.grunner";
+const APP_ID: &str = "grunner";
 
 /// Main entry point for the Grunner application
 ///

@@ -136,7 +136,7 @@ You can also build and install from source using the provided flatpak manifest:
 sudo flatpak install org.gnome.Platform//49 org.gnome.Sdk//49
 
 # Build and install
-flatpak-builder --user --install build-dir packaging/flatpak/org.nihmar.grunner.yml
+flatpak-builder --user --install build-dir packaging/flatpak/grunner.yml
 ```
 
 ### Bind to a keyboard shortcut

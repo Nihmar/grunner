@@ -5,3 +5,4 @@ Exec=grunner
 Icon=grunner
 Type=Application
 Categories=Utility;
+StartupWMClass=grunner

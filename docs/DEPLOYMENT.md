@@ -23,7 +23,7 @@ User Space Application
 ├── Configuration: ~/.config/grunner/grunner.toml
 ├── Cache: ~/.cache/grunner/apps.bin
 ├── Icons: ~/.local/share/icons/hicolor/
-└── Desktop Entry: ~/.local/share/applications/org.nihmar.grunner.desktop
+└── Desktop Entry: ~/.local/share/applications/grunner.desktop
 ```
 
 ### Deployment Scenarios
@@ -153,20 +153,20 @@ cp target/release/grunner ~/.local/bin/
 
 # Install icon (if available)
 if [ -f assets/grunner.svg ]; then
-    cp assets/grunner.svg ~/.local/share/icons/hicolor/scalable/apps/org.nihmar.grunner.svg
+    cp assets/grunner.svg ~/.local/share/icons/hicolor/scalable/apps/grunner.svg
 fi
 
 # Create desktop entry
-cat > ~/.local/share/applications/org.nihmar.grunner.desktop << EOF
+cat > ~/.local/share/applications/grunner.desktop << EOF
 [Desktop Entry]
 Type=Application
 Name=grunner
 Comment=Application launcher
 Exec=$HOME/.local/bin/grunner
-Icon=org.nihmar.grunner
+Icon=grunner
 Terminal=false
 Categories=Utility;
-StartupWMClass=org.nihmar.grunner
+StartupWMClass=grunner
 NoDisplay=false
 EOF
 
@@ -185,8 +185,8 @@ sudo cargo build --release
 
 # Install to system directories
 sudo cp target/release/grunner /usr/local/bin/
-sudo cp assets/grunner.svg /usr/share/icons/hicolor/scalable/apps/org.nihmar.grunner.svg
-sudo cp assets/org.nihmar.grunner.desktop /usr/share/applications/
+sudo cp assets/grunner.svg /usr/share/icons/hicolor/scalable/apps/grunner.svg
+sudo cp assets/grunner.desktop /usr/share/applications/
 
 # Update system databases
 sudo gtk-update-icon-cache /usr/share/icons/hicolor
@@ -207,8 +207,8 @@ mkdir -p grunner-0.7.0/usr/share/icons/hicolor/scalable/apps
 
 # Copy files
 cp target/release/grunner grunner-0.7.0/usr/bin/
-cp assets/grunner.svg grunner-0.7.0/usr/share/icons/hicolor/scalable/apps/org.nihmar.grunner.svg
-cp assets/org.nihmar.grunner.desktop grunner-0.7.0/usr/share/applications/
+cp assets/grunner.svg grunner-0.7.0/usr/share/icons/hicolor/scalable/apps/grunner.svg
+cp assets/grunner.desktop grunner-0.7.0/usr/share/applications/
 
 # Create control file
 cat > grunner-0.7.0/DEBIAN/control << EOF
@@ -256,13 +256,13 @@ cargo build --release
 
 %install
 install -D -m 755 target/release/grunner %{buildroot}%{_bindir}/grunner
-install -D -m 644 assets/grunner.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/org.nihmar.grunner.svg
-install -D -m 644 assets/org.nihmar.grunner.desktop %{buildroot}%{_datadir}/applications/org.nihmar.grunner.desktop
+install -D -m 644 assets/grunner.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/grunner.svg
+install -D -m 644 assets/grunner.desktop %{buildroot}%{_datadir}/applications/grunner.desktop
 
 %files
 %{_bindir}/grunner
-%{_datadir}/icons/hicolor/scalable/apps/org.nihmar.grunner.svg
-%{_datadir}/applications/org.nihmar.grunner.desktop
+%{_datadir}/icons/hicolor/scalable/apps/grunner.svg
+%{_datadir}/applications/grunner.desktop
 
 %changelog
 * Tue Jan 01 2024 Your Name <email@example.com> - 0.7.0-1
@@ -467,20 +467,20 @@ grunner --rebuild-cache
 
 #### Available D-Bus Interfaces
 ```
-Service: org.nihmar.grunner
-Object: /org/nihmar/grunner
-Interface: org.nihmar.grunner.Application
+Service: grunner
+Object: /grunner
+Interface: grunner.Application
 ```
 
 **Querying via D-Bus:**
 ```bash
 # List methods
-gdbus introspect --session --dest org.nihmar.grunner --object-path /org/nihmar/grunner
+gdbus introspect --session --dest grunner --object-path /grunner
 
 # Call method
-gdbus call --session --dest org.nihmar.grunner \
-  --object-path /org/nihmar/grunner \
-  --method org.nihmar.grunner.Application.GetVersion
+gdbus call --session --dest grunner \
+  --object-path /grunner \
+  --method grunner.Application.GetVersion
 ```
 
 #### GNOME Shell Search Provider Integration

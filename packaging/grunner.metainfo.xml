@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <component type="desktop-application">
-  <id>org.nihmar.grunner</id>
+  <id>grunner</id>
   <metadata_license>CC0-1.0</metadata_license>   <!-- ADD THIS -->
   <project_license>MIT</project_license>          <!-- ADD THIS -->
   <name>grunner</name>
@@ -9,7 +9,7 @@
     <p>GRunner is a fast, keyboard-driven application launcher for GNOME.</p>
   </description>
   <url type="homepage">https://github.com/Nihmar/grunner</url>
-  <launchable type="desktop-id">org.nihmar.grunner.desktop</launchable>
+  <launchable type="desktop-id">grunner.desktop</launchable>
   <releases>
     <release version="1.0.0" date="2026-03-02" />
   </releases>

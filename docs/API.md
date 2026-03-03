@@ -27,7 +27,7 @@ fn main() -> glib::ExitCode
 - Returns `ExitCode::SUCCESS` on normal execution
 
 **Constants**:
-- `APP_ID: &str = "org.nihmar.grunner"` - Application ID for D-Bus and GNOME Shell integration
+- `APP_ID: &str = "grunner"` - Application ID for D-Bus and GNOME Shell integration
 
 #### config.rs
 **Purpose**: Configuration loading, parsing, and management.

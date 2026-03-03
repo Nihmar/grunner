@@ -1,7 +1,0 @@
-[Desktop Entry]
-Name=grunner
-Comment=A fast, keyboard-driven application launcher for GNOME
-Exec=grunner
-Icon=org.nihmar.grunner
-Type=Application
-Categories=Utility;

@@ -1,4 +1,4 @@
-app-id: org.nihmar.grunner
+app-id: grunner
 runtime: org.gnome.Platform
 runtime-version: "49"
 sdk: org.gnome.Sdk
@@ -24,9 +24,9 @@ modules:
       - cargo --offline fetch --manifest-path Cargo.toml --verbose
       - cargo --offline build --release --verbose
       - install -Dm755 target/release/grunner /app/bin/grunner
-      - install -Dm644 assets/org.nihmar.grunner.svg /app/share/icons/hicolor/scalable/apps/org.nihmar.grunner.svg
-      - install -Dm644 packaging/org.nihmar.grunner.desktop /app/share/applications/org.nihmar.grunner.desktop
-      - install -Dm644 packaging/org.nihmar.grunner.metainfo.xml /app/share/metainfo/org.nihmar.grunner.metainfo.xml
+      - install -Dm644 assets/grunner.svg /app/share/icons/hicolor/scalable/apps/grunner.svg
+      - install -Dm644 packaging/grunner.desktop /app/share/applications/grunner.desktop
+      - install -Dm644 packaging/grunner.metainfo.xml /app/share/metainfo/grunner.metainfo.xml
     sources:
       - type: git
         url: https://github.com/Nihmar/grunner.git
