@@ -21,7 +21,4 @@ target
 #.idea/
 
 *.pkg.tar.zst
-packaging/flatpak/build-dir/
-packaging/flatpak/flatpak-repo/
-*.flatpak
 pkg

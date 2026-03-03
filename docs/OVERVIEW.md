@@ -172,8 +172,7 @@ grunner/
 ### Installation
 - **Manual**: `cargo build --release`
 - **Package**: `makepkg -si` for Arch Linux (PKGBUILD provided)
-- **Flatpak**: Download from GitHub Releases
-- **Desktop integration**: `.desktop` files provided in packaging directory
+- **Desktop integration**: `.desktop` files provided in assets directory
 
 ## Configuration Management
 

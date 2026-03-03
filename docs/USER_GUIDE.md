@@ -58,12 +58,6 @@ For a complete installation with desktop integration, see the "Package Installat
 makepkg -si
 ```
 
-**Flatpak:**
-Download the `.flatpak` file from [GitHub Releases](https://github.com/Nihmar/grunner/releases) and install with:
-```bash
-flatpak install grunner.flatpak
-```
-
 **Manual Build (Alternative):**
 ```bash
 # Build the application
