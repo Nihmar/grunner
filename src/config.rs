@@ -207,8 +207,8 @@ pub fn load() -> Config {
     // Read existing config file
     let content = match std::fs::read_to_string(&path) {
         Ok(s) => s,
-        Err(e) => {
-            eprintln!("Failed to read config file: {}. Using defaults.", e);
+        Err(_e) => {
+            // Failed to read config file
             return Config::default();
         }
     };
@@ -234,8 +234,8 @@ fn apply_toml(content: &str) -> Config {
     // Parse TOML content
     let toml_cfg: TomlConfig = match toml::from_str(content) {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("Failed to parse config: {}. Using defaults.", e);
+        Err(_e) => {
+            // Failed to parse config
             return cfg;
         }
     };

@@ -124,18 +124,18 @@ pub fn launch_app(exec: &str, terminal: bool) {
                     cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
                 }
             }
-            if let Err(e) = cmd.spawn() {
-                eprintln!("Failed to launch terminal {}: {}", term, e);
+            if let Err(_e) = cmd.spawn() {
+                // Failed to launch terminal
             }
         } else {
-            eprintln!("No terminal emulator found");
+            // No terminal emulator found
         }
     } else {
         // Run directly without terminal
         let mut cmd = std::process::Command::new("sh");
         cmd.arg("-c").arg(&clean);
-        if let Err(e) = cmd.spawn() {
-            eprintln!("Failed to launch {}: {}", clean, e);
+        if let Err(_e) = cmd.spawn() {
+            // Failed to launch
         }
     }
 }
@@ -149,8 +149,8 @@ pub fn launch_app(exec: &str, terminal: bool) {
 /// logout_action() handles logout with various methods.
 pub fn power_action(action: &str) {
     let run_systemctl = |subcmd: &str| {
-        if let Err(e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
-            eprintln!("Failed to run systemctl {}: {}", subcmd, e);
+        if let Err(_e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
+            // Failed to run systemctl
         }
     };
 
@@ -214,8 +214,8 @@ pub fn open_settings() {
 
     // Ensure config directory exists
     if let Some(dir) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(dir) {
-            eprintln!("Failed to create config dir: {}", e);
+        if let Err(_e) = std::fs::create_dir_all(dir) {
+            // Failed to create config dir
         }
     }
 
@@ -225,8 +225,8 @@ pub fn open_settings() {
     }
 
     // Open with system default editor
-    if let Err(e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
-        eprintln!("Failed to open settings with xdg-open: {}", e);
+    if let Err(_e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
+        // Failed to open settings with xdg-open
     }
 }
 
@@ -279,8 +279,8 @@ pub fn open_file_or_line(line: &str) {
             }
             cmd.arg(file);
 
-            if let Err(e) = cmd.spawn() {
-                eprintln!("Failed to open file at line: {}", e);
+            if let Err(_e) = cmd.spawn() {
+                // Failed to open file at line
             }
             return;
         }
@@ -288,8 +288,8 @@ pub fn open_file_or_line(line: &str) {
 
     // If not a file:line pattern or file doesn't exist, try opening as plain file
     if Path::new(line).exists() {
-        if let Err(e) = std::process::Command::new("xdg-open").arg(line).spawn() {
-            eprintln!("Failed to open file: {}", e);
+        if let Err(_e) = std::process::Command::new("xdg-open").arg(line).spawn() {
+            // Failed to open file
         }
     } else {
         // Path doesn't exist - copy text to clipboard as fallback
@@ -313,7 +313,6 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
 
     // Validate vault path exists
     if !vault_path.exists() {
-        eprintln!("Vault path does not exist: {}", vault_path.display());
         return;
     }
 
@@ -327,8 +326,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
         ObsidianAction::NewNote => {
             // Create a new note with timestamp in the configured folder
             let folder = vault_path.join(&cfg.new_notes_folder);
-            if let Err(e) = fs::create_dir_all(&folder) {
-                eprintln!("Cannot create folder {}: {}", folder.display(), e);
+            if let Err(_e) = fs::create_dir_all(&folder) {
                 return;
             }
 
@@ -340,8 +338,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Create the note file
             let mut file = match File::create(&path) {
                 Ok(f) => f,
-                Err(e) => {
-                    eprintln!("Cannot create note {}: {}", path.display(), e);
+                Err(_e) => {
                     return;
                 }
             };
@@ -349,8 +346,8 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Write optional text content to the note
             if let Some(t) = text {
                 if !t.is_empty() {
-                    if let Err(e) = writeln!(file, "{}", t) {
-                        eprintln!("Cannot write to note {}: {}", path.display(), e);
+                    if let Err(_e) = writeln!(file, "{}", t) {
+                        // Cannot write to note
                     }
                 }
             }
@@ -365,8 +362,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
         ObsidianAction::DailyNote => {
             // Open or create today's daily note
             let folder = vault_path.join(&cfg.daily_notes_folder);
-            if let Err(e) = fs::create_dir_all(&folder) {
-                eprintln!("Cannot create folder {}: {}", folder.display(), e);
+            if let Err(_e) = fs::create_dir_all(&folder) {
                 return;
             }
 
@@ -377,8 +373,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Open in append mode to preserve existing content
             let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
                 Ok(f) => f,
-                Err(e) => {
-                    eprintln!("Cannot open daily note {}: {}", path.display(), e);
+                Err(_e) => {
                     return;
                 }
             };
@@ -403,8 +398,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
 
             // Ensure parent directory exists
             if let Some(parent) = path.parent() {
-                if let Err(e) = fs::create_dir_all(parent) {
-                    eprintln!("Cannot create folder {}: {}", parent.display(), e);
+                if let Err(_e) = fs::create_dir_all(parent) {
                     return;
                 }
             }
@@ -443,7 +437,6 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
 
     // Validate vault exists
     if !vault_path.exists() {
-        eprintln!("Vault path does not exist: {}", vault_path.display());
         return;
     }
 
@@ -465,7 +458,6 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
 
     // Validate vault exists
     if !vault_path.exists() {
-        eprintln!("Vault path does not exist: {}", vault_path.display());
         return;
     }
 
@@ -492,7 +484,7 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
 ///
 /// Uses the system's default URI handler (xdg-open on Linux) to open the URI.
 fn open_uri(uri: &str) {
-    if let Err(e) = std::process::Command::new("xdg-open").arg(uri).spawn() {
-        eprintln!("Failed to open URI {}: {}", uri, e);
+    if let Err(_e) = std::process::Command::new("xdg-open").arg(uri).spawn() {
+        // Failed to open URI
     }
 }

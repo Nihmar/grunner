@@ -488,8 +488,8 @@ async fn query_all_streaming(
     // Get or create D-Bus connection
     let conn = match get_or_init_conn().await {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("[search] cannot connect to session bus: {}", e);
+        Err(_e) => {
+            // Cannot connect to session bus
             return;
         }
     };
@@ -512,7 +512,7 @@ async fn query_all_streaming(
         .collect();
 
     // Process results as they complete
-    while let Some((bus_name, outcome)) = futs.next().await {
+    while let Some((_bus_name, outcome)) = futs.next().await {
         match outcome {
             Ok(results) if !results.is_empty() => {
                 // Send batch of results back to main thread
@@ -520,7 +520,7 @@ async fn query_all_streaming(
                     break; // Channel closed, stop processing
                 }
             }
-            Err(e) => eprintln!("[search] provider {} error: {}", bus_name, e),
+            Err(_e) => { /* Provider error */ }
             _ => {} // Empty results or other non-error cases
         }
     }
@@ -661,14 +661,14 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
             .as_secs() as u32;
 
         let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
-        if let Err(e) = proxy
+        if let Err(_e) = proxy
             .call::<_, _, ()>(
                 "ActivateResult",
                 &(result_id.as_str(), &terms_str, timestamp),
             )
             .await
         {
-            eprintln!("[search] ActivateResult error: {}", e);
+            // ActivateResult error
         }
     });
 }

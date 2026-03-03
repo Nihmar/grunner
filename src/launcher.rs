@@ -112,8 +112,8 @@ fn save_cache(apps: &[DesktopApp]) {
 
     // Ensure cache directory exists
     if let Some(dir) = path.parent() {
-        if let Err(e) = fs::create_dir_all(dir) {
-            eprintln!("Failed to create cache dir: {}", e);
+        if let Err(_e) = fs::create_dir_all(dir) {
+            // Failed to create cache dir
             return;
         }
     }
@@ -121,11 +121,11 @@ fn save_cache(apps: &[DesktopApp]) {
     // Serialize and write cache
     match bincode::serialize(apps) {
         Ok(bytes) => {
-            if let Err(e) = fs::write(&path, &bytes) {
-                eprintln!("Failed to write app cache: {}", e);
+            if let Err(_e) = fs::write(&path, &bytes) {
+                // Failed to write app cache
             }
         }
-        Err(e) => eprintln!("Failed to serialize app cache: {}", e),
+        Err(_e) => { /* Failed to serialize app cache */ }
     }
 }
 
