@@ -1,11 +1,11 @@
-<svg width="100" height="60" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
-  <!-- Pill background: soft light gray, rounded corners -->
-  <rect x="5" y="5" width="90" height="50" rx="10" ry="10" fill="#fafafa" stroke="#e0e0e0" stroke-width="1"/>
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Pill background: soft light gray, perfectly centered vertically -->
+  <rect x="5" y="25" width="90" height="50" rx="10" ry="10" fill="#fafafa" stroke="#e0e0e0" stroke-width="1"/>
 
-  <!-- Colon: two thick dots -->
-  <circle cx="32" cy="22" r="4.5" fill="#333"/>
-  <circle cx="32" cy="38" r="4.5" fill="#333"/>
+  <!-- Colon: two thick dots (positioned within the pill) -->
+  <circle cx="32" cy="42" r="4.5" fill="#333"/>
+  <circle cx="32" cy="58" r="4.5" fill="#333"/>
 
-  <!-- Underscore: now with rounding proportional to the pill (20% of height = 1.2) -->
-  <rect x="44" y="41" width="26" height="6" rx="1.2" ry="1.2" fill="#333"/>
+  <!-- Underscore: thick line with proportional rounding, placed to the right of colon -->
+  <rect x="44" y="61" width="26" height="6" rx="1.2" ry="1.2" fill="#333"/>
 </svg>
