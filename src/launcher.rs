@@ -11,6 +11,7 @@
 //! - Filtering of non-application and hidden entries
 
 use jwalk::WalkDir;
+use log::{debug, error, info, trace};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -83,21 +84,58 @@ fn dirs_max_mtime(dirs: &[PathBuf]) -> Option<SystemTime> {
 /// `None` if cache is stale, missing, or corrupt.
 fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
     let cache = cache_path();
+    debug!("Checking application cache at {:?}", cache);
 
     // Get cache file modification time
-    let cache_mtime = fs::metadata(&cache).ok()?.modified().ok()?;
+    let cache_mtime = match fs::metadata(&cache) {
+        Ok(metadata) => match metadata.modified() {
+            Ok(mtime) => mtime,
+            Err(e) => {
+                debug!("Failed to get cache file modification time: {}", e);
+                return None;
+            }
+        },
+        Err(e) => {
+            debug!("Cache file not found or inaccessible: {}", e);
+            return None;
+        }
+    };
 
     // Get latest directory modification time
-    let dirs_mtime = dirs_max_mtime(dirs)?;
+    let dirs_mtime = match dirs_max_mtime(dirs) {
+        Some(mtime) => mtime,
+        None => {
+            debug!("Failed to get directory modification times");
+            return None;
+        }
+    };
 
     // Cache is stale if directories were modified after cache was created
     if dirs_mtime > cache_mtime {
+        info!("Cache is stale (dirs modified after cache creation)");
         return None;
     }
 
-    // Read and deserialize cache
-    let bytes = fs::read(&cache).ok()?;
-    bincode::deserialize(&bytes).ok()
+    // Read cache file
+    let bytes = match fs::read(&cache) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            error!("Failed to read cache file: {}", e);
+            return None;
+        }
+    };
+
+    // Deserialize cache
+    match bincode::deserialize::<Vec<DesktopApp>>(&bytes) {
+        Ok(apps) => {
+            info!("Loaded {} applications from cache", apps.len());
+            Some(apps)
+        }
+        Err(e) => {
+            error!("Failed to deserialize cache: {}", e);
+            None
+        }
+    }
 }
 
 /// Save parsed applications to cache for faster future loads
@@ -109,23 +147,31 @@ fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
 /// for fast reading/writing and compact storage.
 fn save_cache(apps: &[DesktopApp]) {
     let path = cache_path();
+    debug!("Saving {} applications to cache at {:?}", apps.len(), path);
 
     // Ensure cache directory exists
     if let Some(dir) = path.parent() {
-        if let Err(_e) = fs::create_dir_all(dir) {
-            // Failed to create cache dir
+        if let Err(e) = fs::create_dir_all(dir) {
+            error!("Failed to create cache directory {:?}: {}", dir, e);
             return;
+        } else {
+            debug!("Created cache directory: {:?}", dir);
         }
     }
 
     // Serialize and write cache
     match bincode::serialize(apps) {
         Ok(bytes) => {
-            if let Err(_e) = fs::write(&path, &bytes) {
-                // Failed to write app cache
+            debug!("Serialized {} bytes of cache data", bytes.len());
+            if let Err(e) = fs::write(&path, &bytes) {
+                error!("Failed to write cache to {:?}: {}", path, e);
+            } else {
+                info!("Saved {} applications to cache", apps.len());
             }
         }
-        Err(_e) => { /* Failed to serialize app cache */ }
+        Err(e) => {
+            error!("Failed to serialize cache: {}", e);
+        }
     }
 }
 
@@ -144,11 +190,20 @@ fn save_cache(apps: &[DesktopApp]) {
 /// # Returns
 /// Vector of parsed `DesktopApp` instances
 fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
+    info!("Scanning {} directories for .desktop files", dirs.len());
+
     // Collect all .desktop file paths using parallel iteration
     let paths: Vec<PathBuf> = dirs
         .par_iter()
-        .filter(|d| d.exists()) // Skip non-existent directories
+        .filter(|d| {
+            let exists = d.exists();
+            if !exists {
+                debug!("Skipping non-existent directory: {:?}", d);
+            }
+            exists
+        })
         .flat_map(|dir| {
+            debug!("Scanning directory: {:?}", dir);
             WalkDir::new(dir)
                 .into_iter()
                 .filter_map(Result::ok)
@@ -158,6 +213,8 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
         })
         .collect();
 
+    debug!("Found {} .desktop files before deduplication", paths.len());
+
     // Remove duplicate paths using a hash set for deduplication
     let mut seen = HashSet::new();
     let unique_paths: Vec<PathBuf> = paths
@@ -165,14 +222,27 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
         .filter(|p| seen.insert(p.clone()))
         .collect();
 
+    debug!(
+        "{} unique .desktop files after deduplication",
+        unique_paths.len()
+    );
+
     // Parse desktop files in parallel and collect valid applications
     let mut apps: Vec<DesktopApp> = unique_paths
         .par_iter()
         .filter_map(|p| parse_desktop_file(p))
         .collect();
 
+    debug!("Successfully parsed {} applications", apps.len());
+
     // Sort applications alphabetically for consistent UI presentation
     apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    info!(
+        "Scanned {} applications from {} directories",
+        apps.len(),
+        dirs.len()
+    );
     apps
 }
 
@@ -191,11 +261,18 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
 pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     // First attempt to load from cache
     if let Some(cached) = try_load_cache(dirs) {
+        info!("Cache hit: loaded {} applications from cache", cached.len());
         return cached;
     }
 
+    info!("Cache miss or invalid, scanning application directories");
     // Cache miss or invalid - perform fresh scan
     let apps = scan_apps(dirs);
+    info!(
+        "Scanned {} applications from {} directories",
+        apps.len(),
+        dirs.len()
+    );
 
     // Save to cache for future use
     save_cache(&apps);
@@ -219,6 +296,7 @@ pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
 /// `None` if it's not an application or should be hidden.
 fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     // Read file content
+    trace!("Parsing desktop file: {:?}", path);
     let content = fs::read_to_string(path).ok()?;
 
     // Initialize parser state
@@ -280,14 +358,41 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     }
 
     // Filter out non-applications and hidden entries
-    if app_type != "Application" || no_display || hidden {
+    if app_type != "Application" {
+        trace!(
+            "Skipping non-application entry (type: {}) in {:?}",
+            app_type,
+            path
+        );
+        return None;
+    }
+    if no_display {
+        trace!("Skipping NoDisplay=true entry in {:?}", path);
+        return None;
+    }
+    if hidden {
+        trace!("Skipping Hidden=true entry in {:?}", path);
         return None;
     }
 
     // Return parsed application (requires at least name and exec)
+    let Some(name) = name else {
+        debug!("Missing Name field in desktop file {:?}", path);
+        return None;
+    };
+    let Some(exec) = exec else {
+        debug!("Missing Exec field in desktop file {:?}", path);
+        return None;
+    };
+
+    trace!(
+        "Successfully parsed desktop application: {} from {:?}",
+        name,
+        path
+    );
     Some(DesktopApp {
-        name: name?,
-        exec: exec?,
+        name,
+        exec,
         description,
         icon,
         terminal,

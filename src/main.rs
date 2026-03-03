@@ -6,6 +6,7 @@ mod config;
 mod item_activation;
 mod launcher;
 mod list_model;
+mod logging;
 mod obsidian_bar;
 mod obsidian_item;
 mod power_bar;
@@ -39,6 +40,18 @@ fn main() -> glib::ExitCode {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
     }
+
+    // Initialize logging system
+    if let Err(e) = logging::init() {
+        eprintln!("Failed to initialize logging: {}", e);
+        // Continue without logging
+    }
+
+    // Set up panic hook to log panics
+    logging::setup_panic_hook();
+
+    // Log application startup
+    log::info!("Grunner {} starting up", env!("CARGO_PKG_VERSION"));
 
     // Load application configuration from file
     let cfg = config::load();

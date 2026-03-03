@@ -14,6 +14,7 @@ use crate::obsidian_item::ObsidianAction;
 use crate::utils::expand_home;
 use chrono::Local;
 use gtk4::prelude::DisplayExt;
+use log::{debug, error, info, warn};
 
 use std::fs;
 use std::fs::File;
@@ -102,9 +103,14 @@ fn find_terminal() -> Option<String> {
 /// If `terminal` is true, launches the command inside the discovered terminal emulator.
 /// Different terminals have different argument syntax for running commands.
 pub fn launch_app(exec: &str, terminal: bool) {
+    debug!("Launching application: {} (terminal: {})", exec, terminal);
     let clean = launcher::clean_exec(exec);
+    debug!("Cleaned execution command: {}", clean);
+
     if terminal {
+        debug!("Looking for terminal emulator");
         if let Some(term) = find_terminal() {
+            info!("Using terminal emulator: {}", term);
             let mut cmd = std::process::Command::new(&term);
             match term.as_str() {
                 // GNOME and XFCE terminals use "--" separator
@@ -124,18 +130,30 @@ pub fn launch_app(exec: &str, terminal: bool) {
                     cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
                 }
             }
-            if let Err(_e) = cmd.spawn() {
-                // Failed to launch terminal
+            debug!("Spawning terminal command: {:?}", cmd);
+            if let Err(e) = cmd.spawn() {
+                error!(
+                    "Failed to launch terminal {} with command '{}': {}",
+                    term, clean, e
+                );
+            } else {
+                info!(
+                    "Successfully launched application in terminal {}: {}",
+                    term, clean
+                );
             }
         } else {
-            // No terminal emulator found
+            warn!("No terminal emulator found for command: {}", clean);
         }
     } else {
         // Run directly without terminal
         let mut cmd = std::process::Command::new("sh");
         cmd.arg("-c").arg(&clean);
-        if let Err(_e) = cmd.spawn() {
-            // Failed to launch
+        debug!("Spawning command directly: {:?}", cmd);
+        if let Err(e) = cmd.spawn() {
+            error!("Failed to launch command '{}': {}", clean, e);
+        } else {
+            info!("Successfully launched application: {}", clean);
         }
     }
 }
@@ -148,18 +166,36 @@ pub fn launch_app(exec: &str, terminal: bool) {
 /// Uses systemctl for suspend, reboot, and poweroff actions.
 /// logout_action() handles logout with various methods.
 pub fn power_action(action: &str) {
+    debug!("Performing power action: {}", action);
     let run_systemctl = |subcmd: &str| {
-        if let Err(_e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
-            // Failed to run systemctl
+        debug!("Running systemctl {}", subcmd);
+        if let Err(e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
+            error!("Failed to run systemctl {}: {}", subcmd, e);
+        } else {
+            info!("Successfully initiated systemctl {}", subcmd);
         }
     };
 
     match action {
-        "logout" => logout_action(),
-        "suspend" => run_systemctl("suspend"),
-        "reboot" => run_systemctl("reboot"),
-        "poweroff" => run_systemctl("poweroff"),
-        _ => {}
+        "logout" => {
+            info!("Logging out current session");
+            logout_action()
+        }
+        "suspend" => {
+            info!("Suspending system");
+            run_systemctl("suspend")
+        }
+        "reboot" => {
+            info!("Rebooting system");
+            run_systemctl("reboot")
+        }
+        "poweroff" => {
+            info!("Shutting down system");
+            run_systemctl("poweroff")
+        }
+        _ => {
+            warn!("Unknown power action: {}", action);
+        }
     }
 }
 
@@ -170,38 +206,69 @@ pub fn power_action(action: &str) {
 /// 2. Use gnome-session-quit for GNOME sessions
 /// 3. Use loginctl with current username as fallback
 fn logout_action() {
+    debug!("Attempting to log out current session");
     // First try: Use XDG_SESSION_ID if available
     if let Ok(session_id) = std::env::var("XDG_SESSION_ID") {
         if !session_id.is_empty() {
+            debug!("Using XDG_SESSION_ID {} for logout", session_id);
             let status = std::process::Command::new("loginctl")
                 .args(["terminate-session", &session_id])
                 .status();
             if let Ok(status) = status {
                 if status.success() {
+                    info!("Successfully logged out via loginctl with XDG_SESSION_ID");
                     return;
+                } else {
+                    warn!(
+                        "loginctl terminate-session failed with status: {:?}",
+                        status
+                    );
                 }
+            } else {
+                error!("Failed to execute loginctl terminate-session command");
             }
+        } else {
+            debug!("XDG_SESSION_ID is empty");
         }
+    } else {
+        debug!("XDG_SESSION_ID environment variable not set");
     }
 
     // Second try: Use GNOME session quit command
     if let Some(path) = which("gnome-session-quit") {
+        debug!("Using gnome-session-quit at {:?} for logout", path);
         let status = std::process::Command::new(path).arg("--logout").status();
         if let Ok(status) = status {
             if status.success() {
+                info!("Successfully logged out via gnome-session-quit");
                 return;
+            } else {
+                warn!("gnome-session-quit failed with status: {:?}", status);
             }
+        } else {
+            error!("Failed to execute gnome-session-quit command");
         }
+    } else {
+        debug!("gnome-session-quit not found in PATH");
     }
 
     // Final fallback: Terminate user session via loginctl
+    debug!("Falling back to loginctl terminate-user");
     let user = std::env::var("USER")
         .or_else(|_| std::env::var("LOGNAME"))
         .unwrap_or_default();
     if !user.is_empty() {
-        let _ = std::process::Command::new("loginctl")
+        info!("Logging out user {} via loginctl terminate-user", user);
+        if let Err(e) = std::process::Command::new("loginctl")
             .args(["terminate-user", &user])
-            .spawn();
+            .spawn()
+        {
+            error!("Failed to execute loginctl terminate-user: {}", e);
+        } else {
+            info!("Successfully initiated logout for user {}", user);
+        }
+    } else {
+        warn!("Cannot determine current user for logout");
     }
 }
 
@@ -211,22 +278,31 @@ fn logout_action() {
 /// and opens it with the system's default text editor via xdg-open.
 pub fn open_settings() {
     let path = config::config_path();
+    debug!("Opening settings file at {:?}", path);
 
     // Ensure config directory exists
     if let Some(dir) = path.parent() {
-        if let Err(_e) = std::fs::create_dir_all(dir) {
-            // Failed to create config dir
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            warn!("Failed to create config directory {:?}: {}", dir, e);
+        } else {
+            debug!("Created config directory: {:?}", dir);
         }
     }
 
     // Ensure config file exists by loading it
     if !path.exists() {
+        debug!("Config file does not exist, creating default");
         config::load();
+    } else {
+        debug!("Config file exists at {:?}", path);
     }
 
     // Open with system default editor
-    if let Err(_e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
-        // Failed to open settings with xdg-open
+    info!("Opening settings file with xdg-open: {:?}", path);
+    if let Err(e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
+        error!("Failed to open settings with xdg-open: {}", e);
+    } else {
+        info!("Successfully opened settings file");
     }
 }
 
@@ -266,11 +342,14 @@ fn parse_file_line(line: &str) -> Option<(&str, u32)> {
 /// If it's just a file path, opens the file.
 /// If the path doesn't exist, copies the text to clipboard as a fallback.
 pub fn open_file_or_line(line: &str) {
+    debug!("Opening file or line: {}", line);
     // Check if input matches "file:line:content" pattern (like grep -n output)
     if let Some((file, line_num)) = parse_file_line(line) {
         // Verify file exists before attempting to open
         if Path::new(file).exists() {
+            info!("Opening file {} at line {}", file, line_num);
             let editor = std::env::var("EDITOR").unwrap_or_else(|_| "xdg-open".to_string());
+            debug!("Using editor: {}", editor);
             let mut cmd = std::process::Command::new(&editor);
 
             // Add line number argument for text editors (not for xdg-open)
@@ -279,8 +358,11 @@ pub fn open_file_or_line(line: &str) {
             }
             cmd.arg(file);
 
-            if let Err(_e) = cmd.spawn() {
-                // Failed to open file at line
+            debug!("Spawning command: {:?}", cmd);
+            if let Err(e) = cmd.spawn() {
+                error!("Failed to open file {} at line {}: {}", file, line_num, e);
+            } else {
+                info!("Successfully opened file {} at line {}", file, line_num);
             }
             return;
         }
@@ -288,14 +370,19 @@ pub fn open_file_or_line(line: &str) {
 
     // If not a file:line pattern or file doesn't exist, try opening as plain file
     if Path::new(line).exists() {
-        if let Err(_e) = std::process::Command::new("xdg-open").arg(line).spawn() {
-            // Failed to open file
+        info!("Opening file: {}", line);
+        if let Err(e) = std::process::Command::new("xdg-open").arg(line).spawn() {
+            error!("Failed to open file {} with xdg-open: {}", line, e);
+        } else {
+            info!("Successfully opened file: {}", line);
         }
     } else {
         // Path doesn't exist - copy text to clipboard as fallback
+        warn!("Path does not exist, copying to clipboard: {}", line);
         let display = gtk4::gdk::Display::default().expect("cannot get display");
         let clipboard = display.clipboard();
         clipboard.set_text(line);
+        info!("Copied text to clipboard: {}", line);
     }
 }
 
@@ -309,24 +396,34 @@ pub fn open_file_or_line(line: &str) {
 /// Handles all Obsidian operations: opening vault, creating new notes,
 /// daily notes, and quick notes.
 pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: &ObsidianConfig) {
+    debug!(
+        "Performing Obsidian action: {:?} with text: {:?}",
+        action, text
+    );
     let vault_path = expand_home(&cfg.vault);
+    debug!("Obsidian vault path: {:?}", vault_path);
 
     // Validate vault path exists
     if !vault_path.exists() {
+        error!("Obsidian vault path does not exist: {:?}", vault_path);
         return;
     }
 
     match action {
         ObsidianAction::OpenVault => {
             // Open entire vault in Obsidian
+            info!("Opening Obsidian vault");
             let vault_name = vault_path.file_name().unwrap_or_default().to_string_lossy();
             let uri = format!("obsidian://open?vault={}", urlencoding::encode(&vault_name));
             open_uri(&uri);
         }
         ObsidianAction::NewNote => {
             // Create a new note with timestamp in the configured folder
+            info!("Creating new Obsidian note");
             let folder = vault_path.join(&cfg.new_notes_folder);
-            if let Err(_e) = fs::create_dir_all(&folder) {
+            debug!("New note folder: {:?}", folder);
+            if let Err(e) = fs::create_dir_all(&folder) {
+                error!("Failed to create new note folder {:?}: {}", folder, e);
                 return;
             }
 
@@ -336,9 +433,11 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             let path = folder.join(filename);
 
             // Create the note file
+            debug!("Creating note file: {:?}", path);
             let mut file = match File::create(&path) {
                 Ok(f) => f,
-                Err(_e) => {
+                Err(e) => {
+                    error!("Failed to create note file {:?}: {}", path, e);
                     return;
                 }
             };
@@ -346,8 +445,9 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Write optional text content to the note
             if let Some(t) = text {
                 if !t.is_empty() {
-                    if let Err(_e) = writeln!(file, "{}", t) {
-                        // Cannot write to note
+                    debug!("Writing {} characters to note", t.len());
+                    if let Err(e) = writeln!(file, "{}", t) {
+                        error!("Failed to write text to note {:?}: {}", path, e);
                     }
                 }
             }
@@ -361,8 +461,11 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
         }
         ObsidianAction::DailyNote => {
             // Open or create today's daily note
+            info!("Opening/creating daily Obsidian note");
             let folder = vault_path.join(&cfg.daily_notes_folder);
-            if let Err(_e) = fs::create_dir_all(&folder) {
+            debug!("Daily notes folder: {:?}", folder);
+            if let Err(e) = fs::create_dir_all(&folder) {
+                error!("Failed to create daily notes folder {:?}: {}", folder, e);
                 return;
             }
 
@@ -371,9 +474,11 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             let path = folder.join(format!("{}.md", today));
 
             // Open in append mode to preserve existing content
+            debug!("Opening daily note file: {:?}", path);
             let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
                 Ok(f) => f,
-                Err(_e) => {
+                Err(e) => {
+                    error!("Failed to open daily note file {:?}: {}", path, e);
                     return;
                 }
             };
@@ -381,7 +486,10 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Append optional text to the daily note
             if let Some(t) = text {
                 if !t.is_empty() {
-                    writeln!(file, "{}", t).ok();
+                    debug!("Appending {} characters to daily note", t.len());
+                    if let Err(e) = writeln!(file, "{}", t) {
+                        error!("Failed to append text to daily note {:?}: {}", path, e);
+                    }
                 }
             }
 
@@ -394,11 +502,17 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
         }
         ObsidianAction::QuickNote => {
             // Append text to the configured quick note file
+            info!("Updating quick Obsidian note");
             let path = vault_path.join(&cfg.quick_note);
+            debug!("Quick note path: {:?}", path);
 
             // Ensure parent directory exists
             if let Some(parent) = path.parent() {
-                if let Err(_e) = fs::create_dir_all(parent) {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    error!(
+                        "Failed to create quick note parent directory {:?}: {}",
+                        parent, e
+                    );
                     return;
                 }
             }
@@ -406,12 +520,18 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Append text to quick note if provided
             if let Some(t) = text {
                 if !t.is_empty() {
-                    let mut file = fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&path)
-                        .expect("cannot open quick note");
-                    writeln!(file, "{}", t).ok();
+                    debug!("Appending {} characters to quick note", t.len());
+                    let mut file =
+                        match fs::OpenOptions::new().create(true).append(true).open(&path) {
+                            Ok(f) => f,
+                            Err(e) => {
+                                error!("Failed to open quick note file {:?}: {}", path, e);
+                                return;
+                            }
+                        };
+                    if let Err(e) = writeln!(file, "{}", t) {
+                        error!("Failed to write to quick note {:?}: {}", path, e);
+                    }
                 }
             }
 
@@ -433,10 +553,12 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
 ///
 /// Opens the specified file in Obsidian using the obsidian:// URI scheme.
 pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
+    debug!("Opening Obsidian file path: {}", file_path);
     let vault_path = expand_home(&cfg.vault);
 
     // Validate vault exists
     if !vault_path.exists() {
+        error!("Obsidian vault path does not exist: {:?}", vault_path);
         return;
     }
 
@@ -454,10 +576,12 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
 ///
 /// Opens the specified file in Obsidian and jumps to the given line number.
 pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig) {
+    debug!("Opening Obsidian file at line: {}:{}", file_path, line);
     let vault_path = expand_home(&cfg.vault);
 
     // Validate vault exists
     if !vault_path.exists() {
+        error!("Obsidian vault path does not exist: {:?}", vault_path);
         return;
     }
 
@@ -467,6 +591,7 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
     } else {
         vault_path.join(file_path)
     };
+    debug!("Resolved path: {:?}", path);
 
     // Construct Obsidian URI with line parameter
     let uri = format!(
@@ -484,7 +609,10 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
 ///
 /// Uses the system's default URI handler (xdg-open on Linux) to open the URI.
 fn open_uri(uri: &str) {
-    if let Err(_e) = std::process::Command::new("xdg-open").arg(uri).spawn() {
-        // Failed to open URI
+    debug!("Opening URI: {}", uri);
+    if let Err(e) = std::process::Command::new("xdg-open").arg(uri).spawn() {
+        error!("Failed to open URI '{}': {}", uri, e);
+    } else {
+        info!("Successfully opened URI: {}", uri);
     }
 }

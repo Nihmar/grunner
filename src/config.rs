@@ -14,6 +14,7 @@
 //! - Search provider filtering
 
 use crate::utils::expand_home;
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -197,23 +198,38 @@ pub fn load() -> Config {
 
     // If config file doesn't exist, create it with defaults
     if !path.exists() {
+        info!(
+            "Configuration file not found at {:?}, creating default",
+            path
+        );
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).ok();
+            if std::fs::create_dir_all(dir).is_ok() {
+                debug!("Created configuration directory: {:?}", dir);
+            }
         }
-        std::fs::write(&path, default_toml()).ok();
+        if std::fs::write(&path, default_toml()).is_ok() {
+            info!("Created default configuration file at {:?}", path);
+        } else {
+            warn!("Failed to create default configuration file at {:?}", path);
+        }
         return Config::default();
     }
 
     // Read existing config file
     let content = match std::fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(_e) => {
+        Ok(s) => {
+            debug!("Successfully read configuration file from {:?}", path);
+            s
+        }
+        Err(e) => {
             // Failed to read config file
+            error!("Failed to read configuration file from {:?}: {}", path, e);
             return Config::default();
         }
     };
 
     // Parse TOML and apply to default configuration
+    debug!("Parsing configuration TOML ({} bytes)", content.len());
     apply_toml(&content)
 }
 
@@ -233,9 +249,13 @@ fn apply_toml(content: &str) -> Config {
 
     // Parse TOML content
     let toml_cfg: TomlConfig = match toml::from_str(content) {
-        Ok(c) => c,
-        Err(_e) => {
+        Ok(c) => {
+            debug!("Successfully parsed configuration TOML");
+            c
+        }
+        Err(e) => {
             // Failed to parse config
+            error!("Failed to parse configuration TOML: {}", e);
             return cfg;
         }
     };
@@ -243,9 +263,11 @@ fn apply_toml(content: &str) -> Config {
     // Apply window settings if present
     if let Some(window) = toml_cfg.window {
         if let Some(w) = window.width.filter(|&v| v > 0) {
+            debug!("Setting window width to {}", w);
             cfg.window_width = w;
         }
         if let Some(h) = window.height.filter(|&v| v > 0) {
+            debug!("Setting window height to {}", h);
             cfg.window_height = h;
         }
     }
@@ -253,15 +275,19 @@ fn apply_toml(content: &str) -> Config {
     // Apply search settings if present
     if let Some(search) = toml_cfg.search {
         if let Some(m) = search.max_results.filter(|&v| v > 0) {
+            debug!("Setting max_results to {}", m);
             cfg.max_results = m;
         }
         if let Some(dirs) = search.app_dirs {
+            debug!("Setting app_dirs to {:?}", dirs);
             cfg.app_dirs = dirs.into_iter().map(|s| expand_home(&s)).collect();
         }
         if let Some(debounce) = search.command_debounce_ms {
+            debug!("Setting command_debounce_ms to {}", debounce);
             cfg.command_debounce_ms = debounce;
         }
         if let Some(blacklist) = search.provider_blacklist {
+            debug!("Setting search_provider_blacklist to {:?}", blacklist);
             cfg.search_provider_blacklist = blacklist;
         }
     }
@@ -269,17 +295,23 @@ fn apply_toml(content: &str) -> Config {
     // Apply calculator settings if present
     if let Some(calc) = toml_cfg.calculator {
         if let Some(enabled) = calc.enabled {
+            debug!("Setting calculator enabled to {}", enabled);
             cfg.calculator = enabled;
         }
     }
 
     // Apply custom commands if present (replaces defaults)
     if let Some(cmds) = toml_cfg.commands {
+        debug!(
+            "Setting custom commands: {:?}",
+            cmds.keys().collect::<Vec<_>>()
+        );
         cfg.commands = cmds;
     }
 
     // Apply Obsidian settings if present
     if let Some(obs) = toml_cfg.obsidian {
+        debug!("Setting Obsidian configuration");
         cfg.obsidian = Some(obs);
     }
 

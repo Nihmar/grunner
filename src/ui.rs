@@ -30,6 +30,7 @@ use gtk4::{
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow};
+use log::{error, info, trace};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -50,14 +51,17 @@ fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>, model: Ap
     match rx.try_recv() {
         Ok(apps) => {
             // Apps loaded successfully - update the model
+            info!("Loaded {} applications", apps.len());
             model.set_apps(apps);
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => {
             // No data yet - reschedule polling on next idle
+            trace!("Application loading still in progress");
             glib::idle_add_local_once(move || poll_apps(rx, model));
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
             // Thread finished (shouldn't happen without sending data)
+            error!("Application loading thread terminated unexpectedly");
         }
     }
 }

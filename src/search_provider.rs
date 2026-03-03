@@ -15,6 +15,7 @@
 //! to communicate with search providers while keeping the UI responsive.
 
 use futures::stream::{FuturesUnordered, StreamExt};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -155,13 +156,19 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
         )),
     ];
 
+    debug!("Discovering search providers, blacklist: {:?}", blacklist);
     let mut providers = Vec::new();
     for dir in dirs {
         if !dir.is_dir() {
+            debug!("Skipping non-directory or missing directory: {:?}", dir);
             continue;
         }
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warn!("Failed to read directory {:?}: {}", dir, e);
+                continue;
+            }
         };
         for entry in entries.flatten() {
             let path = entry.path();
@@ -170,13 +177,18 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
                 if let Some(p) = parse_ini(&path) {
                     // Skip if this provider's desktop_id is in the blacklist
                     if blacklist.iter().any(|b| b == &p.desktop_id) {
+                        debug!("Skipping blacklisted provider: {}", p.desktop_id);
                         continue;
                     }
+                    debug!("Discovered provider: {} from {:?}", p.desktop_id, path);
                     providers.push(p);
+                } else {
+                    debug!("Failed to parse provider .ini file: {:?}", path);
                 }
             }
         }
     }
+    info!("Discovered {} search providers", providers.len());
     providers
 }
 
@@ -192,7 +204,13 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
 /// `Some(SearchProvider)` if the file is valid and version 2,
 /// `None` otherwise.
 fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            debug!("Failed to read .ini file {:?}: {}", path, e);
+            return None;
+        }
+    };
     let mut bus_name = None;
     let mut object_path = None;
     let mut desktop_id = None;
@@ -217,14 +235,48 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
 
     // Only support version 2 of the search provider API
     if version != Some(2) {
+        if let Some(v) = version {
+            debug!(
+                "Skipping provider {:?} with unsupported version {}",
+                path, v
+            );
+        } else {
+            debug!("Skipping provider {:?} with missing version", path);
+        }
         return None;
     }
 
-    let desktop_id = desktop_id?;
+    let desktop_id = match desktop_id {
+        Some(id) => id,
+        None => {
+            debug!("Provider {:?} missing DesktopId field", path);
+            return None;
+        }
+    };
 
+    let bus_name = match bus_name {
+        Some(name) => name,
+        None => {
+            debug!("Provider {:?} missing BusName field", path);
+            return None;
+        }
+    };
+
+    let object_path = match object_path {
+        Some(path) => path,
+        None => {
+            debug!("Provider {:?} missing ObjectPath field", path);
+            return None;
+        }
+    };
+
+    debug!(
+        "Successfully parsed provider: {} from {:?}",
+        desktop_id, path
+    );
     Some(SearchProvider {
-        bus_name: bus_name?,
-        object_path: object_path?,
+        bus_name,
+        object_path,
         app_icon: resolve_app_icon(&desktop_id),
         desktop_id,
     })
@@ -250,6 +302,11 @@ pub fn resolve_app_icon(desktop_id: &str) -> String {
         format!("{}.desktop", desktop_id)
     };
 
+    debug!(
+        "Resolving app icon for desktop ID: {} (filename: {})",
+        desktop_id, filename
+    );
+
     // Search in standard desktop entry directories
     let search_dirs = [
         format!("/usr/share/applications/{}", filename),
@@ -258,14 +315,28 @@ pub fn resolve_app_icon(desktop_id: &str) -> String {
     ];
 
     for path in &search_dirs {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            for line in content.lines() {
-                if let Some(icon) = line.trim().strip_prefix("Icon=") {
-                    return icon.trim().to_string();
+        debug!("Checking for desktop file at: {}", path);
+        match std::fs::read_to_string(path) {
+            Ok(content) => {
+                for line in content.lines() {
+                    if let Some(icon) = line.trim().strip_prefix("Icon=") {
+                        let icon_name = icon.trim().to_string();
+                        debug!(
+                            "Found icon '{}' for desktop ID '{}' at path: {}",
+                            icon_name, desktop_id, path
+                        );
+                        return icon_name;
+                    }
                 }
+                debug!("Desktop file found at {} but no Icon= line", path);
+            }
+            Err(e) => {
+                debug!("Could not read desktop file {}: {}", path, e);
             }
         }
     }
+
+    warn!("No icon found for desktop ID: {}", desktop_id);
     String::new()
 }
 
@@ -488,8 +559,8 @@ async fn query_all_streaming(
     // Get or create D-Bus connection
     let conn = match get_or_init_conn().await {
         Ok(c) => c,
-        Err(_e) => {
-            // Cannot connect to session bus
+        Err(e) => {
+            error!("Cannot connect to D-Bus session bus: {}", e);
             return;
         }
     };
@@ -517,10 +588,13 @@ async fn query_all_streaming(
             Ok(results) if !results.is_empty() => {
                 // Send batch of results back to main thread
                 if tx.send(results).is_err() {
+                    debug!("Search provider channel closed, stopping processing");
                     break; // Channel closed, stop processing
                 }
             }
-            Err(_e) => { /* Provider error */ }
+            Err(e) => {
+                error!("Search provider error: {}", e);
+            }
             _ => {} // Empty results or other non-error cases
         }
     }
@@ -638,9 +712,11 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
     let object_path = object_path.to_string();
     let result_id = result_id.to_string();
     let terms = terms.to_vec();
+    debug!("Activating search result: {} from provider {}", result_id, bus_name);
 
     get_runtime().block_on(async move {
         let Ok(conn) = get_or_init_conn().await else {
+            error!("Cannot connect to D-Bus session bus for result activation");
             return;
         };
         let Ok(proxy) = zbus::Proxy::new(
@@ -651,6 +727,7 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
         )
         .await
         else {
+            error!("Failed to create D-Bus proxy for provider {}", bus_name);
             return;
         };
 
@@ -661,14 +738,16 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
             .as_secs() as u32;
 
         let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
-        if let Err(_e) = proxy
+        if let Err(e) = proxy
             .call::<_, _, ()>(
                 "ActivateResult",
                 &(result_id.as_str(), &terms_str, timestamp),
             )
             .await
         {
-            // ActivateResult error
+            error!("Failed to activate result {}: {}", result_id, e);
+        } else {
+            info!("Successfully activated search result: {}", result_id);
         }
     });
 }

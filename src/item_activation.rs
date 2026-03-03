@@ -15,6 +15,7 @@ use crate::list_model::AppListModel;
 use crate::obsidian_item::ObsidianActionItem;
 use crate::search_result_item::SearchResultItem;
 use gtk4::prelude::Cast;
+use log::{debug, info, warn};
 
 /// Parse and open Obsidian grep result lines
 ///
@@ -25,16 +26,20 @@ use gtk4::prelude::Cast;
 /// * `line` - The grep result line to parse
 /// * `cfg` - Obsidian configuration for vault path and settings
 pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
+    debug!("Processing Obsidian grep line: {}", line);
     if let Some((file_path, rest)) = line.split_once(':') {
         if let Some((line_num, _)) = rest.split_once(':') {
             // File with line number: open at specific line
+            info!("Opening Obsidian file at line: {}:{}", file_path, line_num);
             open_obsidian_file_line(file_path, line_num, cfg);
         } else {
             // File without line number: open file
+            info!("Opening Obsidian file: {}", file_path);
             open_obsidian_file_path(file_path, cfg);
         }
     } else {
         // Not a grep format line: try to open as plain file
+        info!("Opening Obsidian file (non-grep format): {}", line);
         open_obsidian_file_path(line, cfg);
     }
 }
@@ -50,24 +55,35 @@ pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) 
 /// * `model` - The application list model containing configuration and state
 /// * `mode` - The current application mode (Normal, Obsidian, FileSearch, etc.)
 pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
+    debug!("Activating item in mode {:?}", mode);
     // Handle desktop application items
     if let Ok(app_item) = obj.clone().downcast::<AppItem>() {
+        info!(
+            "Launching application: {} (terminal: {})",
+            app_item.exec(),
+            app_item.terminal()
+        );
         launch_app(&app_item.exec(), app_item.terminal());
     }
     // Handle command line items (file paths, grep results, etc.)
     else if let Ok(cmd_item) = obj.clone().downcast::<CommandItem>() {
         let line = cmd_item.line();
+        debug!("Activating command line item: {} in mode {:?}", line, mode);
         match mode {
             // Obsidian grep mode: open grep results in Obsidian
             AppMode::ObsidianGrep => {
                 if let Some(cfg) = &model.obsidian_cfg {
                     open_obsidian_grep_line(&line, cfg);
+                } else {
+                    warn!("Obsidian configuration missing for grep line activation");
                 }
             }
             // Obsidian file mode: open files in Obsidian
             AppMode::Obsidian => {
                 if let Some(cfg) = &model.obsidian_cfg {
                     open_obsidian_file_path(&line, cfg);
+                } else {
+                    warn!("Obsidian configuration missing for file activation");
                 }
             }
             // Other modes: open files or execute commands
@@ -78,8 +94,15 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
     }
     // Handle Obsidian action items (vault open, new note, etc.)
     else if let Ok(obs_item) = obj.clone().downcast::<ObsidianActionItem>() {
+        debug!(
+            "Activating Obsidian action: {:?} with arg: {:?}",
+            obs_item.action(),
+            obs_item.arg()
+        );
         if let Some(cfg) = &model.obsidian_cfg {
             perform_obsidian_action(obs_item.action(), obs_item.arg().as_deref(), cfg);
+        } else {
+            warn!("Obsidian configuration missing for action activation");
         }
     }
     // Handle GNOME Shell search provider results
@@ -90,6 +113,7 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
             sr_item.id(),
             sr_item.terms(),
         );
+        info!("Activating search result: {} from provider {}", id, bus);
         // Activate search result in background thread to avoid blocking UI
         std::thread::spawn(move || {
             crate::search_provider::activate_result(&bus, &path, &id, &terms);

@@ -17,6 +17,12 @@ fuzzy-matcher = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 
+log = "0.4"
+simplelog = "0.12"
+systemd-journal-logger = { version = "2.2.2", optional = true }
+syslog = { version = "6.1", optional = true }
+dirs = "5.0"
+
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 urlencoding = "2.1"
 zbus = "5.14.0"
@@ -25,6 +31,11 @@ tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "time", "macr
 rayon = "1"
 bincode = "1"
 jwalk = "0.8"
+
+[features]
+default = ["dep:systemd-journal-logger"]
+journal = ["dep:systemd-journal-logger"]
+syslog = ["dep:syslog"]
 
 [profile.release]
 lto = true
