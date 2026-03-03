@@ -13,7 +13,6 @@ mod search_provider;
 mod search_result_item;
 mod ui;
 mod utils;
-
 use glib::ExitCode;
 use gtk4::prelude::*;
 use libadwaita::Application;
