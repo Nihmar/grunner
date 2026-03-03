@@ -33,7 +33,7 @@ bincode = "1"
 jwalk = "0.8"
 
 [features]
-default = ["dep:systemd-journal-logger"]
+default = ["journal"]
 journal = ["dep:systemd-journal-logger"]
 syslog = ["dep:syslog"]
 

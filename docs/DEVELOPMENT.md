@@ -396,7 +396,7 @@ GRUNNER_LOG_LEVEL=debug cargo run
 
 ```bash
 # Journald (systemd systems - recommended)
-journalctl -f -u grunner
+journalctl -f -t grunner
 
 # File logs (default location)
 tail -f ~/.cache/grunner/grunner.log

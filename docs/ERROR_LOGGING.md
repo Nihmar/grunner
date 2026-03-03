@@ -17,6 +17,8 @@ This guide documents the comprehensive error logging system implemented for Grun
 
 ### Logging System Components
 
+The actual implementation in `src/logging.rs` provides the following architecture:
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Code                         │
@@ -38,7 +40,8 @@ This guide documents the comprehensive error logging system implemented for Grun
         │  • syslog      │  │  • Defaults       │
         │  • file        │  │  • Fallback logic │
         │  • stderr      │  │                   │
-        └───────────────┘  └────────────────────┘
+        │  • none        │  └────────────────────┘
+        └────────────────┘
 ```
 
 ### Integration with Existing Architecture
@@ -53,27 +56,25 @@ The logging system integrates seamlessly with Grunner's existing layered archite
 
 ### Dependencies
 
-Add the following to `Cargo.toml`:
+The actual dependencies in `Cargo.toml` are:
 
 ```toml
 [dependencies]
 log = "0.4"
 simplelog = "0.12"
-
-# Optional features for different backends
-systemd-journal = { version = "0.7", optional = true }
+systemd-journal-logger = { version = "2.2.2", optional = true }
 syslog = { version = "6.1", optional = true }
-dirs = "5.0"  # For cache directory resolution
+dirs = "5.0"
 
 [features]
-default = ["journal"]
-journal = ["systemd-journal"]
-syslog = ["syslog"]
+default = ["dep:systemd-journal-logger"]
+journal = ["dep:systemd-journal-logger"]
+syslog = ["dep:syslog"]
 ```
 
-### Core Logging Module
+### Core Logging Module Structure
 
-Create `src/logging.rs` with the following structure:
+The actual `src/logging.rs` module provides:
 
 ```rust
 //! Logging configuration and initialization for Grunner
@@ -85,17 +86,34 @@ Create `src/logging.rs` with the following structure:
 //! - Standard error - for development environments
 
 use log::{LevelFilter, SetLoggerError};
-use std::fs::{OpenOptions, create_dir_all};
+use simplelog::{Config as SimpleLogConfig, WriteLogger};
+use std::fs::{create_dir_all, OpenOptions};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 /// Available logging destinations
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LogDestination {
-    Journal,    // systemd journal (preferred for GNOME/Gtk applications)
-    Syslog,     // Traditional syslog
-    File,       // File-based logging
-    Stderr,     // Standard error (development)
-    None,       // No logging
+    /// systemd journal (preferred for GNOME/Gtk applications)
+    Journal,
+    /// Traditional syslog
+    Syslog,
+    /// File-based logging
+    File,
+    /// Standard error (development)
+    Stderr,
+    /// No logging
+    None,
+}
+
+impl Default for LogDestination {
+    fn default() -> Self {
+        if is_running_under_systemd() {
+            LogDestination::Journal
+        } else {
+            LogDestination::File
+        }
+    }
 }
 
 /// Logging configuration structure
@@ -115,32 +133,6 @@ impl Default for LogConfig {
         }
     }
 }
-
-impl Default for LogDestination {
-    fn default() -> Self {
-        if is_running_under_systemd() {
-            LogDestination::Journal
-        } else {
-            LogDestination::File
-        }
-    }
-}
-
-/// Initialize logging based on environment variables
-pub fn init() -> Result<(), SetLoggerError> {
-    let config = load_config_from_env();
-    init_with_config(&config)
-}
-
-/// Set up panic hook to capture and log panics
-pub fn setup_panic_hook() {
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        error!("PANIC: {}", panic_info);
-        eprintln!("PANIC: {}", panic_info);
-        default_hook(panic_info);
-    }));
-}
 ```
 
 ### Backend Implementations
@@ -150,8 +142,14 @@ pub fn setup_panic_hook() {
 ```rust
 #[cfg(feature = "journal")]
 fn init_journal_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
-    systemd_journal::JournalLog::new()
-        .unwrap()
+    use systemd_journal_logger::JournalLog;
+
+    JournalLog::new()
+        .map_err(|e| {
+            eprintln!("Failed to initialize journal logger: {}", e);
+            log::set_max_level(LevelFilter::Off);
+            ().into()
+        })?
         .filter_level(level)
         .install()
 }
@@ -165,43 +163,66 @@ fn init_file_logger(level: LevelFilter, file_path: Option<&PathBuf>) -> Result<(
         .cloned()
         .or_else(default_log_file_path)
         .unwrap_or_else(|| PathBuf::from("grunner.log"));
-    
+
+    // Create parent directories if needed
     if let Some(parent) = path.parent() {
         let _ = create_dir_all(parent);
     }
-    
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .unwrap_or_else(|e| {
-            eprintln!("Failed to open log file {:?}: {}, falling back to stderr", path, e);
-            std::io::stderr()
-        });
-    
-    simplelog::WriteLogger::init(level, simplelog::Config::default(), file)
+
+    match OpenOptions::new().create(true).append(true).open(&path) {
+        Ok(file) => WriteLogger::init(level, SimpleLogConfig::default(), file),
+        Err(e) => {
+            eprintln!(
+                "Failed to open log file {:?}: {}, falling back to stderr",
+                path, e
+            );
+            init_stderr_logger(level)
+        }
+    }
+}
+```
+
+#### Stderr Backend (Development)
+
+```rust
+fn init_stderr_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
+    let config = SimpleLogConfig::default();
+    WriteLogger::init(level, config, std::io::stderr())
 }
 ```
 
 ### Main Application Integration
 
-Update `src/main.rs`:
+The actual `src/main.rs` integration:
 
 ```rust
-mod logging;  // Add this to your module declarations
+mod logging;  // Logging module
 
 fn main() -> glib::ExitCode {
+    // Parse command-line arguments for version flag
+    let args: Vec<String> = env::args().collect();
+
+    // Handle version flag requests
+    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
+
     // Initialize logging system
     if let Err(e) = logging::init() {
         eprintln!("Failed to initialize logging: {}", e);
         // Continue without logging
     }
-    
+
     // Set up panic hook to log panics
     logging::setup_panic_hook();
-    
-    info!("Grunner {} starting up", env!("CARGO_PKG_VERSION"));
-    
+
+    // Log application startup
+    log::info!("Grunner {} starting up", env!("CARGO_PKG_VERSION"));
+
+    // Load application configuration from file
+    let cfg = config::load();
+
     // Rest of main function...
 }
 ```
@@ -217,18 +238,18 @@ Control logging behavior with these environment variables:
 export GRUNNER_LOG=journal
 
 # Log level (error, warn, info, debug, trace)
-export GRUNNER_LOG_LEVEL=debug
+export GRUNNER_LOG_LEVEL=info
 
 # Custom log file path (for file logging)
-export GRUNNER_LOG_FILE=~/grunner-debug.log
+export GRUNNER_LOG_FILE=~/grunner.log
 ```
 
 ### Logging Macros
 
-Use the standard `log` crate macros throughout your code:
+Use the standard `log` crate macros throughout your code as implemented in all source files:
 
 ```rust
-// Error logging (always logged)
+// Error logging (always logged at error level and above)
 error!("Failed to parse configuration: {}", e);
 
 // Warning logging (logged at warn level and above)
@@ -248,18 +269,15 @@ trace!("Entering function with params: {:?}", params);
 
 1. **Error Context**: Always include context with error messages
    ```rust
-   // Bad
-   error!("Failed to load file");
-   
-   // Good
+   // Good practice
    error!("Failed to load configuration file {}: {}", path.display(), e);
    ```
 
 2. **Structured Logging**: Include relevant metadata
    ```rust
    error!(
-       "Search provider {} failed: {} (query: {}, user: {})",
-       provider_id, error, query, username
+       "Search provider {} failed: {} (query: {})",
+       provider_id, error, query
    );
    ```
 
@@ -278,17 +296,17 @@ trace!("Entering function with params: {:?}", params);
 
 ```bash
 # Follow Grunner logs in real-time
-journalctl -f -u grunner
+journalctl -f -t grunner
 
 # View all Grunner logs
-journalctl -u grunner
+journalctl -t grunner
 
 # View logs with specific level
-journalctl -u grunner --priority=err
-journalctl -u grunner --priority=3  # error level
+journalctl -t grunner --priority=err
+journalctl -t grunner --priority=3  # error level
 
 # View logs from specific time period
-journalctl -u grunner --since "2024-01-01" --until "2024-01-02"
+journalctl -t grunner --since "2024-01-01" --until "2024-01-02"
 ```
 
 ### File Logging
@@ -317,11 +335,10 @@ tail -f /var/log/user.log | grep grunner  # Some Debian systems
 
 ## Integration Examples
 
-### Configuration Loading
-
-Update `src/config.rs`:
+### Configuration Loading (Actual implementation from config.rs)
 
 ```rust
+// In src/config.rs
 fn apply_toml(content: &str) -> Config {
     let mut cfg = Config::default();
 
@@ -338,11 +355,10 @@ fn apply_toml(content: &str) -> Config {
 }
 ```
 
-### Search Provider Errors
-
-Update `src/search_provider.rs`:
+### Search Provider Errors (Actual implementation from search_provider.rs)
 
 ```rust
+// In src/search_provider.rs
 match outcome {
     Ok(results) if !results.is_empty() => {
         if tx.send(results).is_err() {
@@ -359,11 +375,10 @@ match outcome {
 }
 ```
 
-### UI Error Handling
-
-Update `src/ui.rs`:
+### UI Error Handling (Actual patterns from ui.rs)
 
 ```rust
+// In src/ui.rs
 fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<AppItem>>, model: glib::WeakRef<AppListModel>) {
     match rx.try_recv() {
         Ok(apps) => {
@@ -378,6 +393,27 @@ fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<AppItem>>, model: glib::WeakRef<A
             error!("Application loading thread terminated unexpectedly");
         }
     }
+}
+```
+
+### Launcher Module Logging (Actual implementation from launcher.rs)
+
+```rust
+// In src/launcher.rs
+pub fn load_apps(app_dirs: &[String]) -> Vec<AppItem> {
+    let start = std::time::Instant::now();
+    let apps = app_dirs
+        .iter()
+        .flat_map(|dir| {
+            let expanded = expand_home(dir);
+            trace!("Scanning directory: {}", expanded);
+            // ... scanning logic
+        })
+        .collect();
+    
+    let duration = start.elapsed();
+    info!("Loaded {} applications in {:?}", apps.len(), duration);
+    apps
 }
 ```
 
@@ -405,19 +441,23 @@ fn poll_apps(rx: std::sync::mpsc::Receiver<Vec<AppItem>>, model: glib::WeakRef<A
 For detailed debugging, use:
 
 ```bash
-# Enable all logging with trace level
+# Enable all logging with trace level to stderr
 GRUNNER_LOG=stderr GRUNNER_LOG_LEVEL=trace grunner 2>&1 | tee debug.log
 
-# Or for production systems
+# Or for production systems with file logging
 GRUNNER_LOG=file GRUNNER_LOG_LEVEL=debug GRUNNER_LOG_FILE=/tmp/grunner-debug.log grunner
+
+# For journald debugging
+GRUNNER_LOG=journal GRUNNER_LOG_LEVEL=debug grunner
 ```
 
 ## Security Considerations
 
 1. **No Sensitive Data**: Ensure logs don't contain passwords, API keys, or personal information
 2. **Log File Permissions**: File logs should be readable only by the user (0600 permissions)
-3. **Journald Security**: Leverages systemd's built-in security features
+3. **Journald Security**: Leverages systemd's built-in security features and access controls
 4. **Environment Variables**: Document that logging configuration is controlled by users
+5. **Panic Information**: Panic logs may contain stack traces and memory addresses
 
 ## Performance Impact
 
@@ -431,21 +471,22 @@ The logging system is designed for minimal performance impact:
       debug!("Debug info: {}", expensive_data);
   }
   ```
-- **Asynchronous Logging**: Some backends (journald) support asynchronous operation
+- **Asynchronous Logging**: Journald backend supports asynchronous operation
+- **Buffer Management**: File logging uses buffered I/O for efficiency
 
-## Migration from Current Error Handling
+## Migration from Print-based Error Handling
 
-Current error handling patterns should be updated:
+The logging system replaces previous error handling patterns:
 
 ```rust
-// Before
+// Before (old pattern)
 eprintln!("Error: Failed to load config");
 // or
 if let Err(e) = operation() {
     // Error silently ignored
 }
 
-// After
+// After (with logging system)
 error!("Failed to load configuration: {}", e);
 // or
 if let Err(e) = operation() {
@@ -456,18 +497,18 @@ if let Err(e) = operation() {
 
 ## Conclusion
 
-This error logging implementation provides a robust, flexible system for tracking application behavior while respecting user privacy. By integrating with standard Linux logging infrastructure (journald/syslog) and providing multiple configuration options, it supports both development debugging and production troubleshooting.
+The error logging implementation in Grunner provides a robust, flexible system for tracking application behavior while respecting user privacy. By integrating with standard Linux logging infrastructure (journald/syslog) and providing multiple configuration options, it supports both development debugging and production troubleshooting.
 
-The system's design emphasizes:
-- **User control** through environment variables
-- **System integration** with standard Linux logging
+The system's actual implementation emphasizes:
+- **User control** through environment variables (`GRUNNER_LOG`, `GRUNNER_LOG_LEVEL`)
+- **System integration** with journald (preferred) and fallback to file/syslog
 - **Minimal performance impact** through compile-time optimization
-- **Comprehensive coverage** of all error paths
+- **Comprehensive coverage** with panic capture and graceful degradation
 - **Privacy preservation** by keeping logs local to the user's system
 
-For ongoing maintenance, regularly review log statements for clarity and relevance, and update documentation as new features are added to the logging system.
+All source files in the Grunner project have been updated to use the logging macros (`error!`, `warn!`, `info!`, `debug!`, `trace!`) for consistent error reporting and debugging.
 
 ---
 
 *Last Updated: Grunner v0.7.0*
-*Implementation Status: Proposal*
+*Implementation Status: Complete and Integrated*

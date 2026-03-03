@@ -8,7 +8,7 @@
 
 use log::{LevelFilter, SetLoggerError};
 use simplelog::{Config as SimpleLogConfig, WriteLogger};
-use std::fs::{create_dir_all, OpenOptions};
+use std::fs::{OpenOptions, create_dir_all};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -143,14 +143,21 @@ fn load_config_from_env() -> LogConfig {
 fn init_journal_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
     use systemd_journal_logger::JournalLog;
 
-    JournalLog::new()
-        .map_err(|e| {
-            eprintln!("Failed to initialize journal logger: {}", e);
-            log::set_max_level(LevelFilter::Off);
-            ().into()
-        })?
-        .filter_level(level)
-        .install()
+    match JournalLog::new() {
+        Ok(logger) => {
+            // Set the maximum log level first
+            log::set_max_level(level);
+            // Install the logger
+            logger.install()
+        }
+        Err(e) => {
+            eprintln!(
+                "Failed to initialize journal logger: {}, falling back to stderr",
+                e
+            );
+            init_stderr_logger(level)
+        }
+    }
 }
 
 /// Fallback when journal feature is disabled
@@ -163,7 +170,7 @@ fn init_journal_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
 /// Initialize syslog logger
 #[cfg(feature = "syslog")]
 fn init_syslog_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
-    use syslog::{Facility, Formatter3164};
+    use syslog::{BasicLogger, Facility, Formatter3164};
 
     let formatter = Formatter3164 {
         facility: Facility::LOG_USER,
@@ -172,14 +179,27 @@ fn init_syslog_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
         pid: std::process::id(),
     };
 
-    syslog::unix(formatter)
-        .map_err(|e| {
-            eprintln!("Failed to initialize syslog logger: {}", e);
-            log::set_max_level(LevelFilter::Off);
-            ().into()
-        })?
-        .filter_level(level)
-        .install()
+    let logger = match syslog::unix(formatter) {
+        Ok(logger) => logger,
+        Err(e) => {
+            eprintln!(
+                "Failed to initialize syslog logger: {}, falling back to stderr",
+                e
+            );
+            return init_stderr_logger(level);
+        }
+    };
+
+    match log::set_boxed_logger(Box::new(BasicLogger::new(logger))) {
+        Ok(_) => {
+            log::set_max_level(level);
+            Ok(())
+        }
+        Err(_) => {
+            eprintln!("Failed to register syslog logger, falling back to stderr");
+            init_stderr_logger(level)
+        }
+    }
 }
 
 /// Fallback when syslog feature is disabled

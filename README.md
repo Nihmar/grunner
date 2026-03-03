@@ -35,6 +35,7 @@ Take a quick look at grunner in action:
 - **Settings shortcut** — opens your config file with `xdg-open` for quick editing
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
 - **Configurable** — a single TOML file controls window size, search directories, result limits, user-defined custom commands, debounce timing, and Obsidian paths
+- **Comprehensive logging** — integrated logging system with journald, syslog, file, and stderr backends, configurable via environment variables with panic capture for debugging
 
 ---
 
@@ -304,6 +305,31 @@ quick_note = "Quick.md"
 | `obsidian.new_notes_folder` | string | — | New notes subfolder |
 | `obsidian.quick_note` | string | — | Quick-note file path (relative to vault) |
 
+### Logging Configuration
+
+Grunner includes a comprehensive logging system that can be configured via environment variables. The logging system supports multiple backends (journald, syslog, file, stderr) and log levels.
+
+**Environment Variables:**
+```bash
+# Log destination (journal, syslog, file, stderr, none)
+export GRUNNER_LOG=journal
+
+# Log level (error, warn, info, debug, trace)
+export GRUNNER_LOG_LEVEL=info
+
+# Custom log file path (for file logging)
+export GRUNNER_LOG_FILE=~/grunner.log
+```
+
+**Log Backends:**
+- **journald** (default on systemd systems): Logs to systemd journal, view with `journalctl -t grunner`
+- **syslog**: Traditional syslog on non-systemd systems
+- **file**: File-based logging to `~/.cache/grunner/grunner.log` by default
+- **stderr**: Standard error output for development
+- **none**: Disable all logging
+
+For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md).
+
 ---
 
 ## Documentation
@@ -336,6 +362,7 @@ Comprehensive documentation is available in the `docs/` directory:
 | `search_provider.rs` | D-Bus client for GNOME Shell search providers (discovery + query + activation) |
 | `actions.rs` | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs |
 | `config.rs` | TOML config loading with defaults and `~` expansion |
+| `logging.rs` | Logging configuration and initialization with journald, syslog, file, and stderr backends |
 | `app_item.rs` | GObject wrapper for application entries |
 | `cmd_item.rs` | GObject wrapper for command output lines |
 | `obsidian_item.rs` | GObject wrapper for Obsidian action entries |

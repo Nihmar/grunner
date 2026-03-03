@@ -567,8 +567,8 @@ Grunner's logging system supports multiple destinations:
 
 - **Systemd Journal (journald)**: Default on systemd systems
   ```bash
-  journalctl --user -f -u grunner
-  journalctl --user -u grunner --priority=err  # errors only
+  journalctl --user -f -t grunner
+  journalctl --user -t grunner --priority=err  # errors only
   ```
 
 - **File Logging**: When configured via `GRUNNER_LOG=file`
