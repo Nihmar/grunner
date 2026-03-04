@@ -1,13 +1,9 @@
-
-
-
 .launcher-window {
     background-color: var(--window-bg-color);
     color: var(--window-fg-color);
-    border: none; 
+    border: none;
     border-radius: calc(var(--window-radius, 12px) - 4px);
 }
-
 
 .launcher-box {
     background-color: var(--window-bg-color);
@@ -15,9 +11,7 @@
     border: 1px solid
         color-mix(in srgb, var(--window-fg-color) 12%, transparent);
     border-radius: calc(var(--window-radius, 12px) - 4px);
-    
 }
-
 
 .search-entry {
     background-color: var(--window-bg-color);
@@ -39,7 +33,6 @@
 .search-entry > text {
     background-color: var(--window-bg-color);
 }
-
 
 .app-list {
     background-color: transparent;
@@ -71,12 +64,10 @@
     );
 }
 
-
 .app-icon {
     min-width: 32px;
     min-height: 32px;
 }
-
 
 .row-name {
     color: var(--window-fg-color);
@@ -97,7 +88,6 @@
     color: color-mix(in srgb, var(--accent-color) 70%, transparent);
 }
 
-
 scrollbar {
     background-color: transparent;
 }
@@ -117,6 +107,38 @@ scrollbar slider:hover {
     background-color: color-mix(
         in srgb,
         var(--window-fg-color) 35%,
+        transparent
+    );
+}
+
+/* Power buttons (settings and system actions) */
+.power-button {
+    min-width: 24px;
+    min-height: 24px;
+    padding: 8px 8px;
+    border-radius: calc(var(--window-radius, 12px) - 4px);
+    background-color: color-mix(
+        in srgb,
+        var(--window-fg-color) 8%,
+        transparent
+    );
+    color: var(--window-fg-color);
+    border: none;
+    transition: background-color 80ms ease;
+}
+
+.power-button:hover {
+    background-color: color-mix(
+        in srgb,
+        var(--window-fg-color) 12%,
+        transparent
+    );
+}
+
+.power-button:active {
+    background-color: color-mix(
+        in srgb,
+        var(--window-fg-color) 16%,
         transparent
     );
 }

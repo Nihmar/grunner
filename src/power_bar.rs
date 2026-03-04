@@ -11,7 +11,7 @@
 use crate::actions::{open_settings, power_action};
 use glib::clone;
 use gtk4::prelude::*;
-use gtk4::{Align, Box as GtkBox, Button, Entry, Image, Label, Orientation};
+use gtk4::{Align, Box as GtkBox, Button, Entry, Image, Orientation};
 use libadwaita::prelude::{AdwDialogExt, AlertDialogExt};
 use libadwaita::{AlertDialog, ApplicationWindow, ResponseAppearance};
 
@@ -22,18 +22,19 @@ use libadwaita::{AlertDialog, ApplicationWindow, ResponseAppearance};
 /// If no candidate icon is found, the button will display only the label.
 ///
 /// # Arguments
-/// * `label` - Text label to display on the button
+/// * `label` - Text label to display on the button (used as tooltip and fallback)
 /// * `icon_candidates` - List of icon names to try in order of preference
 /// * `icon_theme` - The current GTK icon theme for icon availability checking
 ///
 /// # Returns
-/// A configured `Button` with icon (if available) and label, styled as a power button
+/// A configured `Button` with icon (if available), styled as a power button.
+/// If no icon is available, the label text is displayed instead.
 fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::IconTheme) -> Button {
     // Create button with power button styling
     let btn = Button::new();
     btn.add_css_class("power-button");
 
-    // Create horizontal box to hold icon and label
+    // Create horizontal box to hold icon or label
     let btn_box = GtkBox::new(Orientation::Horizontal, 6);
     btn_box.set_halign(Align::Center);
 
@@ -42,11 +43,14 @@ fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::Ic
         let image = Image::from_icon_name(icon_name);
         image.set_pixel_size(16); // Consistent icon size for power buttons
         btn_box.append(&image);
+    } else {
+        // No icon found - display label text as fallback
+        let label_widget = gtk4::Label::new(Some(label));
+        btn_box.append(&label_widget);
     }
-    // Note: If no icon is found, the button will display only the label
 
-    // Add the text label to the button
-    btn_box.append(&Label::new(Some(label)));
+    // Set tooltip with the label text
+    btn.set_tooltip_text(Some(label));
     btn.set_child(Some(&btn_box));
     btn
 }
