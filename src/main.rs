@@ -42,6 +42,36 @@ fn main() -> glib::ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // Handle list-providers flag requests
+    if args.contains(&"--list-providers".to_string()) {
+        println!("Grunner Search Providers");
+        println!("=======================\n");
+
+        let providers = search_provider::discover_providers(&[]);
+        println!("Found {} search provider(s):\n", providers.len());
+
+        for (i, provider) in providers.iter().enumerate() {
+            println!("{}. {}", i + 1, provider.desktop_id);
+            println!("   Bus Name:       {}", provider.bus_name);
+            println!("   Object Path:    {}", provider.object_path);
+            println!("   App Icon:       {}", provider.app_icon);
+            println!("   Default Disabled: {}", provider.default_disabled);
+            println!();
+        }
+
+        // Print summary
+        let enabled_count = providers.iter().filter(|p| !p.default_disabled).count();
+        println!("Summary:");
+        println!("  Total providers: {}", providers.len());
+        println!("  Enabled providers: {}", enabled_count);
+        println!(
+            "  Default-disabled providers: {}",
+            providers.len() - enabled_count
+        );
+
+        return ExitCode::SUCCESS;
+    }
+
     // Initialize logging system
     if let Err(e) = logging::init() {
         eprintln!("Failed to initialize logging: {}", e);

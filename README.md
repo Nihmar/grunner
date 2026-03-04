@@ -12,15 +12,15 @@ A fast, keyboard-driven application launcher for GNOME and other Linux desktops,
 
 Take a quick look at grunner in action:
 
-| | |
-|---|---|
-| **Main window** – fuzzy application search | ![Main view](screenshots/main_view.png) |
-| **Application filtering** | ![App filter](screenshots/app_filter.png) |
-| **File search** (`:f`) with fallback support | ![Locate](screenshots/locate.png) |
-| **Full‑text grep** (`:fg`) with fallback support | ![Ripgrep](screenshots/ripgrep.png) |
-| **Obsidian actions** (`:ob`) – vault, new note, daily note, quick note | ![Obsidian](screenshots/obsidian.png) |
-| **Obsidian file search** (`:ob` with file list) | ![Obsidian locate](screenshots/obsidian_locate.png) |
-| **Obsidian vault grep** (`:obg`) | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png) |
+|                                                                           |                                                                                                             |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Main window** – fuzzy application search                                | ![Main view](screenshots/main_view.png)                                                                     |
+| **Application filtering**                                                 | ![App filter](screenshots/app_filter.png)                                                                   |
+| **File search** (`:f`) with fallback support                              | ![Locate](screenshots/locate.png)                                                                           |
+| **Full‑text grep** (`:fg`) with fallback support                          | ![Ripgrep](screenshots/ripgrep.png)                                                                         |
+| **Obsidian actions** (`:ob`) – vault, new note, daily note, quick note    | ![Obsidian](screenshots/obsidian.png)                                                                       |
+| **Obsidian file search** (`:ob` with file list)                           | ![Obsidian locate](screenshots/obsidian_locate.png)                                                         |
+| **Obsidian vault grep** (`:obg`)                                          | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png)                                                       |
 | **GNOME Shell search providers** (`:s`) – files, calendar, contacts, etc. | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
 
 ---
@@ -50,16 +50,19 @@ Take a quick look at grunner in action:
 Install them on your distribution:
 
 **Fedora**
+
 ```bash
 sudo dnf install rust gtk4-devel libadwaita-devel
 ```
 
 **Ubuntu / Debian**
+
 ```bash
 sudo apt install rustc cargo libgtk-4-dev libadwaita-1-dev
 ```
 
 **Arch Linux**
+
 ```bash
 sudo pacman -S rust gtk4 libadwaita
 ```
@@ -73,13 +76,13 @@ sudo systemctl enable --now plocate-updatedb.timer
 
 ### Optional runtime tools
 
-| Tool | Used by | Notes |
-|---|---|---|
-| `plocate` | `:f` file search | Preferred tool; falls back to `find` if not available. Index must be populated via `updatedb` for best performance. |
-| `rg` (ripgrep) | `:fg` full-text grep, `:obg` vault grep | Preferred tool; falls back to `grep` if not available. |
-| Terminal emulator | Apps with `Terminal=true` | Auto-detected in order: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm` |
-| `obsidian` | `:ob` / `:obg` commands | Must be launchable via `xdg-open obsidian://…` |
-| `systemctl` / `loginctl` | Power bar (suspend, reboot, poweroff, logout) | Standard on systemd-based distros |
+| Tool                     | Used by                                       | Notes                                                                                                                              |
+| ------------------------ | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `plocate`                | `:f` file search                              | Preferred tool; falls back to `find` if not available. Index must be populated via `updatedb` for best performance.                |
+| `rg` (ripgrep)           | `:fg` full-text grep, `:obg` vault grep       | Preferred tool; falls back to `grep` if not available.                                                                             |
+| Terminal emulator        | Apps with `Terminal=true`                     | Auto-detected in order: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm` |
+| `obsidian`               | `:ob` / `:obg` commands                       | Must be launchable via `xdg-open obsidian://…`                                                                                     |
+| `systemctl` / `loginctl` | Power bar (suspend, reboot, poweroff, logout) | Standard on systemd-based distros                                                                                                  |
 
 ---
 
@@ -129,8 +132,8 @@ makepkg -si
 
 In GNOME Settings → Keyboard → Custom Shortcuts, add:
 
-| Name | Command | Suggested shortcut |
-|---|---|---|
+| Name    | Command   | Suggested shortcut        |
+| ------- | --------- | ------------------------- |
 | grunner | `grunner` | `Super+Space` or `Alt+F2` |
 
 ---
@@ -141,13 +144,13 @@ Launch `grunner`. The window appears with a search bar focused and ready for inp
 
 ### Keyboard shortcuts
 
-| Key | Action |
-|---|---|
-| Type anything | Filter applications (fuzzy search) |
-| `Enter` | Launch selected app / activate selected result |
-| `↑` / `↓` | Move selection up / down |
-| `Page Up` / `Page Down` | Jump 10 items up / down |
-| `Escape` | Close the launcher |
+| Key                     | Action                                         |
+| ----------------------- | ---------------------------------------------- |
+| Type anything           | Filter applications (fuzzy search)             |
+| `Enter`                 | Launch selected app / activate selected result |
+| `↑` / `↓`               | Move selection up / down                       |
+| `Page Up` / `Page Down` | Jump 10 items up / down                        |
+| `Escape`                | Close the launcher                             |
 
 ---
 
@@ -193,12 +196,12 @@ Queries all installed and enabled GNOME Shell search providers in parallel (e.g.
 
 Requires `[obsidian]` to be configured (see [Configuration](#configuration)). Displays an action bar with four buttons:
 
-| Button | Action |
-|---|---|
-| **Open Vault** | Opens the configured vault in Obsidian |
-| **New Note** | Creates a new timestamped note in `new_notes_folder`, optionally pre-filled with `[text]`, then opens it |
-| **Daily Note** | Opens (or creates) today's daily note in `daily_notes_folder`, optionally appending `[text]` |
-| **Quick Note** | Appends `[text]` to the configured `quick_note` file, then opens it |
+| Button         | Action                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------- |
+| **Open Vault** | Opens the configured vault in Obsidian                                                                   |
+| **New Note**   | Creates a new timestamped note in `new_notes_folder`, optionally pre-filled with `[text]`, then opens it |
+| **Daily Note** | Opens (or creates) today's daily note in `daily_notes_folder`, optionally appending `[text]`             |
+| **Quick Note** | Appends `[text]` to the configured `quick_note` file, then opens it                                      |
 
 ```
 :ob pick up milk
@@ -214,9 +217,7 @@ Searches the content of all Markdown files in your vault using `rg` if available
 :obg project alpha
 ```
 
-
 ---
-
 
 ## Configuration
 
@@ -256,10 +257,6 @@ app_dirs = [
 #     "org.gnome.Characters.desktop",
 # ]
 
-
-
-
-
 [obsidian]
 # Absolute or ~ path to the root of your Obsidian vault.
 vault = "~/Documents/Obsidian/MyVault"
@@ -273,15 +270,14 @@ quick_note = "Quick.md"
 
 ### Configuration reference
 
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `window.width` | integer | `640` | Window width in pixels |
-| `window.height` | integer | `480` | Window height in pixels |
-| `search.max_results` | integer | `64` | Maximum results displayed |
-| `search.command_debounce_ms` | integer | `300` | Debounce delay for colon commands (ms) |
-| `search.app_dirs` | array of strings | (see above) | Directories to scan for `.desktop` files |
-| `search.provider_blacklist` | array of strings | `[]` | List of GNOME Shell search providers to exclude |
-
+| Key                          | Type             | Default     | Description                                     |
+| ---------------------------- | ---------------- | ----------- | ----------------------------------------------- |
+| `window.width`               | integer          | `640`       | Window width in pixels                          |
+| `window.height`              | integer          | `480`       | Window height in pixels                         |
+| `search.max_results`         | integer          | `64`        | Maximum results displayed                       |
+| `search.command_debounce_ms` | integer          | `300`       | Debounce delay for colon commands (ms)          |
+| `search.app_dirs`            | array of strings | (see above) | Directories to scan for `.desktop` files        |
+| `search.provider_blacklist`  | array of strings | `[]`        | List of GNOME Shell search providers to exclude |
 
 | `obsidian.vault` | string | — | Path to Obsidian vault root |
 | `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |
@@ -293,6 +289,7 @@ quick_note = "Quick.md"
 Grunner includes a comprehensive logging system that can be configured via environment variables. The logging system supports multiple backends (journald, syslog, file, stderr) and log levels.
 
 **Environment Variables:**
+
 ```bash
 # Log destination (journal, syslog, file, stderr, none)
 export GRUNNER_LOG=journal
@@ -305,6 +302,7 @@ export GRUNNER_LOG_FILE=~/grunner.log
 ```
 
 **Log Backends:**
+
 - **journald** (default on systemd systems): Logs to systemd journal, view with `journalctl -t grunner`
 - **syslog**: Traditional syslog on non-systemd systems
 - **file**: File-based logging to `~/.cache/grunner/grunner.log` by default
@@ -320,33 +318,36 @@ For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md
 Comprehensive documentation is available in the `docs/` directory:
 
 ### For Users
+
 - **[User Guide](docs/USER_GUIDE.md)** - Installation, configuration, and usage instructions
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - System requirements and deployment options
 
 ### For Developers
+
 - **[Architecture Documentation](docs/ARCHITECTURE.md)** - System design and module dependencies
 - **[API Reference](docs/API.md)** - Complete API documentation for all modules
 - **[Development Guide](docs/DEVELOPMENT.md)** - Development environment setup and contribution guidelines
 
 ### Overview
+
 - **[Project Overview](docs/OVERVIEW.md)** - High-level project summary and technology stack
 
 ---
 
 ## Architecture overview
 
-| File | Purpose |
-|---|---|
-| `main.rs` | Entry point; loads config, creates the GTK application, and calls `build_ui` |
-| `ui.rs` | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
-| `list_model.rs` | Central search model; dispatches queries to the correct mode and populates the `ListStore` |
-| `launcher.rs` | Scans `.desktop` files, parses them, and deduplicates entries |
-| `app_mode.rs` | Application mode detection and management (Normal, FileSearch, SearchProvider, Obsidian) |
-| `item_activation.rs` | Item activation logic based on item type and application mode |
-| `obsidian_bar.rs` | Obsidian action bar UI component with buttons for vault operations |
-| `power_bar.rs` | Power action bar UI component with system management buttons |
-| `settings_window.rs` | Settings dialog UI with configuration editing and validation |
-| `utils.rs` | Utility functions for path expansion, shell escaping, and home directory resolution |
+| File                 | Purpose                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `main.rs`            | Entry point; loads config, creates the GTK application, and calls `build_ui`                |
+| `ui.rs`              | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
+| `list_model.rs`      | Central search model; dispatches queries to the correct mode and populates the `ListStore`  |
+| `launcher.rs`        | Scans `.desktop` files, parses them, and deduplicates entries                               |
+| `app_mode.rs`        | Application mode detection and management (Normal, FileSearch, SearchProvider, Obsidian)    |
+| `item_activation.rs` | Item activation logic based on item type and application mode                               |
+| `obsidian_bar.rs`    | Obsidian action bar UI component with buttons for vault operations                          |
+| `power_bar.rs`       | Power action bar UI component with system management buttons                                |
+| `settings_window.rs` | Settings dialog UI with configuration editing and validation                                |
+| `utils.rs`           | Utility functions for path expansion, shell escaping, and home directory resolution         |
 
 | `search_provider.rs` | D-Bus client for GNOME Shell search providers (discovery + query + activation) |
 | `actions.rs` | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs |
@@ -359,7 +360,6 @@ Comprehensive documentation is available in the `docs/` directory:
 | `style.css` | libadwaita CSS using `var(--accent-color)` and `var(--window-bg-color)` |
 
 ---
-
 
 ## Theming
 

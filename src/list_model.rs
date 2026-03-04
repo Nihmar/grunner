@@ -334,6 +334,8 @@ struct ProviderSearchPoller {
     clear_timeout: Rc<RefCell<Option<glib::SourceId>>>,
     /// Whether the first batch of results has been processed
     first_batch: Rc<Cell<bool>>,
+    /// Whether to clear the store before showing results
+    clear_store: bool,
 }
 
 impl ProviderSearchPoller {
@@ -389,8 +391,8 @@ impl ProviderSearchPoller {
                         })
                         .collect();
 
-                    // Clear store only on first batch
-                    if !this.first_batch.get() {
+                    // Clear store only on first batch and if clear_store is true
+                    if !this.first_batch.get() && this.clear_store {
                         this.model.store.remove_all();
                         this.first_batch.set(true);
                     }
@@ -552,6 +554,31 @@ impl AppListModel {
         self.schedule_command_with_delay(self.command_debounce_ms, f);
     }
 
+    /// Schedule a search provider query to run in parallel with application search
+    ///
+    /// This mimics GNOME Search behavior where search provider results appear
+    /// alongside application results when filtering.
+    fn schedule_provider_search(&self, query: String, clear_store: bool) {
+        // Discover providers (cached after first use)
+        let providers = self
+            .search_providers
+            .get_or_init(|| search_provider::discover_providers(&self.search_provider_blacklist));
+
+        if providers.is_empty() {
+            return;
+        }
+
+        self.active_mode.set(ActiveMode::SearchProvider);
+        self.bump_task_gen();
+        let providers_clone: Vec<SearchProvider> = providers.to_vec();
+        let max = self.max_results;
+        let model_clone = self.clone();
+        // Use shorter debounce for search providers for more responsive feel
+        self.schedule_command_with_delay(120, move || {
+            model_clone.run_provider_search(providers_clone, query, max, clear_store);
+        });
+    }
+
     /// Increment the task generation counter and return the new value
     ///
     /// This is used to identify stale async tasks - if a task's generation
@@ -666,6 +693,9 @@ impl AppListModel {
             for app in results {
                 self.store.append(&AppItem::new(app));
             }
+
+            // Schedule search provider query to mimic GNOME Search behavior
+            self.schedule_provider_search(query.to_string(), false);
         }
 
         // Auto-select first item if we have results
@@ -716,7 +746,7 @@ impl AppListModel {
         let model_clone = self.clone();
         // Use shorter debounce for search providers for more responsive feel
         self.schedule_command_with_delay(120, move || {
-            model_clone.run_provider_search(providers_clone, arg, max);
+            model_clone.run_provider_search(providers_clone, arg, max, true);
         });
     }
 
@@ -856,27 +886,35 @@ impl AppListModel {
     /// 1. Sets up a timeout to show "searching..." indicator
     /// 2. Spawns a background thread to query all providers
     /// 3. Sets up a poller to receive streaming results
-    fn run_provider_search(&self, providers: Vec<SearchProvider>, query: String, max: usize) {
+    fn run_provider_search(
+        &self,
+        providers: Vec<SearchProvider>,
+        query: String,
+        max: usize,
+        clear_store: bool,
+    ) {
         let generation = self.task_gen.get();
         let model_clone = self.clone();
         let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
 
         // Set up a short timeout to clear old results and show "searching" state
         let clear_timeout = Rc::new(RefCell::new(None::<glib::SourceId>));
-        let clear_model = self.clone();
-        let clear_gen = generation;
-        let clear_timeout_clone = clear_timeout.clone();
-        let timeout_id = glib::timeout_add_local(Duration::from_millis(25), move || {
-            if clear_model.task_gen.get() == clear_gen {
-                clear_model.store.remove_all();
-                clear_model
-                    .selection
-                    .set_selected(gtk4::INVALID_LIST_POSITION);
-            }
-            *clear_timeout_clone.borrow_mut() = None;
-            glib::ControlFlow::Break
-        });
-        *clear_timeout.borrow_mut() = Some(timeout_id);
+        if clear_store {
+            let clear_model = self.clone();
+            let clear_gen = generation;
+            let clear_timeout_clone = clear_timeout.clone();
+            let timeout_id = glib::timeout_add_local(Duration::from_millis(25), move || {
+                if clear_model.task_gen.get() == clear_gen {
+                    clear_model.store.remove_all();
+                    clear_model
+                        .selection
+                        .set_selected(gtk4::INVALID_LIST_POSITION);
+                }
+                *clear_timeout_clone.borrow_mut() = None;
+                glib::ControlFlow::Break
+            });
+            *clear_timeout.borrow_mut() = Some(timeout_id);
+        }
 
         // Channel for streaming results from background thread
         let (tx, rx) = std::sync::mpsc::channel::<Vec<search_provider::SearchResult>>();
@@ -891,6 +929,7 @@ impl AppListModel {
             terms,
             clear_timeout,
             first_batch: Rc::new(Cell::new(false)),
+            clear_store,
         };
         glib::idle_add_local_once(move || poller.poll());
     }

@@ -91,6 +91,11 @@ pub struct SearchProvider {
     /// This matches the .desktop filename and allows users to exclude
     /// specific providers via configuration.
     pub desktop_id: String,
+    /// Whether this provider is disabled by default (from DefaultDisabled=true in .ini)
+    ///
+    /// Exposed for UI/config use, but does NOT cause the provider to be skipped
+    /// at discovery time. GNOME Shell itself only uses this as a UI hint.
+    pub default_disabled: bool,
 }
 
 /// Icon data carried by a search result
@@ -140,6 +145,10 @@ pub struct SearchResult {
 /// Scans standard directories for .ini files describing search providers,
 /// parses them, and filters out any providers in the blacklist.
 ///
+/// Note: providers with DefaultDisabled=true are included in discovery,
+/// matching GNOME Shell behaviour. Callers may inspect `default_disabled`
+/// to present an opt-in UI, but the field does not suppress querying.
+///
 /// # Arguments
 /// * `blacklist` - List of desktop IDs to exclude from discovery
 ///
@@ -154,6 +163,7 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
             "{}/.local/share/gnome-shell/search-providers",
             home
         )),
+        PathBuf::from("/var/lib/flatpak/exports/share/gnome-shell/search-providers"),
     ];
 
     debug!("Discovering search providers, blacklist: {:?}", blacklist);
@@ -180,7 +190,22 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
                         debug!("Skipping blacklisted provider: {}", p.desktop_id);
                         continue;
                     }
+                    // FIX: Do NOT skip DefaultDisabled providers here.
+                    // GNOME Shell treats DefaultDisabled=true as a UI hint only —
+                    // the provider is off by default in Settings → Search, but the
+                    // user can enable it and GNOME Shell will then query it normally.
+                    // Hard-dropping it at discovery time means providers like Bazaar
+                    // (which ships with DefaultDisabled=true) are never queried even
+                    // when the user expects them to work.
+                    if p.default_disabled {
+                        debug!(
+                            "Provider {} has DefaultDisabled=true; including anyway \
+                             (callers may present an opt-in UI based on this flag)",
+                            p.desktop_id
+                        );
+                    }
                     debug!("Discovered provider: {} from {:?}", p.desktop_id, path);
+                    eprintln!("Discovered provider: {} from {:?}", p.desktop_id, path);
                     providers.push(p);
                 } else {
                     debug!("Failed to parse provider .ini file: {:?}", path);
@@ -189,6 +214,7 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
         }
     }
     info!("Discovered {} search providers", providers.len());
+    eprintln!("Discovered {} search providers", providers.len());
     providers
 }
 
@@ -215,6 +241,7 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
     let mut object_path = None;
     let mut desktop_id = None;
     let mut version: Option<u32> = None;
+    let mut default_disabled = false;
 
     // Parse simple key=value format
     for line in content.lines() {
@@ -230,6 +257,9 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
         }
         if let Some(v) = line.strip_prefix("Version=") {
             version = v.parse().ok();
+        }
+        if let Some(v) = line.strip_prefix("DefaultDisabled=") {
+            default_disabled = v.eq_ignore_ascii_case("true");
         }
     }
 
@@ -271,14 +301,15 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
     };
 
     debug!(
-        "Successfully parsed provider: {} from {:?}",
-        desktop_id, path
+        "Successfully parsed provider: {} from {:?} (default_disabled: {})",
+        desktop_id, path, default_disabled
     );
     Some(SearchProvider {
         bus_name,
         object_path,
         app_icon: resolve_app_icon(&desktop_id),
         desktop_id,
+        default_disabled,
     })
 }
 
@@ -286,6 +317,9 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
 ///
 /// Looks up the .desktop file for a given desktop ID and extracts
 /// the Icon= field to determine what icon to use for this provider.
+///
+/// Searches both standard XDG application directories and Flatpak export
+/// directories, matching the locations GNOME Shell itself uses.
 ///
 /// # Arguments
 /// * `desktop_id` - Desktop ID (with or without .desktop extension)
@@ -307,11 +341,21 @@ pub fn resolve_app_icon(desktop_id: &str) -> String {
         desktop_id, filename
     );
 
-    // Search in standard desktop entry directories
+    // FIX: Include Flatpak export paths so that Flatpak-installed apps like
+    // Bazaar have their icons resolved correctly. The original code only checked
+    // XDG standard paths, causing Flatpak providers to always produce an empty
+    // app_icon string.
     let search_dirs = [
         format!("/usr/share/applications/{}", filename),
         format!("{}/.local/share/applications/{}", home, filename),
         format!("/usr/local/share/applications/{}", filename),
+        // System-wide Flatpak exports
+        format!("/var/lib/flatpak/exports/share/applications/{}", filename),
+        // Per-user Flatpak exports
+        format!(
+            "{}/.local/share/flatpak/exports/share/applications/{}",
+            home, filename
+        ),
     ];
 
     for path in &search_dirs {
@@ -556,6 +600,18 @@ async fn query_all_streaming(
     max_per_provider: usize,
     tx: std::sync::mpsc::Sender<Vec<SearchResult>>,
 ) {
+    debug!(
+        "Starting search across {} providers with terms: {:?}",
+        providers.len(),
+        terms
+    );
+    for provider in providers {
+        debug!(
+            "  - {} (bus: {}, path: {})",
+            provider.desktop_id, provider.bus_name, provider.object_path
+        );
+    }
+
     // Get or create D-Bus connection
     let conn = match get_or_init_conn().await {
         Ok(c) => c,
@@ -583,9 +639,10 @@ async fn query_all_streaming(
         .collect();
 
     // Process results as they complete
-    while let Some((_bus_name, outcome)) = futs.next().await {
+    while let Some((bus_name, outcome)) = futs.next().await {
         match outcome {
             Ok(results) if !results.is_empty() => {
+                debug!("Provider {} returned {} results", bus_name, results.len());
                 // Send batch of results back to main thread
                 if tx.send(results).is_err() {
                     debug!("Search provider channel closed, stopping processing");
@@ -593,9 +650,11 @@ async fn query_all_streaming(
                 }
             }
             Err(e) => {
-                error!("Search provider error: {}", e);
+                error!("Search provider {} error: {}", bus_name, e);
             }
-            _ => {} // Empty results or other non-error cases
+            _ => {
+                debug!("Provider {} returned empty result set", bus_name);
+            } // Empty results or other non-error cases
         }
     }
 }
@@ -614,6 +673,11 @@ async fn query_one(
     max_results: usize,
 ) -> zbus::Result<Vec<SearchResult>> {
     use tokio::time::timeout;
+
+    debug!(
+        "Querying search provider: {} with terms: {:?}",
+        provider.bus_name, terms
+    );
 
     // Create D-Bus proxy for the search provider
     let proxy = zbus::Proxy::new(
@@ -634,7 +698,15 @@ async fn query_one(
             zbus::Error::Failure("D-Bus call to GetInitialResultSet timed out".into())
         })??;
 
+    debug!(
+        "Provider {} returned {} result IDs: {:?}",
+        provider.bus_name,
+        ids.len(),
+        ids
+    );
+
     if ids.is_empty() {
+        debug!("Provider {} returned empty result set", provider.bus_name);
         return Ok(vec![]);
     }
 
@@ -647,11 +719,23 @@ async fn query_one(
             .await
             .map_err(|_| zbus::Error::Failure("D-Bus call to GetResultMetas timed out".into()))??;
 
+    debug!(
+        "Provider {} returned {} result metas",
+        provider.bus_name,
+        metas.len()
+    );
+
     // Convert D-Bus metadata to SearchResult structs
-    let results = metas
+    let results: Vec<SearchResult> = metas
         .into_iter()
         .filter_map(|meta| build_result(meta, provider, &provider.app_icon))
         .collect();
+
+    debug!(
+        "Provider {} successfully returned {} search results",
+        provider.bus_name,
+        results.len()
+    );
 
     Ok(results)
 }
@@ -686,10 +770,33 @@ fn build_result(
 /// Extract a string value from a D-Bus dictionary
 ///
 /// Removes the key from the dictionary and attempts to convert the value
-/// to a String. Returns None if the key doesn't exist or conversion fails.
+/// to a String. Handles both plain strings (`s` signature) and variant-
+/// wrapped strings (`v` containing `s`), which some providers send.
+///
+/// Returns None if the key doesn't exist or the value cannot be converted.
 fn take_str(meta: &mut HashMap<String, OwnedValue>, key: &str) -> Option<String> {
+    use zbus::zvariant::Value;
+
     let val = meta.remove(key)?;
-    String::try_from(val).ok()
+
+    // FIX: The original code used String::try_from(val) directly, which only
+    // succeeds for values with a plain `s` D-Bus signature. Some providers
+    // (including Bazaar) wrap their string values in a variant (`v`), causing
+    // try_from to fail and return None. Since `id` is required in build_result,
+    // a variant-wrapped id silently drops the entire result. We now unwrap one
+    // level of variant before attempting conversion.
+    match val.deref() {
+        Value::Str(s) => Some(s.as_str().to_string()),
+        Value::Value(inner) => {
+            if let Value::Str(s) = inner.deref() {
+                Some(s.as_str().to_string())
+            } else {
+                // Still try the generic path for other wrapped types
+                None
+            }
+        }
+        _ => String::try_from(val).ok(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -712,7 +819,10 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
     let object_path = object_path.to_string();
     let result_id = result_id.to_string();
     let terms = terms.to_vec();
-    debug!("Activating search result: {} from provider {}", result_id, bus_name);
+    debug!(
+        "Activating search result: {} from provider {}",
+        result_id, bus_name
+    );
 
     get_runtime().block_on(async move {
         let Ok(conn) = get_or_init_conn().await else {

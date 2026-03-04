@@ -283,17 +283,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         #[weak]
         command_icon,
         move |e| {
-            let text = e.text().to_lowercase();
+            let text = e.text().to_string().to_lowercase();
             let mode = AppMode::from_text(&text);
             current_mode.set(mode);
 
-            // Update search results based on current text
-            model.populate(&text);
-
-            // Show/hide Obsidian action bar based on mode
+            // Update chrome immediately — these are cheap
             obsidian_bar.set_visible(mode.show_obsidian_bar());
-
-            // Update mode indicator icon
             match mode.icon_name(obsidian_icon_name) {
                 Some(name) => {
                     command_icon.set_icon_name(Some(name));
@@ -302,9 +297,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 None => command_icon.set_visible(false),
             }
 
-            // Force UI redraw to reflect changes
-            e.queue_draw();
-            e.queue_resize();
+            // Defer the expensive store rebuild to the next idle slot so this
+            // handler returns before GTK processes more input events.
+            let model = model.clone();
+            glib::idle_add_local_once(move || {
+                model.populate(&text);
+            });
         }
     ));
 
