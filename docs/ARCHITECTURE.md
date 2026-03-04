@@ -412,9 +412,7 @@ app_dirs = [
 # Example custom command (not built-in):
 # gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
 
-[calculator]
-# Enable inline calculator (evaluates expressions typed in the search bar)
-# enabled = false
+
 
 [obsidian]
 vault = "~/Documents/Obsidian/MyVault"

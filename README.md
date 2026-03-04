@@ -265,9 +265,7 @@ app_dirs = [
 #     "org.gnome.Characters.desktop",
 # ]
 
-[calculator]
-# Enable inline calculator (evaluates expressions typed in the search bar).
-enabled = false
+
 
 [commands]
 # Define additional custom colon commands. Built-in commands (:f, :fg, :s, :ob, :obg) cannot be overridden.
@@ -295,7 +293,7 @@ quick_note = "Quick.md"
 | `search.command_debounce_ms` | integer | `300` | Debounce delay for colon commands (ms) |
 | `search.app_dirs` | array of strings | (see above) | Directories to scan for `.desktop` files |
 | `search.provider_blacklist` | array of strings | `[]` | List of GNOME Shell search providers to exclude |
-| `calculator.enabled` | boolean | `false` | Enable inline calculator in search bar |
+
 | `commands.<name>` | string | — | Shell command for additional custom colon commands (built-in :f, :fg, :s, :ob, :obg cannot be overridden) |
 | `obsidian.vault` | string | — | Path to Obsidian vault root |
 | `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |

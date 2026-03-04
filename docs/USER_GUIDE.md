@@ -334,12 +334,7 @@ app_dirs = [
 ddg = "curl -s 'https://api.duckduckgo.com/?q=$1&format=json&pretty=1' | jq -r '.Abstract' 2>/dev/null | head -5"
 ```
 
-#### Calculator Configuration
-```toml
-[calculator]
-# Enable inline calculator (evaluates expressions typed in the search bar)
-enabled = false
-```
+
 
 ### Configuration Examples
 
@@ -379,9 +374,7 @@ dict = "dict -d gcide \"$1\" 2>/dev/null | head -10"
 # Web search example
 web = "echo 'Searching for: $1'"
 
-[calculator]
-# Enable inline calculator (evaluates expressions typed in the search bar)
-enabled = true
+
 
 [obsidian]
 vault = "~/Documents/Obsidian/Personal"
@@ -619,13 +612,7 @@ rm ~/.config/grunner/grunner.toml
 rm -rf ~/.cache/grunner/
 ```
 
-### Q: What is the calculator feature and how do I enable it?
-**A:** The calculator feature evaluates mathematical expressions typed in the search bar. To enable it, add the following to your `~/.config/grunner/grunner.toml`:
-```toml
-[calculator]
-enabled = true
-```
-Once enabled, typing expressions like `2+2` or `sin(pi/2)` will show the calculated result.
+
 
 ### Q: How do I exclude certain GNOME Shell search providers?
 **A:** You can blacklist specific search providers by adding their Desktop IDs to the `provider_blacklist` array in the search section:

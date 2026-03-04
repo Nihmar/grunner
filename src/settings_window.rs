@@ -16,8 +16,7 @@ use crate::config::{self, Config, ObsidianConfig};
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use libadwaita::{
-    EntryRow, PreferencesDialog, PreferencesGroup, PreferencesRow, SpinRow, SwitchRow, Toast,
-    ToastOverlay,
+    EntryRow, PreferencesDialog, PreferencesGroup, PreferencesRow, SpinRow, Toast, ToastOverlay,
 };
 use log::{debug, error, info};
 use std::cell::RefCell;
@@ -139,25 +138,6 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         });
         window_group.add(&height_row);
         inner.append(&window_group);
-
-        let features_group = PreferencesGroup::builder()
-            .title("Features")
-            .description("Enable or disable additional features")
-            .build();
-
-        let calc_row = SwitchRow::builder()
-            .title("Calculator")
-            .subtitle("Evaluate mathematical expressions in the search bar")
-            .build();
-        calc_row.set_active(config_rc.borrow().calculator);
-        calc_row.connect_notify_local(Some("active"), {
-            let config_rc = Rc::clone(&config_rc);
-            move |row, _| {
-                config_rc.borrow_mut().calculator = row.is_active();
-            }
-        });
-        features_group.add(&calc_row);
-        inner.append(&features_group);
 
         notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("General"))));
     }
@@ -491,7 +471,6 @@ fn save_config(config: &Config) -> Result<(), std::io::Error> {
     struct TomlConfig {
         window: WindowConfig,
         search: SearchConfig,
-        calculator: CalculatorConfig,
         commands: Option<std::collections::HashMap<String, String>>,
         obsidian: Option<ObsidianConfig>,
     }
@@ -508,11 +487,6 @@ fn save_config(config: &Config) -> Result<(), std::io::Error> {
         app_dirs: Vec<String>,
         command_debounce_ms: u32,
         provider_blacklist: Vec<String>,
-    }
-
-    #[derive(Serialize)]
-    struct CalculatorConfig {
-        enabled: bool,
     }
 
     // Convert app_dirs back to strings (without home expansion)
@@ -532,9 +506,6 @@ fn save_config(config: &Config) -> Result<(), std::io::Error> {
             app_dirs,
             command_debounce_ms: config.command_debounce_ms,
             provider_blacklist: config.search_provider_blacklist.clone(),
-        },
-        calculator: CalculatorConfig {
-            enabled: config.calculator,
         },
         commands: if config.commands.is_empty() {
             None

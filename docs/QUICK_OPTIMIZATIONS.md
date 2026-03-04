@@ -371,15 +371,12 @@ Check for unused dependencies and lighter alternatives.
 2. **Check for lighter alternatives**:
    - `chrono` → Consider `time` crate (smaller)
    - `regex` → Check if simple string matching would suffice
-   - `evalexpr` → Remove if calculator deleted
    - `rayon` → Keep (essential for parallelism)
 
 3. **Update Cargo.toml**:
    ```toml
    [dependencies]
    # Remove if unused
-   # evalexpr = "8.0"  # Remove if calculator deleted
-   
    # Consider alternatives
    # time = "0.3"  # Instead of chrono for date formatting
    ```

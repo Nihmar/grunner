@@ -8,7 +8,6 @@
 //! - Window dimensions and UI settings
 //! - Search behavior and result limits
 //! - Application directory scanning paths
-//! - Calculator functionality toggle
 //! - Custom shell commands for search modes
 //! - Obsidian vault integration settings
 //! - Search provider filtering
@@ -25,8 +24,6 @@ pub const DEFAULT_WINDOW_WIDTH: i32 = 640;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 /// Default maximum number of search results to display
 pub const DEFAULT_MAX_RESULTS: usize = 64;
-/// Default calculator feature state (disabled by default)
-pub const DEFAULT_CALCULATOR: bool = false;
 /// Default debounce time in milliseconds for command execution
 pub const DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300;
 
@@ -78,8 +75,6 @@ pub struct Config {
     pub max_results: usize,
     /// Directories to scan for .desktop files (expanded paths)
     pub app_dirs: Vec<PathBuf>,
-    /// Whether the calculator feature is enabled
-    pub calculator: bool,
     /// Custom shell commands for search modes (key = mode, value = command)
     pub commands: HashMap<String, String>,
     /// Optional Obsidian integration configuration
@@ -98,7 +93,6 @@ impl Default for Config {
     /// - Default search result limit
     /// - Common application directories
     /// - Fixed colon commands (:s, :ob, :obg, :f, :fg)
-    /// - Disabled calculator
     /// - Empty Obsidian configuration
     fn default() -> Self {
         // Initialize empty commands map (f and fg are now fixed commands like :s, :ob, :obg)
@@ -113,7 +107,6 @@ impl Default for Config {
                 .into_iter()
                 .map(|s| expand_home(&s))
                 .collect(),
-            calculator: DEFAULT_CALCULATOR,
             commands,
             obsidian: None,
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
@@ -132,8 +125,6 @@ struct TomlConfig {
     window: Option<WindowConfig>,
     /// Search-related settings
     search: Option<SearchConfig>,
-    /// Calculator feature settings
-    calculator: Option<CalculatorConfig>,
     /// Custom command definitions
     commands: Option<HashMap<String, String>>,
     /// Obsidian integration settings
@@ -160,13 +151,6 @@ struct SearchConfig {
     command_debounce_ms: Option<u32>,
     /// Optional search provider blacklist
     provider_blacklist: Option<Vec<String>>,
-}
-
-/// Calculator configuration section in TOML
-#[derive(Deserialize, Serialize)]
-struct CalculatorConfig {
-    /// Optional calculator enabled state
-    enabled: Option<bool>,
 }
 
 /// Get the path to the user's configuration file
@@ -292,14 +276,6 @@ fn apply_toml(content: &str) -> Config {
         }
     }
 
-    // Apply calculator settings if present
-    if let Some(calc) = toml_cfg.calculator {
-        if let Some(enabled) = calc.enabled {
-            debug!("Setting calculator enabled to {}", enabled);
-            cfg.calculator = enabled;
-        }
-    }
-
     // Apply custom commands if present (replaces defaults)
     if let Some(cmds) = toml_cfg.commands {
         debug!(
@@ -357,27 +333,13 @@ app_dirs = [
 
 # List of GNOME Shell search providers to exclude.
 # Use the DesktopId as it appears in the provider's .ini file.
-# provider_blacklist = [
-#     "org.gnome.Software.desktop",
-#     "org.gnome.Characters.desktop",
-# ]
+provider_blacklist = []
 
-[calculator]
-# Enable inline calculator (evaluates expressions typed in the search bar).
-enabled = false
-
-[commands]
-# Define custom colon commands. The key is the command name (without the leading ':').
-# The value is a shell command that will be executed with 'sh -c'.
-# Use "$1" for the argument typed after the command.
-# Note: :s, :ob, :obg, :f, and :fg are built-in commands and cannot be overridden.
-
-# [obsidian]
-# Uncomment and fill in to enable Obsidian integration.
-# vault = "~/Documents/Obsidian/MyVault"
-# daily_notes_folder = "Daily"
-# new_notes_folder = "Inbox"
-# quick_note = "Quick.md"
+[obsidian]
+vault = ""
+daily_notes_folder = ""
+new_notes_folder = ""
+quick_note = ""
 "#,
         width = DEFAULT_WINDOW_WIDTH,
         height = DEFAULT_WINDOW_HEIGHT,

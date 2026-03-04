@@ -294,8 +294,7 @@ async fn load_icon_async(icon_name: &str) -> Option<gtk4::IconPaintable> {
 **Optimization Opportunities**:
 1. **`chrono`**: Consider `time` crate for smaller footprint
 2. **`regex`**: Evaluate if all uses need full regex engine
-3. **`evalexpr`**: Remove if calculator feature is deleted
-4. **`rayon`**: Could use `std::thread` for simpler parallelism
+3. **`rayon`**: Could use `std::thread` for simpler parallelism
 
 **Expected Benefit**: Smaller binary size, faster compilation.
 
