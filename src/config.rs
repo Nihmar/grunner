@@ -8,14 +8,12 @@
 //! - Window dimensions and UI settings
 //! - Search behavior and result limits
 //! - Application directory scanning paths
-//! - Custom shell commands for search modes
 //! - Obsidian vault integration settings
 //! - Search provider filtering
 
 use crate::utils::expand_home;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Default window width in pixels
@@ -75,8 +73,6 @@ pub struct Config {
     pub max_results: usize,
     /// Directories to scan for .desktop files (expanded paths)
     pub app_dirs: Vec<PathBuf>,
-    /// Custom shell commands for search modes (key = mode, value = command)
-    pub commands: HashMap<String, String>,
     /// Optional Obsidian integration configuration
     pub obsidian: Option<ObsidianConfig>,
     /// Debounce time in milliseconds for command execution
@@ -95,9 +91,6 @@ impl Default for Config {
     /// - Fixed colon commands (:s, :ob, :obg, :f, :fg)
     /// - Empty Obsidian configuration
     fn default() -> Self {
-        // Initialize empty commands map (f and fg are now fixed commands like :s, :ob, :obg)
-        let commands = HashMap::new();
-
         Self {
             window_width: DEFAULT_WINDOW_WIDTH,
             window_height: DEFAULT_WINDOW_HEIGHT,
@@ -107,7 +100,6 @@ impl Default for Config {
                 .into_iter()
                 .map(|s| expand_home(&s))
                 .collect(),
-            commands,
             obsidian: None,
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
             search_provider_blacklist: Vec::new(),
@@ -125,8 +117,6 @@ struct TomlConfig {
     window: Option<WindowConfig>,
     /// Search-related settings
     search: Option<SearchConfig>,
-    /// Custom command definitions
-    commands: Option<HashMap<String, String>>,
     /// Obsidian integration settings
     obsidian: Option<ObsidianConfig>,
 }
@@ -274,15 +264,6 @@ fn apply_toml(content: &str) -> Config {
             debug!("Setting search_provider_blacklist to {:?}", blacklist);
             cfg.search_provider_blacklist = blacklist;
         }
-    }
-
-    // Apply custom commands if present (replaces defaults)
-    if let Some(cmds) = toml_cfg.commands {
-        debug!(
-            "Setting custom commands: {:?}",
-            cmds.keys().collect::<Vec<_>>()
-        );
-        cfg.commands = cmds;
     }
 
     // Apply Obsidian settings if present

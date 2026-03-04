@@ -28,13 +28,13 @@ Take a quick look at grunner in action:
 ## Features
 
 - **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
-- **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), GNOME Shell search providers (:s), and Obsidian integration (:ob, :obg), plus custom user-defined commands
+- **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), GNOME Shell search providers (:s), and Obsidian integration (:ob, :obg)
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
 - **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) via `:s`
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings shortcut** — opens your config file with `xdg-open` for quick editing
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
-- **Configurable** — a single TOML file controls window size, search directories, result limits, user-defined custom commands, debounce timing, and Obsidian paths
+- **Configurable** — a single TOML file controls window size, search directories, result limits, debounce timing, and Obsidian paths
 - **Comprehensive logging** — integrated logging system with journald, syslog, file, and stderr backends, configurable via environment variables with panic capture for debugging
 
 ---
@@ -214,18 +214,9 @@ Searches the content of all Markdown files in your vault using `rg` if available
 :obg project alpha
 ```
 
-#### Custom commands
-
-The following colon commands are built-in and cannot be overridden: `:f`, `:fg`, `:s`, `:ob`, `:obg`. You can define additional custom colon commands in the config file. Each command receives the argument after the command name as `$1` in a shell invocation. Output lines are shown in the results list; selecting a line attempts to open it as a file or copy it to the clipboard.
-
-```toml
-[commands]
-gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
-```
-
-Usage: `:gh neovim`
 
 ---
+
 
 ## Configuration
 
@@ -267,10 +258,7 @@ app_dirs = [
 
 
 
-[commands]
-# Define additional custom colon commands. Built-in commands (:f, :fg, :s, :ob, :obg) cannot be overridden.
-# Example:
-# gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
+
 
 [obsidian]
 # Absolute or ~ path to the root of your Obsidian vault.
@@ -294,7 +282,7 @@ quick_note = "Quick.md"
 | `search.app_dirs` | array of strings | (see above) | Directories to scan for `.desktop` files |
 | `search.provider_blacklist` | array of strings | `[]` | List of GNOME Shell search providers to exclude |
 
-| `commands.<name>` | string | — | Shell command for additional custom colon commands (built-in :f, :fg, :s, :ob, :obg cannot be overridden) |
+
 | `obsidian.vault` | string | — | Path to Obsidian vault root |
 | `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |
 | `obsidian.new_notes_folder` | string | — | New notes subfolder |

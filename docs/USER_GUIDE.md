@@ -227,22 +227,7 @@ Searches content within your Obsidian vault.
 - Uses `ripgrep` for fast searching (falls back to `grep` if not available)
 - Opens matches directly in Obsidian
 
-### 4. Custom Commands
-You can define additional colon commands beyond the built-in fixed commands (:f, :fg, :s, :ob, :obg) in the configuration file.
 
-**Example Configuration:**
-```toml
-[commands]
-# Search GitHub repositories
-gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
-
-# Search Arch Linux AUR
-aur = "yay -Ss \"$1\" 2>/dev/null | head -20"
-```
-
-**Usage:**
-- `:gh neovim` → Search GitHub for Neovim repositories
-- `:aur firefox` → Search AUR for Firefox packages
 
 ## Keyboard Shortcuts
 
@@ -323,16 +308,6 @@ app_dirs = [
 
 
 
-#### Command Configuration
-```toml
-[commands]
-# Define additional custom colon commands.
-# $1 is replaced with the user's argument.
-# Note: :f, :fg, :s, :ob, and :obg are built-in fixed commands and cannot be overridden.
-
-# Custom command example: search DuckDuckGo
-ddg = "curl -s 'https://api.duckduckgo.com/?q=$1&format=json&pretty=1' | jq -r '.Abstract' 2>/dev/null | head -5"
-```
 
 
 
@@ -365,16 +340,6 @@ app_dirs = [
 #     "org.gnome.Software.desktop",
 #     "org.gnome.Characters.desktop",
 # ]
-
-[commands]
-# Custom command examples (note: :f and :fg are built-in and cannot be overridden)
-# Dictionary lookup
-dict = "dict -d gcide \"$1\" 2>/dev/null | head -10"
-
-# Web search example
-web = "echo 'Searching for: $1'"
-
-
 
 [obsidian]
 vault = "~/Documents/Obsidian/Personal"
@@ -444,20 +409,7 @@ Use `:obg search_term` to search through all Markdown files in your vault.
 #### Template Support
 Create a `templates/` folder in your vault and Grunner will prioritize template files when creating new notes.
 
-#### Tag Search
-Configure custom command for tag searching:
-```toml
-[commands]
-obt = "rg -l \"#$1\" \"$OBSIDIAN_VAULT\" 2>/dev/null | head -20"
-```
-Usage: `:obt todo` → Find files with `#todo` tag
 
-#### Backlink Search
-```toml
-[commands]
-obl = "rg -l \"\\[\\[$1\\]\\]\" \"$OBSIDIAN_VAULT\" 2>/dev/null | head -20"
-```
-Usage: `:obl project` → Find files linking to `[[project]]`
 
 ## Troubleshooting
 
@@ -626,7 +578,7 @@ provider_blacklist = [
 The Desktop ID can be found in the provider's `.ini` file or by examining the search results.
 
 ### Q: Can I override the built-in colon commands (:f, :fg, :s, :ob, :obg)?
-**A:** No, the built-in colon commands `:f` (file search), `:fg` (file grep), `:s` (GNOME Shell search), `:ob` (Obsidian actions), and `:obg` (Obsidian grep) are fixed and cannot be overridden. You can define additional custom commands using the `[commands]` section, but these specific commands are hardcoded for consistent behavior.
+**A:** No, the built-in colon commands `:f` (file search), `:fg` (file grep), `:s` (GNOME Shell search), `:ob` (Obsidian actions), and `:obg` (Obsidian grep) are fixed and cannot be overridden.
 
 ### Q: Why are some applications not appearing in search results?
 **A:** Common reasons include:

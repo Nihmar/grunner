@@ -8,7 +8,6 @@
 //! - General: Window dimensions and basic behavior
 //! - Search: Result limits and search behavior
 //! - Obsidian: Integration with Obsidian vault (if configured)
-//! - Commands: Custom colon commands
 //! - Advanced: Debug and experimental features
 
 use crate::config::{self, Config, ObsidianConfig};
@@ -262,61 +261,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("Search"))));
     }
 
-    // ── Tab 3: Commands ──────────────────────────────────────────────────────
-    {
-        let (scroll, inner) = make_tab_page();
-
-        let commands_group = PreferencesGroup::builder()
-            .title("Custom Colon Commands")
-            .description("One per line, format: command=shell command. Use $1 for the argument.")
-            .build();
-
-        let commands_text = gtk4::TextView::builder()
-            .wrap_mode(gtk4::WrapMode::WordChar)
-            .build();
-        let commands_buffer = commands_text.buffer();
-        commands_buffer.set_text(
-            &config_rc
-                .borrow()
-                .commands
-                .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
-                .collect::<Vec<_>>()
-                .join("\n"),
-        );
-        commands_buffer.connect_changed({
-            let config_rc = Rc::clone(&config_rc);
-            move |buffer| {
-                let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
-                let mut new_commands = std::collections::HashMap::new();
-                for line in text.split('\n') {
-                    let trimmed = line.trim();
-                    if let Some(eq_pos) = trimmed.find('=') {
-                        let key = trimmed[..eq_pos].trim().to_string();
-                        let value = trimmed[eq_pos + 1..].trim().to_string();
-                        if !key.is_empty() && !value.is_empty() {
-                            new_commands.insert(key, value);
-                        }
-                    }
-                }
-                config_rc.borrow_mut().commands = new_commands;
-            }
-        });
-        let commands_scrolled = gtk4::ScrolledWindow::builder()
-            .hexpand(true)
-            .min_content_height(150)
-            .max_content_height(300)
-            .build();
-        commands_scrolled.set_child(Some(&commands_text));
-        let commands_row = PreferencesRow::new();
-        commands_row.set_child(Some(&commands_scrolled));
-        commands_group.add(&commands_row);
-        inner.append(&commands_group);
-
-        notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("Commands"))));
-    }
-
-    // ── Tab 4: Obsidian (only when vault is configured) ──────────────────────
+    // ── Tab 3: Obsidian (only when vault is configured) ──────────────────────
     if config_rc.borrow().obsidian.is_some() {
         let (scroll, inner) = make_tab_page();
 
@@ -471,7 +416,7 @@ fn save_config(config: &Config) -> Result<(), std::io::Error> {
     struct TomlConfig {
         window: WindowConfig,
         search: SearchConfig,
-        commands: Option<std::collections::HashMap<String, String>>,
+
         obsidian: Option<ObsidianConfig>,
     }
 
@@ -507,11 +452,7 @@ fn save_config(config: &Config) -> Result<(), std::io::Error> {
             command_debounce_ms: config.command_debounce_ms,
             provider_blacklist: config.search_provider_blacklist.clone(),
         },
-        commands: if config.commands.is_empty() {
-            None
-        } else {
-            Some(config.commands.clone())
-        },
+
         obsidian: config.obsidian.clone(),
     };
 

@@ -408,9 +408,7 @@ app_dirs = [
 # They dynamically choose between plocate/find, ripgrep/grep, and other tools based on availability.
 # These commands cannot be overridden in user configuration.
 
-[commands]
-# Example custom command (not built-in):
-# gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
+
 
 
 

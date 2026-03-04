@@ -121,7 +121,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // Create the main data model that manages search results and state
     let model = AppListModel::new(
         cfg.max_results,
-        cfg.commands.clone(),
         cfg.obsidian.clone(),
         cfg.command_debounce_ms,
         cfg.search_provider_blacklist.clone(),

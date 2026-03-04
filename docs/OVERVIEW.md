@@ -10,7 +10,7 @@ Grunner is designed with several key principles in mind:
 
 1. **Keyboard-first interaction**: All primary functionality is accessible via keyboard shortcuts
 2. **System integration**: Deep integration with GNOME Shell, desktop standards, and system tools
-3. **Extensibility**: Modular architecture supporting custom commands and plugins
+3. **Extensibility**: Modular architecture supporting extensibility features
 4. **Performance**: Written in Rust for speed and memory safety
 5. **Modern UI**: Built on GTK4/libadwaita with adaptive theming
 
@@ -77,7 +77,7 @@ Grunner is designed with several key principles in mind:
 
 ### 2. Search Modes
 - **Default mode**: Application fuzzy search
-- **Colon commands**: Extensible command system with custom shell commands
+- **Colon commands**: Built-in command system for file search, grep, and Obsidian integration
 - **File search**: Integration with `plocate` for fast file finding (falls back to `find` if not available)
 - **Content search**: Integration with `ripgrep` for full-text search (falls back to `grep` if not available)
 - **GNOME Shell search**: Integration with GNOME Shell search providers
@@ -184,7 +184,7 @@ grunner/
 ### Configuration Sections
 1. **Window**: Dimensions and display settings
 2. **Search**: Result limits, debounce timing, application directories
-3. **Commands**: Custom shell commands for colon commands
+3. **Obsidian**: Obsidian vault integration settings
 5. **Obsidian**: Vault paths and note management settings
 
 ### Default Values
@@ -292,7 +292,7 @@ ApplicationWindow
 
 ### Security Model
 1. **No elevated privileges**: Runs with user permissions only
-2. **Shell command sanitization**: Argument escaping for custom commands
+2. **Shell command sanitization**: Argument escaping for built-in commands
 3. **File path validation**: Prevention of path traversal attacks
 4. **D-Bus method validation**: Restricted to safe operations
 
@@ -304,7 +304,7 @@ ApplicationWindow
 ## Extension Points
 
 ### Customization Options
-1. **Custom commands**: Shell commands via configuration
+1. **Theme customization**: CSS theming via recompilation
 2. **CSS theming**: Style customization via recompilation
 3. **Application directories**: Configurable .desktop file locations
 4. **Obsidian integration**: Vault and note management configuration

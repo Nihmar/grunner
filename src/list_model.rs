@@ -25,7 +25,7 @@ use gtk4::prelude::Cast;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::OnceLock;
@@ -444,8 +444,6 @@ pub struct AppListModel {
     /// Maximum number of results to show
     max_results: usize,
 
-    /// Custom shell commands for colon modes
-    commands: Rc<HashMap<String, String>>,
     /// Generation counter for cancelling stale async tasks
     task_gen: Rc<Cell<u64>>,
     /// Obsidian configuration (if enabled)
@@ -469,13 +467,11 @@ impl AppListModel {
     ///
     /// # Arguments
     /// * `max_results` - Maximum number of search results to display
-    /// * `commands` - Custom shell commands for colon modes
     /// * `obsidian_cfg` - Optional Obsidian configuration
     /// * `command_debounce_ms` - Debounce delay for command execution
     /// * `search_provider_blacklist` - List of provider IDs to exclude
     pub fn new(
         max_results: usize,
-        commands: HashMap<String, String>,
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
         search_provider_blacklist: Vec<String>,
@@ -491,7 +487,7 @@ impl AppListModel {
             all_apps: Rc::new(RefCell::new(Vec::new())),
             current_query: Rc::new(RefCell::new(String::new())),
             max_results,
-            commands: Rc::new(commands),
+
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
             active_mode: Rc::new(Cell::new(ActiveMode::None)),
@@ -687,7 +683,11 @@ impl AppListModel {
             "ob" | "obg" => self.handle_obsidian(cmd_part, arg),
             "f" => self.handle_file_search(arg),
             "fg" => self.handle_file_grep(arg),
-            cmd_name => self.handle_custom_command(cmd_name, arg),
+            _ => {
+                if !cmd_part.is_empty() {
+                    self.show_error_item(format!("Unknown command: :{}", cmd_part));
+                }
+            }
         }
     }
 
@@ -787,27 +787,6 @@ impl AppListModel {
         self.active_mode.set(mode);
         self.bump_task_gen();
         self.schedule_command(runner);
-    }
-
-    /// Handle custom colon commands defined in configuration
-    fn handle_custom_command(&self, cmd_name: &str, arg: &str) {
-        let Some(template) = self.commands.get(cmd_name) else {
-            return; // Unknown command - silently ignore
-        };
-
-        if arg.is_empty() {
-            self.clear_store();
-            return;
-        };
-
-        self.bump_task_gen();
-        let template = template.clone();
-        let arg = arg.to_string();
-        let cmd_name = cmd_name.to_string();
-        let model_clone = self.clone();
-        self.schedule_command(move || {
-            model_clone.run_command(&cmd_name, &template, &arg);
-        });
     }
 
     fn handle_file_search(&self, arg: &str) {
