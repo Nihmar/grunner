@@ -7,13 +7,14 @@
 //! - Obsidian vault and note management
 //! - Settings management
 
-use crate::config;
 use crate::config::ObsidianConfig;
 use crate::launcher;
 use crate::obsidian_item::ObsidianAction;
+use crate::settings_window;
 use crate::utils::expand_home;
 use chrono::Local;
 use gtk4::prelude::DisplayExt;
+use libadwaita;
 use log::{debug, error, info, warn};
 
 use std::fs;
@@ -273,37 +274,12 @@ fn logout_action() {
 }
 
 /// Open the application settings file
+/// Open the settings GUI window
 ///
-/// Creates the config directory if it doesn't exist, ensures the config file exists,
-/// and opens it with the system's default text editor via xdg-open.
-pub fn open_settings() {
-    let path = config::config_path();
-    debug!("Opening settings file at {:?}", path);
-
-    // Ensure config directory exists
-    if let Some(dir) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(dir) {
-            warn!("Failed to create config directory {:?}: {}", dir, e);
-        } else {
-            debug!("Created config directory: {:?}", dir);
-        }
-    }
-
-    // Ensure config file exists by loading it
-    if !path.exists() {
-        debug!("Config file does not exist, creating default");
-        config::load();
-    } else {
-        debug!("Config file exists at {:?}", path);
-    }
-
-    // Open with system default editor
-    info!("Opening settings file with xdg-open: {:?}", path);
-    if let Err(e) = std::process::Command::new("xdg-open").arg(&path).spawn() {
-        error!("Failed to open settings with xdg-open: {}", e);
-    } else {
-        info!("Successfully opened settings file");
-    }
+/// Opens a graphical interface for editing Grunner's configuration settings.
+pub fn open_settings(window: &libadwaita::ApplicationWindow, entry: &gtk4::Entry) {
+    info!("Opening GUI settings window");
+    settings_window::open_settings_window(window, entry);
 }
 
 /// Parse a file:line:content pattern (like grep -n output)

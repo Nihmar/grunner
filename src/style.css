@@ -142,3 +142,71 @@ scrollbar slider:hover {
         transparent
     );
 }
+
+/* Settings dialog — pill-style tab strip */
+notebook.pill-tabs > header {
+    background: transparent;
+    border: none;
+    padding: 10px 10px 0px 10px;
+}
+
+notebook.pill-tabs > header tabs {
+    background: transparent; /* color-mix(in srgb, var(--window-fg-color) 6%, transparent); */
+    border-radius: 14px;
+    padding: 3px;
+}
+
+notebook.pill-tabs > header tab {
+    border-radius: 11px;
+    padding: 5px 18px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    min-height: 28px;
+    color: color-mix(in srgb, var(--window-fg-color) 70%, transparent);
+    transition: background-color 80ms ease;
+}
+
+notebook.pill-tabs > header tab:checked {
+    background: color-mix(in srgb, var(--window-fg-color) 12%, transparent);
+    color: var(--window-fg-color);
+    font-weight: bold;
+}
+
+notebook.pill-tabs > header tab:hover:not(:checked) {
+    background: color-mix(in srgb, var(--window-fg-color) 7%, transparent);
+}
+
+/* Hide the separator line between tab strip and page content */
+notebook.pill-tabs > header + separator,
+notebook.pill-tabs separator {
+    min-height: 0;
+    min-width: 0;
+    background: transparent;
+    border: none;
+}
+
+/* Remove the AdwDialog frame: border, corner shadows, and background surface */
+.settings-dialog > .dialog-content {
+    box-shadow: none;
+    border: none;
+    outline: none;
+}
+
+/* Settings dialog — make the notebook page area transparent so it matches
+   the dialog background and removes the dark rectangle + fake separator */
+notebook.pill-tabs > stack {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* Inner padding for each tab's scrollable content box */
+.settings-tab-inner {
+    margin: 16px;
+}
+
+/* Action bar row at the bottom of the settings dialog */
+.settings-action-bar {
+    margin: 12px;
+}

@@ -94,11 +94,14 @@ pub fn build_power_bar(
         btn.connect_clicked(clone!(
             #[weak]
             window,
+            #[weak]
+            entry,
             move |_| {
-                // Open settings file with default editor
-                open_settings();
-                // Close Grunner window after opening settings
-                window.close();
+                // Open settings dialog — do NOT close the window here.
+                // PreferencesDialog is parented to the main window; closing the parent
+                // before the dialog renders destroys it immediately.
+                // Pass entry so focus returns to the search bar on dialog close.
+                open_settings(&window, &entry);
             }
         ));
         power_bar.append(&btn);
