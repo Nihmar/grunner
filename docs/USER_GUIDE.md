@@ -313,6 +313,12 @@ app_dirs = [
     "/var/lib/flatpak/exports/share/applications",
     "~/.local/share/flatpak/exports/share/applications",
 ]
+
+# List of GNOME Shell search providers to exclude
+# provider_blacklist = [
+#     "org.gnome.Software.desktop",
+#     "org.gnome.Characters.desktop",
+# ]
 ```
 
 
@@ -326,6 +332,13 @@ app_dirs = [
 
 # Custom command example: search DuckDuckGo
 ddg = "curl -s 'https://api.duckduckgo.com/?q=$1&format=json&pretty=1' | jq -r '.Abstract' 2>/dev/null | head -5"
+```
+
+#### Calculator Configuration
+```toml
+[calculator]
+# Enable inline calculator (evaluates expressions typed in the search bar)
+enabled = false
 ```
 
 ### Configuration Examples
@@ -352,6 +365,12 @@ app_dirs = [
     "~/.local/share/applications",
 ]
 
+# List of GNOME Shell search providers to exclude
+# provider_blacklist = [
+#     "org.gnome.Software.desktop",
+#     "org.gnome.Characters.desktop",
+# ]
+
 [commands]
 # Custom command examples (note: :f and :fg are built-in and cannot be overridden)
 # Dictionary lookup
@@ -359,6 +378,10 @@ dict = "dict -d gcide \"$1\" 2>/dev/null | head -10"
 
 # Web search example
 web = "echo 'Searching for: $1'"
+
+[calculator]
+# Enable inline calculator (evaluates expressions typed in the search bar)
+enabled = true
 
 [obsidian]
 vault = "~/Documents/Obsidian/Personal"
@@ -593,3 +616,69 @@ journalctl --user -u gnome-session | grep -i grunner
 **A:** Delete the configuration file and cache:
 ```bash
 rm ~/.config/grunner/grunner.toml
+rm -rf ~/.cache/grunner/
+```
+
+### Q: What is the calculator feature and how do I enable it?
+**A:** The calculator feature evaluates mathematical expressions typed in the search bar. To enable it, add the following to your `~/.config/grunner/grunner.toml`:
+```toml
+[calculator]
+enabled = true
+```
+Once enabled, typing expressions like `2+2` or `sin(pi/2)` will show the calculated result.
+
+### Q: How do I exclude certain GNOME Shell search providers?
+**A:** You can blacklist specific search providers by adding their Desktop IDs to the `provider_blacklist` array in the search section:
+```toml
+[search]
+provider_blacklist = [
+    "org.gnome.Software.desktop",
+    "org.gnome.Characters.desktop",
+]
+```
+The Desktop ID can be found in the provider's `.ini` file or by examining the search results.
+
+### Q: Can I override the built-in colon commands (:f, :fg, :s, :ob, :obg)?
+**A:** No, the built-in colon commands `:f` (file search), `:fg` (file grep), `:s` (GNOME Shell search), `:ob` (Obsidian actions), and `:obg` (Obsidian grep) are fixed and cannot be overridden. You can define additional custom commands using the `[commands]` section, but these specific commands are hardcoded for consistent behavior.
+
+### Q: Why are some applications not appearing in search results?
+**A:** Common reasons include:
+1. The application directory isn't in your `app_dirs` configuration
+2. The `.desktop` file has `NoDisplay=true` or `Hidden=true`
+3. The application is a duplicate (same executable as another entry)
+4. The application cache is outdated (delete `~/.cache/grunner/apps.bin`)
+
+### Q: How do I set up Obsidian integration?
+**A:** Add an `[obsidian]` section to your configuration file:
+```toml
+[obsidian]
+vault = "~/Documents/Obsidian/MyVault"
+daily_notes_folder = "Daily"
+new_notes_folder = "Inbox"
+quick_note = "Quick.md"
+```
+Ensure the vault path exists and Obsidian is installed.
+
+### Q: Why does file search (:f) or content grep (:fg) return no results?
+**A:** These commands use `plocate` and `ripgrep` (rg) respectively for optimal performance, with fallbacks to `find` and `grep`. Ensure:
+- `plocate` is installed for fast file search (`sudo apt install plocate` or equivalent)
+- The locate database is updated (`sudo updatedb`)
+- `ripgrep` is installed for fast content search (`sudo apt install ripgrep` or equivalent)
+- You have read permissions for the directories being searched
+
+### Q: How can I change the keyboard shortcut for launching Grunner?
+**A:** In GNOME Settings → Keyboard → Custom Shortcuts, add or edit the shortcut for the `grunner` command. Common shortcuts are `Super+Space` or `Alt+F2`.
+
+### Q: How do I enable debug logging for troubleshooting?
+**A:** Use environment variables to control logging:
+```bash
+# Debug logging to journald (systemd systems)
+GRUNNER_LOG_LEVEL=debug grunner
+
+# Log to file with maximum detail
+GRUNNER_LOG=file GRUNNER_LOG_LEVEL=trace GRUNNER_LOG_FILE=~/grunner-debug.log grunner
+
+# Disable all logging
+GRUNNER_LOG=none grunner
+```
+See the [ERROR_LOGGING.md](ERROR_LOGGING.md) documentation for complete details.

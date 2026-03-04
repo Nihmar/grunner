@@ -81,7 +81,8 @@ ui.rs
 ├── list_model.rs (search results)
 ├── obsidian_bar.rs (Obsidian actions)
 ├── power_bar.rs (power management)
-└── actions.rs (action execution)
+├── actions.rs (action execution)
+└── item_activation.rs (item activation logic)
 
 list_model.rs
 ├── launcher.rs (application search)
@@ -91,6 +92,7 @@ list_model.rs
 
 actions.rs
 ├── utils.rs (path expansion, shell escaping)
+├── settings_window.rs (settings dialog UI)
 └── (various system dependencies)
 ```
 
@@ -183,10 +185,35 @@ actions.rs
   - Handle power management operations
   - Open Obsidian notes and vaults
   - Copy text to clipboard
+  - Open settings dialog window
 - **Key Functions**:
   - `launch_app()`: Application launching with terminal detection
   - `open_file()`: File opening with `xdg-open` or `$EDITOR`
   - `execute_power_action()`: System power management
+  - `open_settings()`: Open configuration settings dialog
+
+#### item_activation.rs
+- **Purpose**: Item activation logic based on item type and application mode
+- **Responsibilities**:
+  - Determine appropriate action based on item type (application, command, Obsidian action, search result)
+  - Handle Obsidian grep result parsing and opening
+  - Activate GNOME Shell search provider results asynchronously
+  - Route activations to appropriate action functions
+- **Key Functions**:
+  - `activate_item()`: Main entry point for item activation
+  - `open_obsidian_grep_line()`: Parse and open Obsidian grep result lines
+
+#### settings_window.rs
+- **Purpose**: Settings dialog UI and configuration management
+- **Responsibilities**:
+  - Build tabbed settings dialog with GTK4 widgets
+  - Provide UI for editing all configuration options
+  - Validate user input and provide feedback
+  - Save configuration changes to disk
+  - Handle settings cancellation and confirmation
+- **Key Functions**:
+  - `open_settings_window()`: Create and present settings dialog
+  - `save_config()`: Serialize and save configuration to TOML file
 
 ## Data Flow
 
@@ -371,13 +398,23 @@ app_dirs = [
     "~/.local/share/applications",
 ]
 
-# Note: The :f and :fg commands are built-in with automatic fallback support.
-# They dynamically choose between plocate/find and ripgrep/grep based on availability.
+# List of GNOME Shell search providers to exclude
+# provider_blacklist = [
+#     "org.gnome.Software.desktop",
+#     "org.gnome.Characters.desktop",
+# ]
+
+# Note: The :f, :fg, :s, :ob, and :obg commands are built-in with automatic fallback support.
+# They dynamically choose between plocate/find, ripgrep/grep, and other tools based on availability.
 # These commands cannot be overridden in user configuration.
 
 [commands]
 # Example custom command (not built-in):
 # gh = "gh search repos \"$1\" --limit 10 --json fullName -q '.[].fullName' 2>/dev/null"
+
+[calculator]
+# Enable inline calculator (evaluates expressions typed in the search bar)
+# enabled = false
 
 [obsidian]
 vault = "~/Documents/Obsidian/MyVault"

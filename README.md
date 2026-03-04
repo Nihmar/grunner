@@ -259,6 +259,16 @@ app_dirs = [
     "~/.local/share/flatpak/exports/share/applications",
 ]
 
+# List of GNOME Shell search providers to exclude.
+# provider_blacklist = [
+#     "org.gnome.Software.desktop",
+#     "org.gnome.Characters.desktop",
+# ]
+
+[calculator]
+# Enable inline calculator (evaluates expressions typed in the search bar).
+enabled = false
+
 [commands]
 # Define additional custom colon commands. Built-in commands (:f, :fg, :s, :ob, :obg) cannot be overridden.
 # Example:
@@ -284,6 +294,8 @@ quick_note = "Quick.md"
 | `search.max_results` | integer | `64` | Maximum results displayed |
 | `search.command_debounce_ms` | integer | `300` | Debounce delay for colon commands (ms) |
 | `search.app_dirs` | array of strings | (see above) | Directories to scan for `.desktop` files |
+| `search.provider_blacklist` | array of strings | `[]` | List of GNOME Shell search providers to exclude |
+| `calculator.enabled` | boolean | `false` | Enable inline calculator in search bar |
 | `commands.<name>` | string | — | Shell command for additional custom colon commands (built-in :f, :fg, :s, :ob, :obg cannot be overridden) |
 | `obsidian.vault` | string | — | Path to Obsidian vault root |
 | `obsidian.daily_notes_folder` | string | — | Daily notes subfolder |
@@ -343,6 +355,12 @@ Comprehensive documentation is available in the `docs/` directory:
 | `ui.rs` | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
 | `list_model.rs` | Central search model; dispatches queries to the correct mode and populates the `ListStore` |
 | `launcher.rs` | Scans `.desktop` files, parses them, and deduplicates entries |
+| `app_mode.rs` | Application mode detection and management (Normal, FileSearch, SearchProvider, Obsidian) |
+| `item_activation.rs` | Item activation logic based on item type and application mode |
+| `obsidian_bar.rs` | Obsidian action bar UI component with buttons for vault operations |
+| `power_bar.rs` | Power action bar UI component with system management buttons |
+| `settings_window.rs` | Settings dialog UI with configuration editing and validation |
+| `utils.rs` | Utility functions for path expansion, shell escaping, and home directory resolution |
 
 | `search_provider.rs` | D-Bus client for GNOME Shell search providers (discovery + query + activation) |
 | `actions.rs` | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs |
@@ -355,6 +373,7 @@ Comprehensive documentation is available in the `docs/` directory:
 | `style.css` | libadwaita CSS using `var(--accent-color)` and `var(--window-bg-color)` |
 
 ---
+
 
 ## Theming
 
