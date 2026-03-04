@@ -185,8 +185,8 @@ pub fn build_power_bar(
                         move |_, response| {
                             if response == "confirm" {
                                 // User confirmed - close window and perform action
-                                window.close();
                                 power_action(&action);
+                                window.close();
                             } else {
                                 // User cancelled - refocus search entry for continued use
                                 entry.grab_focus();
