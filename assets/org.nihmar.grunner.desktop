@@ -2,7 +2,7 @@
 Name=grunner
 Comment=A fast, keyboard-driven application launcher for GNOME
 Exec=grunner
-Icon=grunner
+Icon=org.nihmar.grunner
 Type=Application
 Categories=Utility;
-StartupWMClass=grunner
+StartupWMClass=org.nihmar.grunner

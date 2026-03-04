@@ -21,11 +21,11 @@ package() {
     cd "$_srcdir"
 
     # Binary
-    install -Dm755 "target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
+    install -Dm755 "target/release/grunner" "$pkgdir/usr/bin/$pkgname"
 
     # Icon
-    install -Dm644 "assets/$pkgname.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/$pkgname.svg"
+    install -Dm644 "assets/org.nihmar.grunner.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.nihmar.grunner.svg"
 
     # Desktop entry (see below)
-    install -Dm644 "assets/$pkgname.desktop" "$pkgdir/usr/share/applications/$pkgname.desktop"
+    install -Dm644 "assets/org.nihmar.grunner.desktop" "$pkgdir/usr/share/applications/org.nihmar.grunner.desktop"
 }
