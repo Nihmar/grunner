@@ -184,7 +184,6 @@ actions.rs
   - Execute shell commands
   - Handle power management operations
   - Open Obsidian notes and vaults
-  - Copy text to clipboard
   - Open settings dialog window
 - **Key Functions**:
   - `launch_app()`: Application launching with terminal detection

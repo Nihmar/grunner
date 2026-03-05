@@ -32,7 +32,7 @@ Take a quick look at grunner in action:
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
 - **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) integrated in standard search
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
-- **Settings shortcut** — opens your config file with `xdg-open` for quick editing
+- **Settings window** — graphical dialog with tabs for editing configuration, accessible from the power bar
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
 - **Configurable** — a single TOML file controls window size, search directories, result limits, debounce timing, and Obsidian paths
 - **Comprehensive logging** — integrated logging system with journald, syslog, file, and stderr backends, configurable via environment variables with panic capture for debugging
@@ -164,7 +164,7 @@ Launch `grunner`. The window appears with a search bar focused and ready for inp
 
 ### Default — application search
 
-Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row.
+Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row. The search also includes results from GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching.
 
 ### Colon commands
 
@@ -219,7 +219,7 @@ Searches the content of all Markdown files in your vault using `rg` if available
 
 ## Configuration
 
-grunner stores its configuration at `~/.config/grunner/grunner.toml`. The file is created automatically with defaults on first run. You can open it from within grunner by clicking the **Settings** button in the bottom-left of the window.
+grunner stores its configuration at `~/.config/grunner/grunner.toml`. The file is created automatically with defaults on first run. You can edit settings graphically by clicking the **Settings** button in the bottom-left of the window, which opens a settings dialog with tabs for different configuration categories. From the settings dialog, you can also open the configuration file directly in your default editor.
 
 All keys are optional; missing keys fall back to built-in defaults.
 

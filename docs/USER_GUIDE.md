@@ -152,7 +152,9 @@ Type `:` followed by a command name to access specialized search modes.
 
 #### Available Commands:
 
-The following commands are built-in fixed commands and cannot be overridden: `:f`, `:fg`, `:s`, `:ob`, `:obg`.
+The following commands are built-in fixed commands and cannot be overridden: `:f`, `:fg`, `:ob`, `:obg`.
+
+**Note:** GNOME Shell search providers (Files, Calendar, Contacts, etc.) are now integrated into the default application search and no longer have a separate `:s` command.
 
 ##### `:f` - File Search (built-in fixed command)
 Searches for files in your home directory using `plocate` if available, falling back to `find` otherwise.
@@ -186,20 +188,6 @@ Searches file contents using `ripgrep` if available, falling back to `grep` othe
 - Shows file:line:content format
 - Opens in `$EDITOR` at matching line
 
-##### `:s` - GNOME Shell Search (built-in fixed command)
-Queries GNOME Shell search providers.
-
-**Usage:** `:s search_query`
-
-**Supported Providers:**
-- Files (document search)
-- GNOME Calendar
-- GNOME Contacts
-- And any other installed providers
-
-**Examples:**
-- `:s meeting notes` → Search documents
-- `:s john` → Search contacts
 
 ##### `:ob` - Obsidian Actions (built-in fixed command)
 Provides quick access to Obsidian vault operations.
@@ -267,8 +255,9 @@ Grunner is highly configurable through a TOML file located at:
 ```
 
 ### Opening Configuration
-1. Click the ⚙️ (settings) button in Grunner's bottom bar
-2. Or manually edit: `nano ~/.config/grunner/grunner.toml`
+1. Click the ⚙️ (settings) button in Grunner's bottom bar to open the graphical settings dialog with tabs for different configuration categories
+2. Within the settings dialog, you can also click "Open Config File" to open the configuration file directly in your default editor
+3. Or manually edit: `nano ~/.config/grunner/grunner.toml`
 
 ### Configuration Sections
 
@@ -567,6 +556,7 @@ rm -rf ~/.cache/grunner/
 
 
 ### Q: How do I exclude certain GNOME Shell search providers?
+Note: GNOME Shell search providers are now integrated into the default application search and no longer have a separate `:s` command.
 **A:** You can blacklist specific search providers by adding their Desktop IDs to the `provider_blacklist` array in the search section:
 ```toml
 [search]
@@ -577,8 +567,8 @@ provider_blacklist = [
 ```
 The Desktop ID can be found in the provider's `.ini` file or by examining the search results.
 
-### Q: Can I override the built-in colon commands (:f, :fg, :s, :ob, :obg)?
-**A:** No, the built-in colon commands `:f` (file search), `:fg` (file grep), `:s` (GNOME Shell search), `:ob` (Obsidian actions), and `:obg` (Obsidian grep) are fixed and cannot be overridden.
+### Q: Can I override the built-in colon commands (:f, :fg, :ob, :obg)?
+**A:** No, the built-in colon commands `:f` (file search), `:fg` (file grep), `:ob` (Obsidian actions), and `:obg` (Obsidian grep) are fixed and cannot be overridden.
 
 ### Q: Why are some applications not appearing in search results?
 **A:** Common reasons include:

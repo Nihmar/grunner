@@ -214,6 +214,15 @@ src/
 ├── launcher.rs         # Application scanning
 ├── search_provider.rs  # GNOME Shell integration
 ├── actions.rs          # System actions
+├── settings_window/    # Settings dialog UI
+│   ├── mod.rs         # Settings window module
+│   ├── save.rs        # Configuration saving
+│   └── tabs/          # Settings tabs
+│       ├── mod.rs
+│       ├── info.rs
+│       ├── general.rs
+│       ├── search.rs
+│       └── obsidian.rs
 ├── app_item.rs         # Application result wrapper
 ├── cmd_item.rs         # Command result wrapper
 ├── obsidian_item.rs    # Obsidian action wrapper
@@ -221,6 +230,7 @@ src/
 ├── power_bar.rs        # Power management UI
 ├── search_result_item.rs # Search provider result wrapper
 ├── app_mode.rs         # Mode enumeration
+├── item_activation.rs  # Item activation handling
 ├── utils.rs           # Utility functions
 └── style.css          # CSS stylesheet
 ```

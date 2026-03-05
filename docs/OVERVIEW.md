@@ -76,11 +76,11 @@ Grunner is designed with several key principles in mind:
 - **Duplicate detection** for applications with multiple `.desktop` files
 
 ### 2. Search Modes
-- **Default mode**: Application fuzzy search
-- **Colon commands**: Built-in command system for file search, grep, and Obsidian integration
+- **Default mode**: Application fuzzy search (includes GNOME Shell search provider results)
+- **Colon commands**: Built-in command system for file search (:f), content grep (:fg), and Obsidian integration (:ob, :obg)
 - **File search**: Integration with `plocate` for fast file finding (falls back to `find` if not available)
 - **Content search**: Integration with `ripgrep` for full-text search (falls back to `grep` if not available)
-- **GNOME Shell search**: Integration with GNOME Shell search providers
+- **GNOME Shell search providers**: Integrated into default application search (can be excluded via blacklist)
 - **Obsidian integration**: Vault management and note operations
 
 ### 3. System Integration
@@ -94,6 +94,7 @@ Grunner is designed with several key principles in mind:
 - **Automatic config creation** on first run
 - **Home directory expansion** (`~` support)
 - **Runtime configurable** without recompilation
+- **Graphical settings dialog**: Tabbed interface for editing configuration
 
 ## Technology Stack
 

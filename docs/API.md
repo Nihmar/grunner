@@ -35,24 +35,14 @@ fn main() -> glib::ExitCode
 **Key Structures**:
 ```rust
 pub struct Config {
-    pub window: WindowConfig,
-    pub search: SearchConfig,
-    pub commands: HashMap<String, String>,
-    pub obsidian: Option<ObsidianConfig>,
-}
-
-pub struct WindowConfig {
-    pub width: i32,
-    pub height: i32,
-}
-
-pub struct SearchConfig {
+    pub window_width: i32,
+    pub window_height: i32,
     pub max_results: usize,
+    pub app_dirs: Vec<PathBuf>,
+    pub obsidian: Option<ObsidianConfig>,
     pub command_debounce_ms: u32,
-    pub app_dirs: Vec<String>,
+    pub search_provider_blacklist: Vec<String>,
 }
-
-
 
 pub struct ObsidianConfig {
     pub vault: String,
@@ -77,6 +67,12 @@ pub fn default_app_dirs() -> Vec<String>
 - Returns default list of application directories to scan
 - Includes system-wide, user-local, and Flatpak directories
 
+```rust
+pub fn config_path() -> PathBuf
+```
+- Returns the path to the user's configuration file
+- Typically `~/.config/grunner/grunner.toml`
+
 **Constants**:
 - `DEFAULT_WINDOW_WIDTH: i32 = 640`
 - `DEFAULT_WINDOW_HEIGHT: i32 = 480`
@@ -88,7 +84,7 @@ pub fn default_app_dirs() -> Vec<String>
 
 **Key Functions**:
 ```rust
-pub fn build_ui(app: &Application, cfg: Arc<Config>) -> ApplicationWindow
+pub fn build_ui(app: &Application, cfg: &Config) -> ApplicationWindow
 ```
 - Constructs the main application window
 - Creates search entry, results list, and action bars
@@ -109,53 +105,54 @@ pub fn build_ui(app: &Application, cfg: Arc<Config>) -> ApplicationWindow
 
 **Key Structures**:
 ```rust
-pub struct ListModel {
-    config: Arc<Config>,
-    launcher: Arc<Launcher>,
-    current_mode: AppMode,
+pub struct AppListModel {
+    store: gtk4::ListStore,
+    selection: gtk4::SingleSelection,
+    max_results: usize,
+    obsidian_cfg: Option<ObsidianConfig>,
+    command_debounce_ms: u32,
+    search_provider_blacklist: Vec<String>,
     // ... internal state
 }
 
 pub enum AppMode {
-    AppSearch(String),
-    Command(String, Option<String>),
-    Obsidian(String),
+    Normal,
+    FileSearch(String),
+    FileGrep(String),
+    ObsidianAction(String),
+    ObsidianGrep(String),
 }
 ```
 
 **Key Functions**:
 ```rust
-pub fn new(config: Arc<Config>) -> Self
+pub fn new(max_results: usize, obsidian_cfg: Option<ObsidianConfig>, 
+           command_debounce_ms: u32, search_provider_blacklist: Vec<String>) -> Self
 ```
-- Creates new ListModel instance
-- Initializes search backends
+- Creates new AppListModel instance
+- Initializes GTK list store and selection model
 - Sets up default state
 
 ```rust
-pub async fn search(&self, query: String) -> Vec<glib::Object>
+pub fn schedule_populate(&self, query: &str)
 ```
-- Main search entry point
+- Main search entry point with debouncing
 - Detects search mode based on query
 - Routes to appropriate backend
-- Returns list of GObject results for UI display
+- Updates list store with results
 
 ```rust
-pub fn get_current_mode(&self) -> &AppMode
+pub fn create_factory(&self) -> SignalListItemFactory
 ```
-- Returns current search mode
-- Used for UI state management
+- Creates factory for rendering list items
+- Sets up bindings for item properties
 
 #### launcher.rs
 **Purpose**: Application discovery, indexing, and fuzzy search.
 
 **Key Structures**:
 ```rust
-pub struct Launcher {
-    apps: Vec<AppEntry>,
-    cache_path: PathBuf,
-}
-
-pub struct AppEntry {
+pub struct DesktopApp {
     pub name: String,
     pub exec: String,
     pub description: Option<String>,
@@ -167,24 +164,19 @@ pub struct AppEntry {
 
 **Key Functions**:
 ```rust
-pub fn new(config: &SearchConfig) -> Result<Self>
+pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp>
 ```
-- Creates new Launcher instance
-- Loads or builds application cache
-- Returns `Result` for error handling
+- Loads desktop applications from specified directories
+- Filters out hidden and duplicate applications
+- Parses .desktop files and extracts metadata
+- Returns vector of desktop applications
 
 ```rust
-pub fn search(&self, query: &str, max_results: usize) -> Vec<&AppEntry>
+pub fn fuzzy_search_apps(apps: &[DesktopApp], query: &str, max_results: usize) -> Vec<&DesktopApp>
 ```
 - Performs fuzzy search on application entries
 - Returns ranked results up to `max_results`
 - Uses `fuzzy-matcher` crate for matching
-
-```rust
-pub fn get_all_apps(&self) -> &[AppEntry]
-```
-- Returns all loaded applications
-- Used for debugging and testing
 
 
 
@@ -227,6 +219,38 @@ pub async fn activate_result(&self, provider: &ProviderInfo, identifier: &str) -
 - Activates a search result via D-Bus
 - Returns `Result` indicating success/failure
 
+#### settings_window.rs
+**Purpose**: Settings dialog UI and configuration management.
+
+**Key Structures**:
+```rust
+pub struct SettingsWindow {
+    dialog: libadwaita::PreferencesDialog,
+    config: Rc<RefCell<Config>>,
+}
+```
+
+**Key Functions**:
+```rust
+pub fn open_settings_window(parent: &ApplicationWindow, entry: &gtk4::Entry)
+```
+- Creates and presents the settings dialog as a modal window
+- Attaches to parent window for proper dialog positioning
+- Takes search entry reference for refocusing after dialog dismissal
+
+```rust
+pub fn save_config(config: &Config) -> Result<(), std::io::Error>
+```
+- Serializes configuration to TOML format
+- Saves to `~/.config/grunner/grunner.toml`
+- Returns `Result` indicating success or I/O error
+
+**Components**:
+- Tabbed interface with categories: Info, General, Search, Obsidian
+- Graphical controls for all configuration options
+- Reset to defaults functionality
+- Direct config file opening via "Open Config File" button
+
 #### actions.rs
 **Purpose**: System action execution.
 
@@ -251,12 +275,6 @@ pub fn execute_power_action(action: PowerAction) -> Result<()>
 ```
 - Executes system power management actions
 - Uses `systemctl` or `loginctl`
-- Returns `Result` for error handling
-
-```rust
-pub fn copy_to_clipboard(text: &str) -> Result<()>
-```
-- Copies text to system clipboard
 - Returns `Result` for error handling
 
 **Enums**:
@@ -294,22 +312,19 @@ pub fn load() -> Config
 
 ### Configuration Structure
 
-**Window Configuration**:
+**Configuration Structure**:
 ```rust
-WindowConfig {
-    width: i32,    // Window width in pixels (default: 640)
-    height: i32,   // Window height in pixels (default: 480)
+Config {
+    window_width: i32,    // Window width in pixels (default: 640)
+    window_height: i32,   // Window height in pixels (default: 480)
+    max_results: usize,   // Max results to display (default: 64)
+    app_dirs: Vec<PathBuf>, // Directories to scan for .desktop files (expanded paths)
+    obsidian: Option<ObsidianConfig>, // Obsidian integration settings
+    command_debounce_ms: u32, // Debounce delay in ms (default: 300)
+    search_provider_blacklist: Vec<String>, // GNOME Shell providers to exclude
 }
 ```
 
-**Search Configuration**:
-```rust
-SearchConfig {
-    max_results: usize,          // Max results to display (default: 64)
-    command_debounce_ms: u32,    // Debounce delay in ms (default: 300)
-    app_dirs: Vec<String>,       // Directories to scan for .desktop files
-}
-```
 
 
 
@@ -321,11 +336,6 @@ ObsidianConfig {
     new_notes_folder: String,    // New notes subfolder
     quick_note: String,          // Quick note file path
 }
-```
-
-**Commands Configuration**:
-```rust
-HashMap<String, String>  // Command name → shell command template
 ```
 
 ### Configuration Methods
@@ -353,7 +363,7 @@ impl Config {
 **Algorithm**:
 1. If query starts with `:` → Command mode
    - Parse command and optional argument
-   - Special handling for `:ob` (Obsidian) and `:s` (GNOME Shell)
+   - Special handling for `:ob` (Obsidian) commands
 2. Else → Application search mode
 
 ### Search Backends
@@ -373,11 +383,11 @@ impl Config {
 
 
 
-#### GNOME Shell Search
+#### GNOME Shell Search (Integrated into Default Search)
 **Backend**: `search_provider::SearchProvider`
 **Protocol**: D-Bus `org.gnome.Shell.SearchProvider2`
-**Query**: Async queries to all providers
-**Merging**: Results from all providers combined and ranked
+**Integration**: Results from GNOME Shell search providers are automatically included in default application search
+**Configuration**: Can be excluded via `search_provider_blacklist` in configuration
 
 ### Result Types
 
@@ -527,14 +537,7 @@ pub struct SearchResultItem {
 **Confirmation**: Shows dialog before destructive actions
 **Privileges**: May require polkit authorization
 
-### Clipboard Operations
 
-**Function**: `copy_to_clipboard(text: &str) -> Result<()>`
-
-**Implementation**:
-- Uses GTK4 clipboard API via `gtk4::Clipboard`
-- Supports both primary and clipboard selections
-- Returns `Result` for error handling
 
 ## Integration APIs
 
