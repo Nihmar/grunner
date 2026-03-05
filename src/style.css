@@ -223,7 +223,7 @@ notebook.pill-tabs > stack {
 }
 
 /* Rounded scrolled windows for settings text areas */
-.settings-content scrolledwindow {
+.settings-content scrolledwindow:not(.tab-scroll) {
     border-radius: calc(var(--window-radius, 12px) - 4px);
     border: 1px solid
         color-mix(in srgb, var(--window-fg-color) 20%, transparent);
@@ -242,10 +242,40 @@ notebook.pill-tabs > stack {
 /* Explanation label specific styling */
 .explanation-label {
     /* color: var(--window-fg-color); */
-    padding: 8px 0;
+    margin: 8px;
+    padding: 8px;
     font-size: 14px;
     line-height: 1.4;
     background-color: transparent;
     border: none;
     background: transparent;
+}
+
+.tab-scroll {
+    /*border-radius: calc(var(--window-radius, 12px) - 4px);
+    border: 1px solid
+        color-mix(in srgb, var(--window-fg-color) 20%, transparent);*/
+    border: none;
+    box-shadow: none;
+    outline: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+.tab-viewport {
+    /*border-radius: calc(var(--window-radius, 12px) - 4px);
+    border: 10px solid
+        color-mix(in srgb, var(--window-fg-color) 20%, transparent);*/
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+.tab-inner {
+    margin: 16px;
+    border: none;
+    background: transparent;
+    background-color: transparent;
+    box-shadow: none;
+    outline: none;
 }

@@ -72,13 +72,14 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
             .vscrollbar_policy(gtk4::PolicyType::Automatic)
             .vexpand(true)
             .hexpand(true)
+            .css_classes(["tab-scroll"])
             .build();
         let inner = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-        inner.set_margin_top(16);
-        inner.set_margin_bottom(16);
-        inner.set_margin_start(16);
-        inner.set_margin_end(16);
+        inner.add_css_class("tab-inner");
         scroll.set_child(Some(&inner));
+        if let Some(viewport) = scroll.child() {
+            viewport.add_css_class("tab-viewport");
+        }
         (scroll, inner)
     };
 
