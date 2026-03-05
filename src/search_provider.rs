@@ -205,7 +205,6 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
                         );
                     }
                     debug!("Discovered provider: {} from {:?}", p.desktop_id, path);
-                    eprintln!("Discovered provider: {} from {:?}", p.desktop_id, path);
                     providers.push(p);
                 } else {
                     debug!("Failed to parse provider .ini file: {:?}", path);
@@ -214,7 +213,6 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
         }
     }
     info!("Discovered {} search providers", providers.len());
-    eprintln!("Discovered {} search providers", providers.len());
     providers
 }
 
