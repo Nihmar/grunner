@@ -31,7 +31,7 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 200;
+const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 100;
 
 // Command templates for built-in colon commands with fallback support
 // - File search: uses plocate if available, falls back to find
@@ -89,8 +89,6 @@ enum ActiveMode {
     /// Default mode - no special rendering
     #[default]
     None,
-    /// GNOME Shell search provider results
-    SearchProvider,
     /// Obsidian action mode (vault open, new note, etc.)
     ObsidianAction,
     /// Obsidian file search results
@@ -607,7 +605,7 @@ impl AppListModel {
             return;
         }
 
-        self.active_mode.set(ActiveMode::SearchProvider);
+        self.active_mode.set(ActiveMode::None);
         self.bump_task_gen();
         let providers_clone: Vec<SearchProvider> = providers.to_vec();
         let max = self.max_results;
@@ -777,7 +775,6 @@ impl AppListModel {
         let (cmd_part, arg) = parse_colon_command(query);
 
         match cmd_part {
-            "s" => self.handle_search_provider(arg),
             "ob" | "obg" => self.handle_obsidian(cmd_part, arg),
             "f" => self.handle_file_search(arg),
             "fg" => self.handle_file_grep(arg),
@@ -787,35 +784,6 @@ impl AppListModel {
                 }
             }
         }
-    }
-
-    /// Handle search provider mode triggered by `:s` command
-    fn handle_search_provider(&self, arg: &str) {
-        if arg.is_empty() {
-            self.clear_store();
-            return;
-        }
-
-        // Discover providers (cached after first use)
-        let providers = self
-            .search_providers
-            .get_or_init(|| search_provider::discover_providers(&self.search_provider_blacklist));
-
-        if providers.is_empty() {
-            self.show_error_item("No GNOME Shell search providers found");
-            return;
-        }
-
-        self.active_mode.set(ActiveMode::SearchProvider);
-        self.bump_task_gen();
-        let providers_clone: Vec<SearchProvider> = providers.to_vec();
-        let arg = arg.to_string();
-        let max = self.max_results;
-        let model_clone = self.clone();
-        // Use shorter debounce for search providers for more responsive feel
-        self.schedule_command_with_delay(120, move || {
-            model_clone.run_provider_search(providers_clone, arg, max, true);
-        });
     }
 
     /// Validate the Obsidian vault path from configuration

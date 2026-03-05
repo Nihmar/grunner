@@ -21,16 +21,16 @@ Take a quick look at grunner in action:
 | **Obsidian actions** (`:ob`) – vault, new note, daily note, quick note    | ![Obsidian](screenshots/obsidian.png)                                                                       |
 | **Obsidian file search** (`:ob` with file list)                           | ![Obsidian locate](screenshots/obsidian_locate.png)                                                         |
 | **Obsidian vault grep** (`:obg`)                                          | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png)                                                       |
-| **GNOME Shell search providers** (`:s`) – files, calendar, contacts, etc. | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
+| **GNOME Shell search providers** – files, calendar, contacts, etc. (integrated in standard search) | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
 
 ---
 
 ## Features
 
 - **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
-- **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), GNOME Shell search providers (:s), and Obsidian integration (:ob, :obg)
+- **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), and Obsidian integration (:ob, :obg)
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
-- **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) via `:s`
+- **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) integrated in standard search
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings shortcut** — opens your config file with `xdg-open` for quick editing
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
@@ -188,14 +188,6 @@ Searches file contents recursively under `~` using `ripgrep` if available, falli
 
 ```
 :fg TODO fixme
-```
-
-#### `:s <query>` — GNOME Shell search providers (built-in fixed command)
-
-Queries all installed and enabled GNOME Shell search providers in parallel (e.g., GNOME Files, GNOME Calendar, GNOME Contacts). Results from all providers are merged and displayed with the provider's icon. Press `Enter` to activate the result through the provider's D-Bus interface.
-
-```
-:s meeting notes
 ```
 
 #### `:ob [text]` — Obsidian actions (built-in fixed command)

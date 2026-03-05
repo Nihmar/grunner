@@ -17,8 +17,7 @@ pub enum AppMode {
     Normal,
     /// File search mode triggered by `:f` prefix
     FileSearch,
-    /// Search provider mode triggered by `:s` prefix
-    SearchProvider,
+
     /// Obsidian note search mode triggered by `:ob` prefix
     Obsidian,
     /// Obsidian grep search mode triggered by `:obg` prefix
@@ -38,7 +37,6 @@ impl AppMode {
     /// - `:obg` prefix → `ObsidianGrep` (grep search within Obsidian notes)
     /// - `:ob` prefix → `Obsidian` (simple Obsidian note search)
     /// - `:f` or `:fg` prefix → `FileSearch` (file system search or content grep)
-    /// - `:s` prefix → `SearchProvider` (external search provider)
     /// - No prefix or unrecognized prefix → `Normal` (default application search)
     ///
     /// Note: Order matters - `:obg` must be checked before `:ob` since both start with `:ob`
@@ -49,8 +47,6 @@ impl AppMode {
             Self::Obsidian
         } else if text.starts_with(":f") {
             Self::FileSearch
-        } else if text.starts_with(":s") {
-            Self::SearchProvider
         } else {
             Self::Normal
         }
@@ -67,13 +63,11 @@ impl AppMode {
     ///
     /// # Icon Mappings
     /// - `FileSearch` → "text-x-generic" (generic text file icon)
-    /// - `SearchProvider` → "system-search" (magnifying glass/search icon)
     /// - `Obsidian`/`ObsidianGrep` → Uses the provided `obsidian_icon`
     /// - `Normal` → `None` (no special icon)
     pub fn icon_name<'a>(&self, obsidian_icon: &'a str) -> Option<&'a str> {
         match self {
             Self::FileSearch => Some("text-x-generic"),
-            Self::SearchProvider => Some("system-search"),
             Self::Obsidian | Self::ObsidianGrep => Some(obsidian_icon),
             Self::Normal => None,
         }

@@ -88,7 +88,7 @@ impl Default for Config {
     /// - Standard window dimensions
     /// - Default search result limit
     /// - Common application directories
-    /// - Fixed colon commands (:s, :ob, :obg, :f, :fg)
+    /// - Fixed colon commands (:ob, :obg, :f, :fg)
     /// - Empty Obsidian configuration
     fn default() -> Self {
         Self {
@@ -302,7 +302,7 @@ height = {height}
 # Maximum number of fuzzy-search results shown (only when a query is active).
 max_results = {max}
 
-# Delay in milliseconds before executing a colon command (e.g. :s, :ob, :obg, :f, :fg) after you stop typing.
+# Delay in milliseconds before executing a colon command (e.g. :ob, :obg, :f, :fg) after you stop typing.
 # Lower values feel more responsive but may cause flickering if your command is very fast.
 command_debounce_ms = 300
 
