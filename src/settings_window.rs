@@ -13,6 +13,7 @@
 use crate::actions::open_uri;
 use crate::config::{self, Config, ObsidianConfig};
 
+use gtk4::pango;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use libadwaita::{
@@ -141,21 +142,18 @@ At the bottom of the main window:
 ## Search Providers
 Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching."#;
 
-        let explanation_view = gtk4::TextView::builder()
-            .wrap_mode(gtk4::WrapMode::WordChar)
-            .editable(false)
-            .cursor_visible(false)
-            .build();
-        let explanation_buffer = explanation_view.buffer();
-        explanation_buffer.set_text(explanation_text);
-        let explanation_scrolled = gtk4::ScrolledWindow::builder()
+        let explanation_label = gtk4::Label::builder()
+            .wrap(true)
+            .wrap_mode(pango::WrapMode::WordChar)
+            .selectable(false)
+            .xalign(0.0)
+            .yalign(0.0)
             .hexpand(true)
-            .min_content_height(120)
-            .max_content_height(300)
             .build();
-        explanation_scrolled.set_child(Some(&explanation_view));
+        explanation_label.set_text(&explanation_text);
+        explanation_label.add_css_class("explanation-label");
         let explanation_row = PreferencesRow::new();
-        explanation_row.set_child(Some(&explanation_scrolled));
+        explanation_row.set_child(Some(&explanation_label));
         explanation_group.add(&explanation_row);
         inner.append(&explanation_group);
 

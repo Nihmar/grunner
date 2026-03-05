@@ -154,6 +154,7 @@ notebook.pill-tabs > header tabs {
     background: transparent; /* color-mix(in srgb, var(--window-fg-color) 6%, transparent); */
     border-radius: 14px;
     padding: 3px;
+    border: none;
 }
 
 notebook.pill-tabs > header tab {
@@ -171,10 +172,12 @@ notebook.pill-tabs > header tab:checked {
     background: color-mix(in srgb, var(--window-fg-color) 12%, transparent);
     color: var(--window-fg-color);
     font-weight: bold;
+    border: none;
 }
 
 notebook.pill-tabs > header tab:hover:not(:checked) {
     background: color-mix(in srgb, var(--window-fg-color) 7%, transparent);
+    border: none;
 }
 
 /* Hide the separator line between tab strip and page content */
@@ -204,6 +207,7 @@ notebook.pill-tabs > stack {
 /* Inner padding for each tab's scrollable content box */
 .settings-tab-inner {
     margin: 16px;
+    border: none;
 }
 
 /* Action bar row at the bottom of the settings dialog */
@@ -224,4 +228,24 @@ notebook.pill-tabs > stack {
     border: 1px solid
         color-mix(in srgb, var(--window-fg-color) 20%, transparent);
     background-color: transparent;
+}
+
+/* Explanation label in settings info tab */
+.settings-content label {
+    color: var(--window-fg-color);
+    padding: 8px 0;
+    font-size: 14px;
+    line-height: 1.4;
+    border: none;
+}
+
+/* Explanation label specific styling */
+.explanation-label {
+    /* color: var(--window-fg-color); */
+    padding: 8px 0;
+    font-size: 14px;
+    line-height: 1.4;
+    background-color: transparent;
+    border: none;
+    background: transparent;
 }
