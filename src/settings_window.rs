@@ -12,6 +12,8 @@
 
 use crate::actions::open_uri;
 use crate::config::{self, Config, ObsidianConfig};
+use crate::utils::{contract_home, expand_home};
+use glib::clone;
 
 use gtk4::pango;
 use gtk4::prelude::*;
@@ -21,6 +23,7 @@ use libadwaita::{
 };
 use log::{debug, error, info};
 use std::cell::RefCell;
+
 use std::rc::Rc;
 
 /// Open the settings window as a modal dialog
@@ -468,16 +471,93 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
             .description("Configure Obsidian vault integration")
             .build();
 
-        let vault_row = EntryRow::builder().title("Vault Path").build();
-        vault_row.set_text(&config_rc.borrow().obsidian.as_ref().unwrap().vault);
-        vault_row.connect_changed({
+        // Create a box to hold vault path entry and browse button
+        let vault_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        vault_box.set_hexpand(true);
+
+        let vault_entry = gtk4::Entry::new();
+        vault_entry.set_placeholder_text(Some("~/path/to/vault"));
+        vault_entry.set_text(&config_rc.borrow().obsidian.as_ref().unwrap().vault);
+        vault_entry.set_hexpand(true);
+        vault_box.append(&vault_entry);
+
+        let browse_button = gtk4::Button::from_icon_name("folder-open-symbolic");
+        browse_button.set_css_classes(&["flat"]);
+        browse_button.set_tooltip_text(Some("Browse for vault folder"));
+        vault_box.append(&browse_button);
+
+        let vault_row = PreferencesRow::new();
+        vault_row.set_title("Vault Path");
+        vault_row.set_child(Some(&vault_box));
+
+        // Connect entry changes to config
+        vault_entry.connect_changed({
             let config_rc = Rc::clone(&config_rc);
-            move |row| {
+            move |entry| {
                 if let Some(obs) = config_rc.borrow_mut().obsidian.as_mut() {
-                    obs.vault = row.text().to_string();
+                    obs.vault = entry.text().to_string();
                 }
             }
         });
+
+        // Connect browse button to open folder picker
+        browse_button.connect_clicked({
+            let config_rc = Rc::clone(&config_rc);
+            let vault_entry = vault_entry.clone();
+            let parent = parent.clone();
+            move |_| {
+                let dialog = gtk4::FileChooserNative::builder()
+                    .title("Select Obsidian Vault Folder")
+                    .modal(true)
+                    .action(gtk4::FileChooserAction::SelectFolder)
+                    .transient_for(&parent)
+                    .build();
+
+                // Set initial folder if vault path exists
+                let initial_folder = config_rc.borrow().obsidian.as_ref().and_then(|obs| {
+                    if obs.vault.is_empty() {
+                        None
+                    } else {
+                        let expanded = expand_home(&obs.vault);
+                        if expanded.exists() {
+                            Some(expanded)
+                        } else {
+                            None
+                        }
+                    }
+                });
+
+                if let Some(folder) = initial_folder {
+                    let _ = dialog.set_current_folder(Some(&gtk4::gio::File::for_path(folder)));
+                }
+
+                dialog.connect_response(clone!(
+                    #[strong]
+                    config_rc,
+                    #[strong]
+                    vault_entry,
+                    move |dialog, response| {
+                        if response == gtk4::ResponseType::Accept {
+                            if let Some(file) = dialog.file() {
+                                let folder_path = file.path().unwrap_or_default();
+                                // Convert to tilde representation if under home
+                                let display_path = contract_home(&folder_path);
+                                vault_entry.set_text(&display_path);
+
+                                // Update config with tilde representation
+                                if let Some(obs) = config_rc.borrow_mut().obsidian.as_mut() {
+                                    obs.vault = display_path;
+                                }
+                            }
+                        }
+                        dialog.destroy();
+                    }
+                ));
+
+                dialog.show();
+            }
+        });
+
         obsidian_group.add(&vault_row);
 
         let daily_row = EntryRow::builder().title("Daily Notes Folder").build();

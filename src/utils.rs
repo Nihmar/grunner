@@ -49,3 +49,38 @@ pub fn expand_home(path: &str) -> PathBuf {
         PathBuf::from(path)
     }
 }
+
+/// Convert an absolute path to a tilde representation if it's under the home directory
+///
+/// This function checks if the given path starts with the user's home directory.
+/// If it does, the home directory portion is replaced with `~`. Otherwise,
+/// the path is returned as a string unchanged.
+///
+/// # Arguments
+/// * `path` - A path to potentially contract
+///
+/// # Returns
+/// A string representation of the path with home directory contracted to `~` if applicable.
+///
+/// # Examples
+/// ```
+/// # use grunner::utils::contract_home;
+/// # use std::path::Path;
+/// # // With HOME = "/home/alice":
+/// # // contract_home(Path::new("/home/alice/Documents")) → "~/Documents"
+/// # // contract_home(Path::new("/etc/fstab")) → "/etc/fstab"
+/// ```
+pub fn contract_home(path: &std::path::Path) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let home_path = std::path::Path::new(&home);
+
+    if let Ok(relative) = path.strip_prefix(home_path) {
+        if relative.as_os_str().is_empty() {
+            "~".to_string()
+        } else {
+            format!("~/{}", relative.display())
+        }
+    } else {
+        path.display().to_string()
+    }
+}
