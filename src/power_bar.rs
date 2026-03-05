@@ -156,47 +156,54 @@ pub fn build_power_bar(
             #[weak]
             entry,
             move |_| {
-                // Create confirmation dialog for destructive power operation
-                let dialog = AlertDialog::builder()
-                    .heading(format!("{}?", label_str))
-                    .body(format!(
-                        "Are you sure you want to {}?",
-                        label_str.to_lowercase()
-                    ))
-                    .default_response("cancel")
-                    .close_response("cancel")
-                    .build();
+                if action == "logout" {
+                    // For logout, directly perform the action without custom confirmation dialog
+                    power_action(&action);
+                    entry.grab_focus();
+                    // window.close();
+                } else {
+                    // Create confirmation dialog for destructive power operation
+                    let dialog = AlertDialog::builder()
+                        .heading(format!("{}?", label_str))
+                        .body(format!(
+                            "Are you sure you want to {}?",
+                            label_str.to_lowercase()
+                        ))
+                        .default_response("cancel")
+                        .close_response("cancel")
+                        .build();
 
-                // Add Cancel button (safe, default action)
-                dialog.add_response("cancel", "Cancel");
+                    // Add Cancel button (safe, default action)
+                    dialog.add_response("cancel", "Cancel");
 
-                // Add confirmation button with destructive appearance (warning color)
-                dialog.add_response("confirm", &label_str);
-                dialog.set_response_appearance("confirm", ResponseAppearance::Destructive);
+                    // Add confirmation button with destructive appearance (warning color)
+                    dialog.add_response("confirm", &label_str);
+                    dialog.set_response_appearance("confirm", ResponseAppearance::Destructive);
 
-                let action = action.clone();
-                dialog.connect_response(
-                    None,
-                    clone!(
-                        #[weak]
-                        window,
-                        #[weak]
-                        entry,
-                        move |_, response| {
-                            if response == "confirm" {
-                                // User confirmed - close window and perform action
-                                power_action(&action);
-                                window.close();
-                            } else {
-                                // User cancelled - refocus search entry for continued use
-                                entry.grab_focus();
+                    let action = action.clone();
+                    dialog.connect_response(
+                        None,
+                        clone!(
+                            #[weak]
+                            window,
+                            #[weak]
+                            entry,
+                            move |_, response| {
+                                if response == "confirm" {
+                                    // User confirmed - close window and perform action
+                                    power_action(&action);
+                                    window.close();
+                                } else {
+                                    // User cancelled - refocus search entry for continued use
+                                    entry.grab_focus();
+                                }
                             }
-                        }
-                    ),
-                );
+                        ),
+                    );
 
-                // Show dialog centered on the main window
-                dialog.present(Some(&window));
+                    // Show dialog centered on the main window
+                    dialog.present(Some(&window));
+                }
             }
         ));
 

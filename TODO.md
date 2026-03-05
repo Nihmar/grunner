@@ -16,4 +16,4 @@
     - [ ] org.gnome.clocks.desktop
 - [x] Tackle problem of glitchy edit field
 - [ ] Copy from calculator provider not working
-- [ ] if power action is logout, directly standard logout dialog or direct logout instead of calling standard logout dialog after custom logout dialog
+- [x] if power action is logout, directly standard logout dialog or direct logout instead of calling standard logout dialog after custom logout dialog
