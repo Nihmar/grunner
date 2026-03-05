@@ -14,6 +14,7 @@
     - [ ] org.gnome.Settings.desktop
     - [ ] org.gnome.Calendar.desktop
     - [ ] org.gnome.clocks.desktop
+    - [ ] org.gnome.Nautilus.desktop
 - [x] Tackle problem of glitchy edit field
 - [ ] Copy from calculator provider not working
 - [x] if power action is logout, directly standard logout dialog or direct logout instead of calling standard logout dialog after custom logout dialog
