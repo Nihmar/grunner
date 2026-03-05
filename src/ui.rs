@@ -297,12 +297,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 None => command_icon.set_visible(false),
             }
 
-            // Defer the expensive store rebuild to the next idle slot so this
-            // handler returns before GTK processes more input events.
-            let model = model.clone();
-            glib::idle_add_local_once(move || {
-                model.populate(&text);
-            });
+            // Schedule the expensive store rebuild with debounce for default search
+            model.schedule_populate(&text);
         }
     ));
 

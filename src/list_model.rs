@@ -31,6 +31,8 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 200;
+
 // Command templates for built-in colon commands with fallback support
 // - File search: uses plocate if available, falls back to find
 // - File grep: uses ripgrep (rg) if available, falls back to grep
@@ -456,6 +458,10 @@ pub struct AppListModel {
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     /// Debounce delay in milliseconds
     command_debounce_ms: u32,
+    /// Debounce timer source ID for delayed search execution
+    search_debounce: Rc<RefCell<Option<glib::SourceId>>>,
+    /// Debounce delay in milliseconds for default search mode
+    search_debounce_ms: u32,
     /// Fuzzy matcher for application search
     fuzzy_matcher: Rc<SkimMatcherV2>,
     /// Cached GNOME Shell search providers
@@ -495,6 +501,8 @@ impl AppListModel {
             active_mode: Rc::new(Cell::new(ActiveMode::None)),
             command_debounce: Rc::new(RefCell::new(None)),
             command_debounce_ms,
+            search_debounce: Rc::new(RefCell::new(None)),
+            search_debounce_ms: DEFAULT_SEARCH_DEBOUNCE_MS,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
             search_provider_blacklist,
@@ -515,8 +523,14 @@ impl AppListModel {
     ///
     /// Used when the user types new input before a delayed command executes.
     fn cancel_debounce(&self) {
-        if let Some(source_id) = self.command_debounce.borrow_mut().take() {
-            let _ = source_id.remove();
+        if let Some(id) = self.command_debounce.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    fn cancel_search_debounce(&self) {
+        if let Some(id) = self.search_debounce.borrow_mut().take() {
+            id.remove();
         }
     }
 
@@ -546,12 +560,37 @@ impl AppListModel {
         *self.command_debounce.borrow_mut() = Some(source_id);
     }
 
+    fn schedule_search_with_delay<F>(&self, delay_ms: u32, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.cancel_search_debounce();
+        let mut f_opt = Some(f);
+        let debounce_ref = self.search_debounce.clone();
+        let source_id =
+            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
+                *debounce_ref.borrow_mut() = None;
+                if let Some(f) = f_opt.take() {
+                    f();
+                }
+                glib::ControlFlow::Break
+            });
+        *self.search_debounce.borrow_mut() = Some(source_id);
+    }
+
     /// Schedule a command to run with the configured default debounce delay
     fn schedule_command<F>(&self, f: F)
     where
         F: FnOnce() + 'static,
     {
         self.schedule_command_with_delay(self.command_debounce_ms, f);
+    }
+
+    fn schedule_search<F>(&self, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.schedule_search_with_delay(self.search_debounce_ms, f);
     }
 
     /// Schedule a search provider query to run in parallel with application search
@@ -668,6 +707,7 @@ impl AppListModel {
         *self.current_query.borrow_mut() = query.to_string();
         self.active_mode.set(ActiveMode::None);
         self.cancel_debounce();
+        self.cancel_search_debounce();
 
         // Handle colon-prefixed commands
         if query.starts_with(':') {
@@ -701,6 +741,34 @@ impl AppListModel {
         // Auto-select first item if we have results
         if self.store.n_items() > 0 {
             self.selection.set_selected(0);
+        }
+    }
+
+    /// Schedule a populate call with debounce for default search mode
+    ///
+    /// This method should be called from UI when the search query changes.
+    /// It will cancel any pending search debounce and schedule a new one.
+    /// Colon commands are handled immediately without debounce.
+    pub fn schedule_populate(&self, query: &str) {
+        self.cancel_debounce();
+        self.cancel_search_debounce();
+
+        // Empty query: immediate clear
+        if query.is_empty() {
+            let model = self.clone();
+            glib::idle_add_local_once(move || model.populate(""));
+            return;
+        }
+
+        let query = query.to_string();
+        let model = self.clone();
+
+        if query.starts_with(':') {
+            // Colon commands: immediate (they have internal debounce)
+            glib::idle_add_local_once(move || model.populate(&query));
+        } else {
+            // Default search: 200ms debounce
+            self.schedule_search(move || model.populate(&query));
         }
     }
 
