@@ -15,11 +15,11 @@
     - [x] org.gnome.Calendar.desktop
     - [x] org.gnome.clocks.desktop
     - [x] org.gnome.Nautilus.desktop
-- [ ] settings:
-  - [ ] add explanation in the info tab for how the app works (taken from readme is good. should explain default search, the colon commands and the buttons)
-  - [ ] the memo field inputs seems like they are trying to have rounded borders but their corners are not rounded
-  - [ ] in the info put the reset at the bottom of that page
-  - [ ] in the info put a button to open the config file directly with the default editor
+- [x] settings:
+  - [x] add explanation in the info tab for how the app works (taken from readme is good. should explain default search, the colon commands and the buttons)
+  - [x] the memo field inputs seems like they are trying to have rounded borders but their corners are not rounded
+  - [x] in the info put the reset at the bottom of that page
+  - [x] in the info put a button to open the config file directly with the default editor
 - [x] Tackle problem of glitchy edit field
 - [ ] Copy from calculator provider not working
 - [x] if power action is logout, directly standard logout dialog or direct logout instead of calling standard logout dialog after custom logout dialog
