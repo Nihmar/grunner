@@ -1,0 +1,77 @@
+//! Configuration persistence for the settings window.
+//!
+//! Kept separate from the UI code so serialisation logic can be
+//! read and tested independently of GTK.
+
+use crate::config::{self, Config, ObsidianConfig};
+use log::debug;
+use serde::Serialize;
+use std::fs;
+
+/// Save configuration to file.
+///
+/// # Arguments
+/// * `config` - The configuration to save
+///
+/// # Returns
+/// `Result<(), std::io::Error>` indicating success or failure
+pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
+    // Local structs mirror the TOML layout; they live here so the public
+    // Config type does not need to carry serde attributes it doesn't need
+    // elsewhere.
+    #[derive(Serialize)]
+    struct TomlConfig {
+        window: WindowConfig,
+        search: SearchConfig,
+        obsidian: Option<ObsidianConfig>,
+    }
+
+    #[derive(Serialize)]
+    struct WindowConfig {
+        width: i32,
+        height: i32,
+    }
+
+    #[derive(Serialize)]
+    struct SearchConfig {
+        max_results: usize,
+        app_dirs: Vec<String>,
+        command_debounce_ms: u32,
+        provider_blacklist: Vec<String>,
+    }
+
+    // Convert app_dirs back to strings (without home expansion)
+    let app_dirs: Vec<String> = config
+        .app_dirs
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+
+    let toml_config = TomlConfig {
+        window: WindowConfig {
+            width: config.window_width,
+            height: config.window_height,
+        },
+        search: SearchConfig {
+            max_results: config.max_results,
+            app_dirs,
+            command_debounce_ms: config.command_debounce_ms,
+            provider_blacklist: config.search_provider_blacklist.clone(),
+        },
+        obsidian: config.obsidian.clone(),
+    };
+
+    let toml_string = toml::to_string_pretty(&toml_config)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+    let path = config::config_path();
+    debug!("Saving configuration to {:?}", path);
+
+    // Ensure directory exists
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    fs::write(&path, toml_string)?;
+    Ok(())
+}
