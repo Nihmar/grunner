@@ -210,3 +210,18 @@ notebook.pill-tabs > stack {
 .settings-action-bar {
     margin: 12px;
 }
+
+/* Rounded text views for settings inputs */
+.settings-content textview {
+    border-radius: calc(var(--window-radius, 12px) - 4px);
+    padding: 8px;
+    background-color: transparent;
+}
+
+/* Rounded scrolled windows for settings text areas */
+.settings-content scrolledwindow {
+    border-radius: calc(var(--window-radius, 12px) - 4px);
+    border: 1px solid
+        color-mix(in srgb, var(--window-fg-color) 20%, transparent);
+    background-color: transparent;
+}

@@ -391,7 +391,9 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             info!("Opening Obsidian vault");
             let vault_name = vault_path.file_name().unwrap_or_default().to_string_lossy();
             let uri = format!("obsidian://open?vault={}", urlencoding::encode(&vault_name));
-            open_uri(&uri);
+            if let Err(e) = open_uri(&uri) {
+                error!("Failed to open Obsidian vault: {}", e);
+            }
         }
         ObsidianAction::NewNote => {
             // Create a new note with timestamp in the configured folder
@@ -433,7 +435,9 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                 "obsidian://open?path={}",
                 urlencoding::encode(&path.to_string_lossy())
             );
-            open_uri(&uri);
+            if let Err(e) = open_uri(&uri) {
+                error!("Failed to open Obsidian file: {}", e);
+            }
         }
         ObsidianAction::DailyNote => {
             // Open or create today's daily note
@@ -474,7 +478,9 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                 "obsidian://open?path={}",
                 urlencoding::encode(&path.to_string_lossy())
             );
-            open_uri(&uri);
+            if let Err(e) = open_uri(&uri) {
+                error!("Failed to open Obsidian daily note: {}", e);
+            }
         }
         ObsidianAction::QuickNote => {
             // Append text to the configured quick note file
@@ -516,7 +522,9 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                 "obsidian://open?path={}",
                 urlencoding::encode(&path.to_string_lossy())
             );
-            open_uri(&uri);
+            if let Err(e) = open_uri(&uri) {
+                error!("Failed to open Obsidian quick note: {}", e);
+            }
         }
     }
 }
@@ -540,7 +548,9 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
 
     // Construct and open Obsidian URI
     let uri = format!("obsidian://open?path={}", urlencoding::encode(file_path));
-    open_uri(&uri);
+    if let Err(e) = open_uri(&uri) {
+        error!("Failed to open Obsidian file: {}", e);
+    }
 }
 
 /// Open an Obsidian file at a specific line
@@ -575,7 +585,9 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
         urlencoding::encode(&path.to_string_lossy()),
         line
     );
-    open_uri(&uri);
+    if let Err(e) = open_uri(&uri) {
+        error!("Failed to open Obsidian file at line: {}", e);
+    }
 }
 
 /// Open a URI using xdg-open
@@ -584,11 +596,16 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
 /// * `uri` - The URI to open (obsidian://, http://, etc.)
 ///
 /// Uses the system's default URI handler (xdg-open on Linux) to open the URI.
-fn open_uri(uri: &str) {
+pub fn open_uri(uri: &str) -> Result<(), std::io::Error> {
     debug!("Opening URI: {}", uri);
-    if let Err(e) = std::process::Command::new("xdg-open").arg(uri).spawn() {
-        error!("Failed to open URI '{}': {}", uri, e);
-    } else {
-        info!("Successfully opened URI: {}", uri);
+    match std::process::Command::new("xdg-open").arg(uri).spawn() {
+        Ok(_) => {
+            info!("Successfully opened URI: {}", uri);
+            Ok(())
+        }
+        Err(e) => {
+            error!("Failed to open URI '{}': {}", uri, e);
+            Err(e)
+        }
     }
 }

@@ -10,6 +10,7 @@
 //! - Obsidian: Integration with Obsidian vault (if configured)
 //! - Advanced: Debug and experimental features
 
+use crate::actions::open_uri;
 use crate::config::{self, Config, ObsidianConfig};
 
 use gtk4::prelude::*;
@@ -100,6 +101,138 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
     {
         let (scroll, inner) = make_tab_page();
 
+        // Explanation section
+        let explanation_group = PreferencesGroup::builder()
+            .title("How Grunner Works")
+            .description("Overview of features and usage")
+            .build();
+
+        let explanation_text = r#"Grunner is a GTK4 application launcher with advanced search capabilities and system integration.
+
+## Default Search
+Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row.
+
+## Colon Commands
+Type ':' followed by a command name and optional argument:
+
+• :f <pattern> — Search your home directory for files
+• :fg <pattern> — Search file contents recursively using ripgrep/grep
+• :ob [text] — Obsidian actions (requires configuration)
+• :obg <pattern> — Search Obsidian vault content
+
+## Obsidian Action Bar
+When you type `:ob` (with optional text), an action bar appears with four buttons:
+
+• Open Vault — Opens your configured Obsidian vault
+• New Note — Creates a timestamped note in the new notes folder
+• Daily Note — Opens or creates today's daily note
+• Quick Note — Appends text to the quick note file
+
+Selecting any button performs the corresponding action.
+
+## Power Bar Buttons
+At the bottom of the main window:
+• Settings (left) — Open this settings dialog
+• Suspend — Put system to sleep (with confirmation)
+• Restart — Reboot system (with confirmation)
+• Power off — Shut down system (with confirmation)
+• Log out — End current user session
+
+## Search Providers
+Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching."#;
+
+        let explanation_view = gtk4::TextView::builder()
+            .wrap_mode(gtk4::WrapMode::WordChar)
+            .editable(false)
+            .cursor_visible(false)
+            .build();
+        let explanation_buffer = explanation_view.buffer();
+        explanation_buffer.set_text(explanation_text);
+        let explanation_scrolled = gtk4::ScrolledWindow::builder()
+            .hexpand(true)
+            .min_content_height(120)
+            .max_content_height(300)
+            .build();
+        explanation_scrolled.set_child(Some(&explanation_view));
+        let explanation_row = PreferencesRow::new();
+        explanation_row.set_child(Some(&explanation_scrolled));
+        explanation_group.add(&explanation_row);
+        inner.append(&explanation_group);
+
+        let desktop_ids_group = PreferencesGroup::builder()
+            .title("Desktop IDs for Blacklist")
+            .description("Common GNOME desktop IDs you can copy and paste into the blacklist")
+            .build();
+
+        let desktop_ids = vec![
+            "org.gnome.Contacts.desktop",
+            "org.gnome.Calculator.desktop",
+            "org.gnome.Characters.desktop",
+            "org.gnome.Epiphany.desktop",
+            "org.gnome.Weather.desktop",
+            "org.gnome.Software.desktop",
+            "org.gnome.Settings.desktop",
+            "org.gnome.Calendar.desktop",
+            "org.gnome.clocks.desktop",
+            "org.gnome.Nautilus.desktop",
+        ];
+        let ids_text = gtk4::TextView::builder()
+            .wrap_mode(gtk4::WrapMode::WordChar)
+            .editable(false)
+            .cursor_visible(false)
+            .build();
+        let ids_buffer = ids_text.buffer();
+        ids_buffer.set_text(&desktop_ids.join("\n"));
+        let ids_scrolled = gtk4::ScrolledWindow::builder()
+            .hexpand(true)
+            .min_content_height(120)
+            .max_content_height(200)
+            .build();
+        ids_scrolled.set_child(Some(&ids_text));
+        let ids_row = PreferencesRow::new();
+        ids_row.set_child(Some(&ids_scrolled));
+        desktop_ids_group.add(&ids_row);
+        inner.append(&desktop_ids_group);
+
+        // Configuration file section
+        let config_group = PreferencesGroup::builder()
+            .title("Configuration File")
+            .description("Open the configuration file directly in your default editor")
+            .build();
+
+        let config_button = gtk4::Button::builder().label("Open Config File").build();
+        config_button.connect_clicked({
+            let window = window.downgrade();
+            let overlay = overlay.downgrade();
+            move |_| {
+                let config_path = config::config_path();
+                let uri = format!("file://{}", config_path.to_string_lossy());
+                if let Err(e) = open_uri(&uri) {
+                    error!("Failed to open config file: {}", e);
+                    if let Some(overlay) = overlay.upgrade() {
+                        let toast = Toast::builder()
+                            .title("Failed to open config file")
+                            .timeout(3)
+                            .build();
+                        overlay.add_toast(toast);
+                    }
+                } else {
+                    info!("Opened config file: {}", uri);
+                    // Close settings window after opening config
+                    if let Some(window) = window.upgrade() {
+                        glib::timeout_add_local_once(
+                            std::time::Duration::from_millis(500),
+                            move || {
+                                libadwaita::prelude::AdwDialogExt::close(&window);
+                            },
+                        );
+                    }
+                }
+            }
+        });
+        config_group.add(&config_button);
+        inner.append(&config_group);
+
         let reset_group = PreferencesGroup::builder()
             .title("Reset to Defaults")
             .description("Reset all settings to their default values")
@@ -158,41 +291,6 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         });
         reset_group.add(&reset_button);
         inner.append(&reset_group);
-
-        let desktop_ids_group = PreferencesGroup::builder()
-            .title("Desktop IDs for Blacklist")
-            .description("Common GNOME desktop IDs you can copy and paste into the blacklist")
-            .build();
-
-        let desktop_ids = vec![
-            "org.gnome.Contacts.desktop",
-            "org.gnome.Calculator.desktop",
-            "org.gnome.Characters.desktop",
-            "org.gnome.Epiphany.desktop",
-            "org.gnome.Weather.desktop",
-            "org.gnome.Software.desktop",
-            "org.gnome.Settings.desktop",
-            "org.gnome.Calendar.desktop",
-            "org.gnome.clocks.desktop",
-            "org.gnome.Nautilus.desktop",
-        ];
-        let ids_text = gtk4::TextView::builder()
-            .wrap_mode(gtk4::WrapMode::WordChar)
-            .editable(false)
-            .cursor_visible(false)
-            .build();
-        let ids_buffer = ids_text.buffer();
-        ids_buffer.set_text(&desktop_ids.join("\n"));
-        let ids_scrolled = gtk4::ScrolledWindow::builder()
-            .hexpand(true)
-            .min_content_height(120)
-            .max_content_height(200)
-            .build();
-        ids_scrolled.set_child(Some(&ids_text));
-        let ids_row = PreferencesRow::new();
-        ids_row.set_child(Some(&ids_scrolled));
-        desktop_ids_group.add(&ids_row);
-        inner.append(&desktop_ids_group);
 
         notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("Info"))));
     }
