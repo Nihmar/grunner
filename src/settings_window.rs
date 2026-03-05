@@ -471,31 +471,21 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
             .description("Configure Obsidian vault integration")
             .build();
 
-        // Create a box to hold vault path entry and browse button
-        let vault_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-        vault_box.set_hexpand(true);
-
-        let vault_entry = gtk4::Entry::new();
-        vault_entry.set_placeholder_text(Some("~/path/to/vault"));
-        vault_entry.set_text(&config_rc.borrow().obsidian.as_ref().unwrap().vault);
-        vault_entry.set_hexpand(true);
-        vault_box.append(&vault_entry);
+        // Create vault path entry row with browse button suffix
+        let vault_row = EntryRow::builder().title("Vault Path").build();
+        vault_row.set_text(&config_rc.borrow().obsidian.as_ref().unwrap().vault);
 
         let browse_button = gtk4::Button::from_icon_name("folder-open-symbolic");
         browse_button.set_css_classes(&["flat"]);
         browse_button.set_tooltip_text(Some("Browse for vault folder"));
-        vault_box.append(&browse_button);
-
-        let vault_row = PreferencesRow::new();
-        vault_row.set_title("Vault Path");
-        vault_row.set_child(Some(&vault_box));
+        vault_row.add_suffix(&browse_button);
 
         // Connect entry changes to config
-        vault_entry.connect_changed({
+        vault_row.connect_changed({
             let config_rc = Rc::clone(&config_rc);
-            move |entry| {
+            move |row| {
                 if let Some(obs) = config_rc.borrow_mut().obsidian.as_mut() {
-                    obs.vault = entry.text().to_string();
+                    obs.vault = row.text().to_string();
                 }
             }
         });
@@ -503,7 +493,7 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
         // Connect browse button to open folder picker
         browse_button.connect_clicked({
             let config_rc = Rc::clone(&config_rc);
-            let vault_entry = vault_entry.clone();
+            let vault_row = vault_row.clone();
             let parent = parent.clone();
             move |_| {
                 let dialog = gtk4::FileChooserNative::builder()
@@ -535,14 +525,14 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
                     #[strong]
                     config_rc,
                     #[strong]
-                    vault_entry,
+                    vault_row,
                     move |dialog, response| {
                         if response == gtk4::ResponseType::Accept {
                             if let Some(file) = dialog.file() {
                                 let folder_path = file.path().unwrap_or_default();
                                 // Convert to tilde representation if under home
                                 let display_path = contract_home(&folder_path);
-                                vault_entry.set_text(&display_path);
+                                vault_row.set_text(&display_path);
 
                                 // Update config with tilde representation
                                 if let Some(obs) = config_rc.borrow_mut().obsidian.as_mut() {
