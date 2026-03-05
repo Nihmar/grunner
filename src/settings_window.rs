@@ -96,7 +96,108 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
     }
     content.append(&notebook);
 
-    // ── Tab 1: General ───────────────────────────────────────────────────────
+    // ── Tab 1: Info ──────────────────────────────────────────────────────────
+    {
+        let (scroll, inner) = make_tab_page();
+
+        let reset_group = PreferencesGroup::builder()
+            .title("Reset to Defaults")
+            .description("Reset all settings to their default values")
+            .build();
+
+        let reset_button = gtk4::Button::builder().label("Reset All Settings").build();
+        reset_button.add_css_class("destructive-action");
+        reset_button.connect_clicked({
+            let window = window.downgrade();
+            let overlay = overlay.downgrade();
+            let config_rc = Rc::clone(&config_rc);
+            move |_| {
+                let default_config = Config::default();
+                config_rc.borrow_mut().window_width = default_config.window_width;
+                config_rc.borrow_mut().window_height = default_config.window_height;
+                config_rc.borrow_mut().max_results = default_config.max_results;
+                config_rc.borrow_mut().command_debounce_ms = default_config.command_debounce_ms;
+                config_rc.borrow_mut().app_dirs = default_config.app_dirs.clone();
+                config_rc.borrow_mut().search_provider_blacklist =
+                    default_config.search_provider_blacklist.clone();
+                if let Some(obs) = default_config.obsidian {
+                    config_rc.borrow_mut().obsidian = Some(obs);
+                } else {
+                    config_rc.borrow_mut().obsidian = None;
+                }
+
+                // Save the reset configuration
+                if let Some(window) = window.upgrade() {
+                    if let Some(overlay) = overlay.upgrade() {
+                        if let Err(e) = save_config(&config_rc.borrow()) {
+                            error!("Failed to save reset configuration: {}", e);
+                            let toast = Toast::builder()
+                                .title("Failed to save reset settings")
+                                .timeout(3)
+                                .build();
+                            overlay.add_toast(toast);
+                        } else {
+                            info!("Configuration reset and saved successfully");
+                            let toast = Toast::builder()
+                                .title("Settings reset to defaults")
+                                .timeout(2)
+                                .build();
+                            overlay.add_toast(toast);
+
+                            // Close window after a short delay
+                            glib::timeout_add_local_once(
+                                std::time::Duration::from_millis(1000),
+                                move || {
+                                    libadwaita::prelude::AdwDialogExt::close(&window);
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        });
+        reset_group.add(&reset_button);
+        inner.append(&reset_group);
+
+        let desktop_ids_group = PreferencesGroup::builder()
+            .title("Desktop IDs for Blacklist")
+            .description("Common GNOME desktop IDs you can copy and paste into the blacklist")
+            .build();
+
+        let desktop_ids = vec![
+            "org.gnome.Contacts.desktop",
+            "org.gnome.Calculator.desktop",
+            "org.gnome.Characters.desktop",
+            "org.gnome.Epiphany.desktop",
+            "org.gnome.Weather.desktop",
+            "org.gnome.Software.desktop",
+            "org.gnome.Settings.desktop",
+            "org.gnome.Calendar.desktop",
+            "org.gnome.clocks.desktop",
+            "org.gnome.Nautilus.desktop",
+        ];
+        let ids_text = gtk4::TextView::builder()
+            .wrap_mode(gtk4::WrapMode::WordChar)
+            .editable(false)
+            .cursor_visible(false)
+            .build();
+        let ids_buffer = ids_text.buffer();
+        ids_buffer.set_text(&desktop_ids.join("\n"));
+        let ids_scrolled = gtk4::ScrolledWindow::builder()
+            .hexpand(true)
+            .min_content_height(120)
+            .max_content_height(200)
+            .build();
+        ids_scrolled.set_child(Some(&ids_text));
+        let ids_row = PreferencesRow::new();
+        ids_row.set_child(Some(&ids_scrolled));
+        desktop_ids_group.add(&ids_row);
+        inner.append(&desktop_ids_group);
+
+        notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("Info"))));
+    }
+
+    // ── Tab 2: General ───────────────────────────────────────────────────────
     {
         let (scroll, inner) = make_tab_page();
 
@@ -141,7 +242,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("General"))));
     }
 
-    // ── Tab 2: Search ────────────────────────────────────────────────────────
+    // ── Tab 3: Search ────────────────────────────────────────────────────────
     {
         let (scroll, inner) = make_tab_page();
 
@@ -261,7 +362,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("Search"))));
     }
 
-    // ── Tab 3: Obsidian (only when vault is configured) ──────────────────────
+    // ── Tab 4: Obsidian (only when vault is configured) ──────────────────────
     if config_rc.borrow().obsidian.is_some() {
         let (scroll, inner) = make_tab_page();
 
