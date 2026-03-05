@@ -8,15 +8,14 @@
 //! - Settings management
 
 use crate::config::ObsidianConfig;
+use crate::items::ObsidianAction;
 use crate::launcher;
-use crate::obsidian_item::ObsidianAction;
 use crate::settings_window;
 use crate::utils::expand_home;
 use chrono::Local;
 use gtk4::prelude::DisplayExt;
 use libadwaita;
 use log::{debug, error, info, warn};
-
 use std::fs;
 use std::fs::File;
 use std::io::Write;

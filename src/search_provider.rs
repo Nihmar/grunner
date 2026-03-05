@@ -839,11 +839,11 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
             return;
         };
 
-        // Generate a timestamp for the activation (required by D-Bus API)
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as u32;
+        // The ActivateResult D-Bus method expects an X11/Wayland event timestamp
+        // for focus-stealing prevention, not a Unix timestamp. Using 0 is the
+        // standard sentinel meaning "current/unknown time" and is accepted by
+        // all compositors and providers (including GNOME Calculator).
+        let timestamp: u32 = 0;
 
         let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
         if let Err(e) = proxy

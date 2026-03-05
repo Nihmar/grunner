@@ -11,12 +11,12 @@
 //! all search modes, executes commands, and updates the GTK list store.
 
 use crate::actions::which;
-use crate::app_item::AppItem;
-use crate::cmd_item::CommandItem;
 use crate::config::ObsidianConfig;
+use crate::items::AppItem;
+use crate::items::CommandItem;
+use crate::items::SearchResultItem;
 use crate::launcher::DesktopApp;
 use crate::search_provider::{self, SearchProvider};
-use crate::search_result_item::SearchResultItem;
 use crate::utils::expand_home;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;

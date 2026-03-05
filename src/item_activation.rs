@@ -8,12 +8,12 @@ use crate::actions::{
     launch_app, open_file_or_line, open_obsidian_file_line, open_obsidian_file_path,
     perform_obsidian_action,
 };
-use crate::app_item::AppItem;
 use crate::app_mode::AppMode;
-use crate::cmd_item::CommandItem;
+use crate::items::AppItem;
+use crate::items::CommandItem;
+use crate::items::ObsidianActionItem;
+use crate::items::SearchResultItem;
 use crate::list_model::AppListModel;
-use crate::obsidian_item::ObsidianActionItem;
-use crate::search_result_item::SearchResultItem;
 use gtk4::prelude::Cast;
 use log::{debug, info, warn};
 
