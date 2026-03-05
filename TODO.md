@@ -13,4 +13,4 @@
   - [ ] org.gnome.Settings.desktop
   - [ ] org.gnome.Calendar.desktop
   - [ ] org.gnome.clocks.desktop
-- [ ] Tackle problem of glitchy edit field
+- [x] Tackle problem of glitchy edit field
