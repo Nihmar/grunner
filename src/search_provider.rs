@@ -15,6 +15,8 @@
 //! to communicate with search providers while keeping the UI responsive.
 
 use futures::stream::{FuturesUnordered, StreamExt};
+use gtk4::gdk::Display;
+use gtk4::prelude::*;
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -751,6 +753,21 @@ fn build_result(
     let name = take_str(&mut meta, "name").unwrap_or_else(|| id.clone());
     let description = take_str(&mut meta, "description").unwrap_or_default();
 
+    if let Some(val) = meta.get("clipboardText") {
+        if let Ok(text) = String::try_from(val.clone()) {
+            if let Some(display) = Display::default() {
+                let clipboard = display.clipboard(); // ← no Option here!
+                clipboard.set_text(&text);
+                info!(
+                    "Copied '{}' to clipboard from search provider metadata",
+                    text
+                );
+            } else {
+                warn!("No default GDK Display available — cannot copy to clipboard");
+            }
+        }
+    }
+
     // Parse icon if present
     let icon = meta.get("icon").and_then(parse_icon_variant);
 
@@ -812,7 +829,13 @@ fn take_str(meta: &mut HashMap<String, OwnedValue>, key: &str) -> Option<String>
 /// * `object_path` - D-Bus object path of the provider
 /// * `result_id` - ID of the result to activate
 /// * `terms` - Original search terms (for context)
-pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms: &[String]) {
+pub fn activate_result(
+    bus_name: &str,
+    object_path: &str,
+    result_id: &str,
+    terms: &[String],
+    timestamp: u32,
+) {
     let bus_name = bus_name.to_string();
     let object_path = object_path.to_string();
     let result_id = result_id.to_string();
@@ -843,13 +866,12 @@ pub fn activate_result(bus_name: &str, object_path: &str, result_id: &str, terms
         // for focus-stealing prevention, not a Unix timestamp. Using 0 is the
         // standard sentinel meaning "current/unknown time" and is accepted by
         // all compositors and providers (including GNOME Calculator).
-        let timestamp: u32 = 0;
 
         let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
         if let Err(e) = proxy
             .call::<_, _, ()>(
                 "ActivateResult",
-                &(result_id.as_str(), &terms_str, timestamp),
+                &(result_id.as_str(), &terms_str, timestamp), // ← use the passed timestamp
             )
             .await
         {

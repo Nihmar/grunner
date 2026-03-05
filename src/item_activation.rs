@@ -54,7 +54,7 @@ pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) 
 /// * `obj` - The GTK object representing the item to activate
 /// * `model` - The application list model containing configuration and state
 /// * `mode` - The current application mode (Normal, Obsidian, FileSearch, etc.)
-pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
+pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, timestamp: u32) {
     debug!("Activating item in mode {:?}", mode);
     // Handle desktop application items
     if let Ok(app_item) = obj.clone().downcast::<AppItem>() {
@@ -114,9 +114,9 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode) {
             sr_item.terms(),
         );
         info!("Activating search result: {} from provider {}", id, bus);
-        // Activate search result in background thread to avoid blocking UI
         std::thread::spawn(move || {
-            crate::search_provider::activate_result(&bus, &path, &id, &terms);
+            // Pass the timestamp
+            crate::search_provider::activate_result(&bus, &path, &id, &terms, timestamp);
         });
     }
 }

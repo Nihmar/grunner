@@ -22,6 +22,7 @@ use crate::list_model::AppListModel;
 use crate::obsidian_bar::build_obsidian_bar;
 use crate::power_bar::build_power_bar;
 use glib::clone;
+use gtk4::gdk;
 use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
@@ -330,9 +331,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                 }
                 // Enter: activate selected item
                 Key::Return | Key::KP_Enter => {
+                    let timestamp = gdk::CURRENT_TIME;
                     let pos = model.selection.selected();
                     if let Some(obj) = model.store.item(pos) {
-                        activate_item(&obj, &model, current_mode.get());
+                        activate_item(&obj, &model, current_mode.get(), timestamp);
                     }
                     window.close();
                     glib::Propagation::Stop
@@ -388,8 +390,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         #[strong]
         current_mode,
         move |_, pos| {
+            let timestamp = gdk::CURRENT_TIME;
             if let Some(obj) = model.store.item(pos) {
-                activate_item(&obj, &model, current_mode.get());
+                activate_item(&obj, &model, current_mode.get(), timestamp);
             }
             window.close();
         }
