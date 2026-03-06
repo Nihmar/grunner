@@ -301,27 +301,6 @@ For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md
 
 ---
 
-## Documentation
-
-Comprehensive documentation is available in the `docs/` directory:
-
-### For Users
-
-- **[User Guide](docs/USER_GUIDE.md)** - Installation, configuration, and usage instructions
-- **[Deployment Guide](docs/DEPLOYMENT.md)** - System requirements and deployment options
-
-### For Developers
-
-- **[Architecture Documentation](docs/ARCHITECTURE.md)** - System design and module dependencies
-- **[API Reference](docs/API.md)** - Complete API documentation for all modules
-- **[Development Guide](docs/DEVELOPMENT.md)** - Development environment setup and contribution guidelines
-
-### Overview
-
-- **[Project Overview](docs/OVERVIEW.md)** - High-level project summary and technology stack
-
----
-
 ## Architecture overview
 
 | File                    | Purpose                                                                                     |
