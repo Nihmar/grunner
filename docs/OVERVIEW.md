@@ -20,11 +20,11 @@ Grunner is designed with several key principles in mind:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    GTK4/libadwaita UI Layer                  │
+│                    GTK4/libadwaita UI Layer                 │
 ├─────────────────────────────────────────────────────────────┤
-│                    Application Logic Layer                   │
+│                    Application Logic Layer                  │
 ├─────────────────────────────────────────────────────────────┤
-│                    Data Access Layer                         │
+│                    Data Access Layer                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -33,49 +33,52 @@ Grunner is designed with several key principles in mind:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         main.rs                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                    Application                      │   │
-│  │  • GTK Application lifecycle                        │   │
-│  │  • Configuration loading                            │   │
-│  │  • Signal handling                                  │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                    Application                      │    │
+│  │  • GTK Application lifecycle                        │    │
+│  │  • Configuration loading                            │    │
+│  │  • Signal handling                                  │    │
+│  └─────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────┤
-│                         ui.rs                              │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                    UI Components                    │   │
-│  │  • Window construction                             │   │
-│  │  • Search entry widget                             │   │
-│  │  • Results list view                               │   │
-│  │  • Obsidian action bar                             │   │
-│  │  • Power bar                                       │   │
-│  └─────────────────────────────────────────────────────┘   │
+│                         ui.rs                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                    UI Components                    │    │
+│  │  • Window construction                              │    │
+│  │  • Search entry widget                              │    │
+│  │  • Results list view                                │    │
+│  │  • Obsidian action bar                              │    │
+│  │  • Power bar                                        │    │
+│  │  • Settings window                                  │    │
+│  └─────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────┤
-│                     list_model.rs                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                    Search Engine                    │   │
-│  │  • Query routing                                   │   │
-│  │  • Mode switching                                  │   │
-│  │  • Result population                               │   │
-│  │  • Fuzzy matching                                  │   │
-│  └─────────────────────────────────────────────────────┘   │
+│                     list_model.rs                           │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                    Search Engine                    │    │
+│  │  • Query routing                                    │    │
+│  │  • Mode switching                                   │    │
+│  │  • Result population                                │    │
+│  │  • Fuzzy matching                                   │    │
+│  └─────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────┤
-│                    Specialized Modules                     │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐                     │
-│  │launcher │ │search   │ │actions │                     │
-│  │         │ │provider │ │        │                     │
-│  └─────────┘ └─────────┘ └─────────┘                     │
+│                    Specialized Modules                      │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                        │
+│  │launcher │ │search   │ │actions  │                        │
+│  │         │ │provider │ │         │                        │
+│  └─────────┘ └─────────┘ └─────────┘                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## Key Features
 
 ### 1. Application Launcher
+
 - **Fuzzy search** across all installed `.desktop` applications
 - **Icon and description display** for visual identification
 - **Terminal application support** with auto-detected terminal emulators
 - **Duplicate detection** for applications with multiple `.desktop` files
 
 ### 2. Search Modes
+
 - **Default mode**: Application fuzzy search (includes GNOME Shell search provider results)
 - **Colon commands**: Built-in command system for file search (:f), content grep (:fg), and Obsidian integration (:ob, :obg)
 - **File search**: Integration with `plocate` for fast file finding (falls back to `find` if not available)
@@ -84,12 +87,14 @@ Grunner is designed with several key principles in mind:
 - **Obsidian integration**: Vault management and note operations
 
 ### 3. System Integration
+
 - **Power management**: Suspend, restart, power off, logout
 - **Theme adaptation**: Automatic light/dark mode and accent color following
 - **D-Bus integration**: GNOME Shell search provider communication
 - **XDG standards**: Configuration and data directory compliance
 
 ### 4. Configuration System
+
 - **TOML-based configuration** with sensible defaults
 - **Automatic config creation** on first run
 - **Home directory expansion** (`~` support)
@@ -99,23 +104,27 @@ Grunner is designed with several key principles in mind:
 ## Technology Stack
 
 ### Core Dependencies
+
 - **Rust**: Primary programming language (edition 2024)
 - **GTK4**: GUI toolkit for modern Linux applications
 - **libadwaita**: GNOME HIG-compliant widgets and theming
 - **glib**: Low-level system library bindings
 
 ### Search and Matching
+
 - **fuzzy-matcher**: Fuzzy string matching algorithm
 - **regex**: Regular expression support for advanced search
 - **skim**: Fuzzy matching library (indirect dependency)
 
 ### Data Processing
+
 - **serde**: Serialization/deserialization framework
 - **toml**: TOML configuration parsing
 - **chrono**: Date and time handling
 - **rayon**: Data parallelism
 
 ### System Integration
+
 - **zbus**: D-Bus communication for GNOME Shell integration
 - **tokio**: Asynchronous runtime for concurrent operations
 - **urlencoding**: URL encoding for Obsidian URI generation
@@ -123,27 +132,42 @@ Grunner is designed with several key principles in mind:
 ## Project Structure
 
 ### Source Code Organization
+
 ```
 src/
-├── main.rs              # Application entry point
-├── ui.rs               # GTK UI construction and management
-├── list_model.rs       # Central search model and query routing
-├── config.rs           # Configuration loading and management
-├── launcher.rs         # Application scanning and indexing
-├── search_provider.rs  # GNOME Shell search provider integration
-├── actions.rs          # System actions (launch, open, power)
-├── app_item.rs         # Application entry GObject wrapper
-├── cmd_item.rs         # Command output GObject wrapper
-├── obsidian_item.rs    # Obsidian action GObject wrapper
-├── obsidian_bar.rs     # Obsidian action bar UI
-├── power_bar.rs        # Power management UI
-├── search_result_item.rs # Search provider result GObject wrapper
-├── app_mode.rs         # Application mode enumeration
-├── utils.rs            # Utility functions
-└── style.css           # Application stylesheet
+├── actions.rs
+├── app_mode.rs
+├── config.rs
+├── item_activation.rs
+├── items
+│   ├── app_item.rs
+│   ├── cmd_item.rs
+│   ├── mod.rs
+│   ├── obsidian_item.rs
+│   └── search_result_item.rs
+├── launcher.rs
+├── list_model.rs
+├── logging.rs
+├── main.rs
+├── obsidian_bar.rs
+├── power_bar.rs
+├── search_provider.rs
+├── settings_window
+│   ├── mod.rs
+│   ├── save.rs
+│   └── tabs
+│       ├── general.rs
+│       ├── info.rs
+│       ├── mod.rs
+│       ├── obsidian.rs
+│       └── search.rs
+├── style.css
+├── ui.rs
+└── utils.rs
 ```
 
 ### Asset Structure
+
 ```
 grunner/
 ├── assets/             # Application icons and graphics
@@ -162,15 +186,18 @@ grunner/
 ## Build System
 
 ### Cargo Configuration
+
 - **Edition**: 2024
 - **Optimization**: LTO enabled, panic=abort for release builds
 - **Dependencies**: Managed via Cargo with version pinning
 
 ### Build Profiles
+
 - **Debug**: Development builds with debugging symbols
 - **Release**: Optimized builds with LTO and strip enabled
 
 ### Installation
+
 - **Manual**: `cargo build --release`
 - **Package**: `makepkg -si` for Arch Linux (PKGBUILD provided)
 - **Desktop integration**: `.desktop` files provided in assets directory
@@ -178,31 +205,37 @@ grunner/
 ## Configuration Management
 
 ### Configuration File Location
+
 ```
 ~/.config/grunner/grunner.toml
 ```
 
 ### Configuration Sections
+
 1. **Window**: Dimensions and display settings
 2. **Search**: Result limits, debounce timing, application directories
 3. **Obsidian**: Obsidian vault integration settings
-5. **Obsidian**: Vault paths and note management settings
+4. **Obsidian**: Vault paths and note management settings
 
 ### Default Values
+
 All configuration values have sensible defaults that work out-of-the-box on most Linux distributions with GNOME.
 
 ## Search Architecture
 
 ### Query Processing Pipeline
+
 ```
 User Input → Mode Detection → Query Routing → Backend Execution → Result Processing → UI Display
 ```
 
 ### Mode Detection Logic
+
 1. Check for colon prefix (`:`) → Command mode
 2. Default → Application search mode
 
 ### Result Ranking
+
 - **Application search**: Fuzzy match score based on name and description
 - **File search**: `plocate` relevance scoring (or `find` substring matching as fallback)
 - **Content search**: `ripgrep` match quality (or `grep` as fallback)
@@ -211,6 +244,7 @@ User Input → Mode Detection → Query Routing → Backend Execution → Result
 ## UI Architecture
 
 ### GTK Widget Hierarchy
+
 ```
 ApplicationWindow
 ├── Box (vertical)
@@ -230,6 +264,7 @@ ApplicationWindow
 ```
 
 ### Theming System
+
 - **CSS-based styling** embedded in binary
 - **libadwaita variables** for system theme adaptation
 - **Accent color support** via CSS custom properties
@@ -238,6 +273,7 @@ ApplicationWindow
 ## Data Flow
 
 ### Application Launch Flow
+
 ```
 1. User types query
 2. list_model processes query
@@ -250,6 +286,7 @@ ApplicationWindow
 ```
 
 ### Command Execution Flow
+
 ```
 1. User types :command argument
 2. list_model detects command mode
@@ -263,12 +300,14 @@ ApplicationWindow
 ## Error Handling
 
 ### Error Categories
+
 1. **Configuration errors**: Invalid TOML, missing files, permission issues
 2. **Runtime errors**: Command execution failures, D-Bus communication errors
 3. **UI errors**: Widget creation failures, signal handler errors
 4. **System errors**: Missing dependencies, unsupported features
 
 ### Error Recovery
+
 - **Graceful degradation**: Features disabled rather than crashing
 - **User feedback**: Error messages in UI where appropriate
 - **Logging**: Comprehensive system-based logging with journald, syslog, and file backends (see [ERROR_LOGGING.md](ERROR_LOGGING.md))
@@ -277,6 +316,7 @@ ApplicationWindow
 ## Performance Considerations
 
 ### Optimizations Implemented
+
 1. **Async I/O**: Non-blocking command execution and file operations
 2. **Caching**: Application list caching between runs
 3. **Lazy loading**: Resources loaded on-demand
@@ -284,6 +324,7 @@ ApplicationWindow
 5. **Parallel processing**: Concurrent search provider queries
 
 ### Memory Management
+
 - **Rust ownership system**: Compile-time memory safety
 - **GObject reference counting**: GTK memory management
 - **Efficient data structures**: Minimized allocations and copies
@@ -292,12 +333,14 @@ ApplicationWindow
 ## Security Considerations
 
 ### Security Model
+
 1. **No elevated privileges**: Runs with user permissions only
 2. **Shell command sanitization**: Argument escaping for built-in commands
 3. **File path validation**: Prevention of path traversal attacks
 4. **D-Bus method validation**: Restricted to safe operations
 
 ### Privacy Features
+
 1. **Local processing**: No network communication or telemetry
 2. **Configurable search scope**: User controls what directories are indexed
 3. **Transparent operations**: All commands visible and configurable
@@ -305,12 +348,14 @@ ApplicationWindow
 ## Extension Points
 
 ### Customization Options
+
 1. **Theme customization**: CSS theming via recompilation
 2. **CSS theming**: Style customization via recompilation
 3. **Application directories**: Configurable .desktop file locations
 4. **Obsidian integration**: Vault and note management configuration
 
 ### Potential Extensions
+
 1. **Plugin system**: Dynamic loading of Rust modules
 2. **Additional search backends**: Web search, database search, etc.
 3. **Advanced theming**: CSS variable customization
@@ -319,17 +364,17 @@ ApplicationWindow
 ## Platform Support
 
 ### Officially Supported
-- **GNOME 40+** with Wayland or X11
+
+- **GNOME 49+** with Wayland
 - **Systemd-based distributions** for power management
 - **Linux distributions** with GTK4 and libadwaita packages
 
 ### Community Tested
-- **Fedora** 36+
-- **Ubuntu** 22.04+
+
 - **Arch Linux** with latest packages
-- **Debian** 12+
 
 ### Requirements
+
 - **Rust** 1.70+
 - **GTK4** 4.6+
 - **libadwaita** 1.6+
@@ -340,17 +385,20 @@ ApplicationWindow
 ## Development Workflow
 
 ### Getting Started
+
 1. Clone repository
 2. Install Rust and dependencies
 3. `cargo build` for development
 4. `cargo run` to test changes
 
 ### Testing
+
 - **Unit tests**: `cargo test`
 - **Integration testing**: Manual UI testing
 - **Performance testing**: Benchmarking search operations
 
 ### Contribution Guidelines
+
 1. Follow Rust coding conventions
 2. Add documentation for new features
 3. Update configuration defaults if needed
@@ -359,13 +407,12 @@ ApplicationWindow
 ## Future Development
 
 ### Roadmap Items
+
 1. **Plugin API** for third-party extensions
 2. **Advanced search syntax** (AND/OR operators, filters)
-3. **Session management** (save/restore window state)
-4. **Multi-monitor support** (window placement options)
-5. **Advanced theming** (color scheme customization)
 
 ### Technical Debt
+
 1. **Error handling unification** across modules
 2. **Test coverage improvement** for UI components
 3. **Documentation expansion** for internal APIs
