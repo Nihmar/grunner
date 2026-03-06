@@ -336,3 +336,25 @@ Styles are defined in `style.css` and embedded in the binary at compile time. gr
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## Uninstall
+
+To completely remove grunner from your system, run the following commands:
+
+```bash
+# Remove the .desktop file
+rm -v ~/.local/share/applications/grunner.desktop
+
+# Remove the icon
+rm -v ~/.local/share/icons/grunner.png
+
+# Remove the config file
+rm -v ~/.config/grunner/grunner.toml
+
+# Remove the cache
+rm -rf ~/.cache/grunner
+```
+
+These commands will clean all grunner-related files, including the application integration file, icon, configuration, and cached data.
