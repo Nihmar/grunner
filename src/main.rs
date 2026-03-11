@@ -89,21 +89,44 @@ fn main() -> glib::ExitCode {
 
     // Connect the activation signal to build the UI when the app starts
     app.connect_activate(move |app| {
+        log::debug!("Application activated");
+
         // Find existing launcher window (identified by CSS class "launcher-window")
         let windows = app.windows();
+        log::debug!("Number of windows: {}", windows.len());
+
+        // Debug: print all windows and their CSS classes
+        for (i, win) in windows.iter().enumerate() {
+            let classes: Vec<String> = win.css_classes().iter().map(|c| c.to_string()).collect();
+            log::debug!(
+                "Window {}: visible={}, CSS classes: {:?}",
+                i,
+                win.is_visible(),
+                classes
+            );
+        }
+
         let launcher_window = windows
             .iter()
             .find(|win| win.css_classes().iter().any(|c| c == "launcher-window"));
 
         if let Some(win) = launcher_window {
+            log::debug!("Found launcher window, visible: {}", win.is_visible());
+
             // Toggle visibility of existing launcher window
             if win.is_visible() {
+                log::debug!("Hiding window");
+
                 win.hide();
             } else {
+                log::debug!("Presenting window");
+
                 win.present();
             }
             return;
         }
+        log::debug!("No launcher window found, building new UI");
+
         // No launcher window exists - build the main user interface
         ui::build_ui(app, &cfg);
     });
