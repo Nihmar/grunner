@@ -22,6 +22,7 @@ use crate::list_model::AppListModel;
 use crate::obsidian_bar::build_obsidian_bar;
 use crate::power_bar::build_power_bar;
 use glib::clone;
+
 use gtk4::gdk;
 use gtk4::gdk::Key;
 use gtk4::prelude::*;
@@ -149,6 +150,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // Remove default background class on realize for clean appearance
     window.connect_realize(|w| {
         w.remove_css_class("background");
+    });
+
+    // Intercept close requests to hide window instead of destroying it
+    window.connect_close_request(move |win| {
+        win.hide();
+        glib::Propagation::Stop
     });
 
     // -----------------------------------------------------------------------
@@ -326,7 +333,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             match key {
                 // Escape: close window
                 Key::Escape => {
-                    window.close();
+                    window.hide();
                     glib::Propagation::Stop
                 }
                 // Enter: activate selected item
@@ -336,7 +343,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
                     if let Some(obj) = model.store.item(pos) {
                         activate_item(&obj, &model, current_mode.get(), timestamp);
                     }
-                    window.close();
+                    window.hide();
                     glib::Propagation::Stop
                 }
                 // Down arrow: move selection down
@@ -394,7 +401,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             if let Some(obj) = model.store.item(pos) {
                 activate_item(&obj, &model, current_mode.get(), timestamp);
             }
-            window.close();
+            window.hide();
         }
     ));
 

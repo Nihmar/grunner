@@ -96,7 +96,7 @@ pub fn build_obsidian_bar(
                 }
 
                 // Close the window after performing the action
-                window.close();
+                window.hide();
             }
         ));
 
