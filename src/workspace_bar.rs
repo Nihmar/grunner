@@ -14,6 +14,7 @@ use gtk4::{
 };
 use libadwaita::ApplicationWindow;
 use serde::Deserialize;
+use std::sync::OnceLock;
 use zbus::{Connection, proxy};
 
 // ─── D-Bus proxy definitions ──────────────────────────────────────────────────
@@ -34,6 +35,29 @@ trait WindowCalls {
 
     /// Activates (focuses) the window with the given ID.
     fn activate(&self, win_id: u32) -> zbus::Result<()>;
+}
+
+// ─── Global runtime management ─────────────────────────────────────────────────
+
+/// Global Tokio runtime for async workspace operations
+///
+/// This runtime is used for D-Bus communication with the window-calls extension.
+/// It's shared across all workspace bar refresh operations to avoid the overhead
+/// of creating a new runtime for each window map event.
+static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+/// Get or initialize the shared Tokio runtime
+///
+/// Creates a current-thread runtime optimized for I/O operations,
+/// suitable for D-Bus communication with the window-calls extension.
+fn get_runtime() -> &'static tokio::runtime::Runtime {
+    TOKIO_RT.get_or_init(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("[workspace_bar] failed to build tokio runtime")
+    })
 }
 
 // ─── Internal data model ──────────────────────────────────────────────────────
@@ -404,10 +428,7 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
             let (tx, rx) = std::sync::mpsc::channel::<Option<Vec<WindowInfo>>>();
 
             std::thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("[workspace_bar] failed to build tokio runtime");
+                let rt = get_runtime();
                 let windows = rt.block_on(fetch_workspace_windows());
                 log::debug!(
                     "[workspace_bar] background thread result: {:?}",

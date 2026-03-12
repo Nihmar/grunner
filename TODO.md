@@ -26,10 +26,12 @@
   - All tests pass
 
 ## Priority 3: Performance (Medium)
-- [ ] **Optimize async runtime** - Standardize to shared runtime pattern
-  - Remove per-thread runtime creation in `workspace_bar.rs:412`
-  - Cache filesystem operations in `config.rs:158`
-- [ ] **Review Rayon usage** - Consider sequential scanning for small directories
+- [x] **Optimize async runtime** - Standardize to shared runtime pattern
+  - Removed per-thread runtime creation in `workspace_bar.rs:412`, now uses shared runtime via `OnceLock`
+  - Cached HOME environment variable in `config.rs` and `launcher.rs` to avoid repeated lookups
+- [x] **Review Rayon usage** - Added conditional parallelism
+  - Only use parallel iteration when directory count > 4 or file count > 50
+  - Falls back to sequential processing for small workloads to avoid thread pool overhead
 
 ## Priority 4: Architecture & Maintainability (Medium)
 - [ ] **Centralize global state** - Consolidate `OnceLock` variables

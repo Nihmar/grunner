@@ -17,7 +17,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::SystemTime;
+
+/// Cached home directory to avoid repeated environment variable lookups
+static HOME_DIR: OnceLock<String> = OnceLock::new();
+
+/// Get the home directory, caching the result for performance
+fn get_home_dir() -> &'static str {
+    HOME_DIR.get_or_init(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()))
+}
 
 /// Represents a parsed desktop application entry
 ///
@@ -45,7 +54,7 @@ pub struct DesktopApp {
 /// # Returns
 /// `PathBuf` pointing to the cache file location
 fn cache_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    let home = get_home_dir();
     PathBuf::from(home)
         .join(".cache")
         .join("grunner")
@@ -192,26 +201,54 @@ fn save_cache(apps: &[DesktopApp]) {
 fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     info!("Scanning {} directories for .desktop files", dirs.len());
 
-    // Collect all .desktop file paths using parallel iteration
-    let paths: Vec<PathBuf> = dirs
-        .par_iter()
-        .filter(|d| {
-            let exists = d.exists();
-            if !exists {
-                debug!("Skipping non-existent directory: {:?}", d);
-            }
-            exists
-        })
-        .flat_map(|dir| {
-            debug!("Scanning directory: {:?}", dir);
-            WalkDir::new(dir)
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("desktop"))
-                .map(|e| e.path())
-                .collect::<Vec<_>>()
-        })
-        .collect();
+    // Only use parallel iteration for larger workloads to avoid thread pool overhead
+    // For small directory counts, sequential processing is more efficient
+    let use_parallel = dirs.len() > 4;
+
+    // Collect all .desktop file paths
+    let paths: Vec<PathBuf> = if use_parallel {
+        dirs.par_iter()
+            .filter(|d| {
+                let exists = d.exists();
+                if !exists {
+                    debug!("Skipping non-existent directory: {:?}", d);
+                }
+                exists
+            })
+            .flat_map(|dir| {
+                debug!("Scanning directory: {:?}", dir);
+                WalkDir::new(dir)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .filter(|e| {
+                        e.path().extension().and_then(|ext| ext.to_str()) == Some("desktop")
+                    })
+                    .map(|e| e.path())
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    } else {
+        dirs.iter()
+            .filter(|d| {
+                let exists = d.exists();
+                if !exists {
+                    debug!("Skipping non-existent directory: {:?}", d);
+                }
+                exists
+            })
+            .flat_map(|dir| {
+                debug!("Scanning directory: {:?}", dir);
+                WalkDir::new(dir)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .filter(|e| {
+                        e.path().extension().and_then(|ext| ext.to_str()) == Some("desktop")
+                    })
+                    .map(|e| e.path())
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
 
     debug!("Found {} .desktop files before deduplication", paths.len());
 
@@ -227,11 +264,19 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
         unique_paths.len()
     );
 
-    // Parse desktop files in parallel and collect valid applications
-    let mut apps: Vec<DesktopApp> = unique_paths
-        .par_iter()
-        .filter_map(|p| parse_desktop_file(p))
-        .collect();
+    // Parse desktop files - use parallel iteration only for larger workloads
+    let use_parallel_parsing = unique_paths.len() > 50;
+    let mut apps: Vec<DesktopApp> = if use_parallel_parsing {
+        unique_paths
+            .par_iter()
+            .filter_map(|p| parse_desktop_file(p))
+            .collect()
+    } else {
+        unique_paths
+            .iter()
+            .filter_map(|p| parse_desktop_file(p))
+            .collect()
+    };
 
     debug!("Successfully parsed {} applications", apps.len());
 
@@ -361,7 +406,8 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     if app_type != "Application" {
         trace!(
             "Skipping non-application entry (type: {}) in {:?}",
-            app_type, path
+            app_type,
+            path
         );
         return None;
     }
@@ -386,7 +432,8 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
 
     trace!(
         "Successfully parsed desktop application: {} from {:?}",
-        name, path
+        name,
+        path
     );
     Some(DesktopApp {
         name,
