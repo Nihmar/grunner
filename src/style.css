@@ -286,7 +286,6 @@ notebook.pill-tabs > stack {
     min-height: 42px;
     padding: 4px 12px;
     border-bottom: 1px solid rgba(127, 127, 127, 0.25);
-    -gtk-overlay-scrolling: false;
 }
 
 .workspace-bar.tall {

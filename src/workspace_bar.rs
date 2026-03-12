@@ -211,10 +211,10 @@ fn resolve_from_desktop(wm_class: &str) -> Option<(String, String)> {
             for line in content.lines() {
                 // Take the first Name= entry (usually the main app name)
                 // Desktop files can have multiple entries like "New Window" for actions
-                if name.is_none() && line.trim().starts_with("Name=") {
-                    if let Some(n) = line.trim().strip_prefix("Name=") {
-                        name = Some(n.trim().to_string());
-                    }
+                if name.is_none() && line.trim().starts_with("Name=")
+                    && let Some(n) = line.trim().strip_prefix("Name=")
+                {
+                    name = Some(n.trim().to_string());
                 }
                 if let Some(i) = line.trim().strip_prefix("Icon=") {
                     icon = Some(i.trim().to_string());
@@ -258,8 +258,8 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
         ("net.", ""),
     ];
     for (prefix, replacement) in &replacements {
-        if preferred.starts_with(prefix) {
-            let candidate = format!("{}{}", replacement, &preferred[prefix.len()..]);
+        if let Some(stripped) = preferred.strip_prefix(prefix) {
+            let candidate = format!("{}{}", replacement, stripped);
             if theme.has_icon(&candidate) {
                 return candidate;
             }
@@ -267,10 +267,8 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
     }
 
     // Try last segment only (e.g., "org.gnome.Nautilus" -> "nautilus")
-    if let Some(last) = preferred.rsplit('.').next() {
-        if theme.has_icon(last) {
-            return last.to_owned();
-        }
+    if let Some(last) = preferred.rsplit('.').next() && theme.has_icon(last) {
+        return last.to_owned();
     }
 
     // Try with "gnome-" prefix

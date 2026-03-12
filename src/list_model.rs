@@ -18,48 +18,19 @@ use crate::items::SearchResultItem;
 use crate::launcher::DesktopApp;
 use crate::search_provider::{self, SearchProvider};
 use crate::utils::expand_home;
-use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
+use log::error;
 use std::cell::{Cell, RefCell};
-
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 100;
-
-// Command templates for built-in colon commands with fallback support
-// - File search: uses plocate if available, falls back to find
-// - File grep: uses ripgrep (rg) if available, falls back to grep
-static FILE_SEARCH_CMD: OnceLock<String> = OnceLock::new();
-
-fn file_search_cmd() -> &'static str {
-    FILE_SEARCH_CMD.get_or_init(|| {
-        if which("plocate").is_some() {
-            "plocate -i -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | head -20".to_string()
-        } else {
-            "find \"$HOME\" -type f -ipath \"*$1*\" 2>/dev/null | head -20".to_string()
-        }
-    })
-}
-
-static FILE_GREP_CMD: OnceLock<String> = OnceLock::new();
-
-fn file_grep_cmd() -> &'static str {
-    FILE_GREP_CMD.get_or_init(|| {
-        if which("rg").is_some() {
-            "rg --with-filename --line-number --no-heading -S \"$1\" ~ 2>/dev/null | head -20"
-                .to_string()
-        } else {
-            "grep -r -i -n -I -H -- \"$1\" \"$HOME\" 2>/dev/null | head -20".to_string()
-        }
-    })
-}
 
 /// Parse a colon-prefixed command into command name and argument
 ///
@@ -847,7 +818,11 @@ impl AppListModel {
                     Box::new(move || model_clone.run_rg_in_vault(PathBuf::from(vault_str), &arg)),
                 )
             }
-            _ => unreachable!(),
+            _ => {
+                // Should never happen as cmd_name comes from known commands
+                error!("Unexpected obsidian command: {}", cmd_name);
+                return;
+            }
         };
 
         self.active_mode.set(mode);
@@ -865,7 +840,7 @@ impl AppListModel {
         let arg = arg.to_string();
         let model_clone = self.clone();
         self.schedule_command(move || {
-            model_clone.run_command("f", file_search_cmd(), &arg);
+            model_clone.run_file_search(&arg);
         });
     }
 
@@ -879,7 +854,7 @@ impl AppListModel {
         let arg = arg.to_string();
         let model_clone = self.clone();
         self.schedule_command(move || {
-            model_clone.run_command("fg", file_grep_cmd(), &arg);
+            model_clone.run_file_grep(&arg);
         });
     }
 
@@ -970,11 +945,69 @@ impl AppListModel {
         glib::idle_add_local_once(move || poller.poll());
     }
 
-    /// Execute a custom shell command template with argument substitution
-    fn run_command(&self, _cmd_name: &str, template: &str, argument: &str) {
-        let mut cmd = std::process::Command::new("sh");
-        cmd.arg("-c").arg(template).arg("--").arg(argument);
-        self.run_subprocess(cmd);
+    /// Execute a file search command without using shell
+    fn run_file_search(&self, argument: &str) {
+        // Try plocate first, fall back to find
+        let command = if which("plocate").is_some() {
+            // plocate -i -- "$argument" 2>/dev/null
+            let mut cmd = std::process::Command::new("plocate");
+            cmd.arg("-i")
+                .arg("--")
+                .arg(argument)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null());
+            cmd
+        } else {
+            // find "$HOME" -type f -ipath "*$argument*" 2>/dev/null
+            let home = std::env::var("HOME").unwrap_or_default();
+            let mut cmd = std::process::Command::new("find");
+            cmd.arg(&home)
+                .arg("-type")
+                .arg("f")
+                .arg("-iname")
+                .arg(format!("*{}*", argument))
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null());
+            cmd
+        };
+
+        self.run_subprocess(command);
+    }
+
+    /// Execute a file grep command without using shell
+    fn run_file_grep(&self, argument: &str) {
+        let command = if which("rg").is_some() {
+            // rg --with-filename --line-number --no-heading -S "$argument" ~ 2>/dev/null | head -20
+            let home = std::env::var("HOME").unwrap_or_default();
+            let mut cmd = std::process::Command::new("rg");
+            cmd.arg("--with-filename")
+                .arg("--line-number")
+                .arg("--no-heading")
+                .arg("-S")
+                .arg(argument)
+                .arg(&home)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null());
+            cmd
+        } else {
+            // grep -r -i -n -I -H -- "$argument" "$HOME" 2>/dev/null | head -20
+            let home = std::env::var("HOME").unwrap_or_default();
+            let mut cmd = std::process::Command::new("grep");
+            cmd.arg("-r")
+                .arg("-i")
+                .arg("-n")
+                .arg("-I")
+                .arg("-H")
+                .arg("--")
+                .arg(argument)
+                .arg(&home)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null());
+            cmd
+        };
+
+        // Run the command (output limited by run_subprocess)
+        self.run_subprocess(command);
     }
 
     /// Run `find` command to search for files in Obsidian vault

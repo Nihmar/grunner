@@ -1,12 +1,21 @@
 # Grunner Improvement TODO List
 
 ## Priority 1: Code Quality & Safety (Critical)
-- [ ] **Fix clippy warnings** - 22+ issues across multiple files
-  - Collapsible if statements in `src/actions.rs:423,466,491`
-  - Redundant closures in `src/actions.rs:63`, `src/main.rs:101`, `src/workspace_bar.rs:416`
-  - Manual strip prefix in `src/workspace_bar.rs:262`
-- [ ] **Fix unreachable pattern** in `src/list_model.rs:850` - Prevents potential panics
-- [ ] **Fix shell injection vulnerability** in `src/list_model.rs:45` - Use `Command` with explicit args
+- [x] **Fix clippy warnings** - 22+ issues across multiple files
+  - Removed redundant `libadwaita` import in `src/actions.rs:17`
+  - Fixed redundant closure in `src/actions.rs:63`
+  - Collapsible if statements in `src/actions.rs:423,466,491,502`
+  - Fixed `src/config.rs:184`
+  - Fixed `src/search_provider.rs:419, 487, 543, 756`
+  - Fixed `src/settings_window/tabs/info.rs:183`
+  - Fixed `src/settings_window/tabs/obsidian.rs:87`
+  - Fixed `src/settings_window/mod.rs:115`
+  - Fixed `src/workspace_bar.rs:214, 262, 270`
+  - Fixed `src/items/search_result_item.rs:116` (added allow attribute)
+  - Fixed `src/logging.rs:136, 287`
+- [x] **Fix unreachable pattern** in `src/list_model.rs:850` - Replaced with proper error handling
+- [x] **Fix shell injection vulnerability** in `src/list_model.rs:45` - Removed shell templates, now uses `std::process::Command` with explicit arguments
+- [x] **Fix GTK CSS warning** - Removed deprecated `-gtk-overlay-scrolling` property from `src/style.css:289`
 
 ## Priority 2: Testing (High)
 - [ ] **Add unit tests** - Zero tests currently exist

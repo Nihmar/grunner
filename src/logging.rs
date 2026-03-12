@@ -8,7 +8,7 @@
 
 use log::{LevelFilter, SetLoggerError};
 use simplelog::{Config as SimpleLogConfig, WriteLogger};
-use std::fs::{OpenOptions, create_dir_all};
+use std::fs::{create_dir_all, OpenOptions};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -137,7 +137,6 @@ fn load_config_from_env() -> LogConfig {
 // pub fn get_config() -> &'static LogConfig {
 //     CONFIG.get_or_init(|| load_config_from_env())
 // }
-
 /// Initialize journald logger
 #[cfg(feature = "journal")]
 fn init_journal_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
@@ -284,7 +283,7 @@ pub fn setup_panic_hook() {
             let message = if let Some(s) = payload.downcast_ref::<&str>() {
                 *s
             } else if let Some(s) = payload.downcast_ref::<String>() {
-                &s
+                s
             } else {
                 "Box<Any>"
             };

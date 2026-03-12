@@ -180,29 +180,27 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
                 cfg.obsidian = default_config.obsidian;
             }
 
-            if let Some(window) = window.upgrade() {
-                if let Some(overlay) = overlay.upgrade() {
-                    if let Err(e) = save_config(&config_rc.borrow()) {
-                        error!("Failed to save reset configuration: {}", e);
-                        let toast = Toast::builder()
-                            .title("Failed to save reset settings")
-                            .timeout(3)
-                            .build();
-                        overlay.add_toast(toast);
-                    } else {
-                        info!("Configuration reset and saved successfully");
-                        let toast = Toast::builder()
-                            .title("Settings reset to defaults")
-                            .timeout(2)
-                            .build();
-                        overlay.add_toast(toast);
-                        glib::timeout_add_local_once(
-                            std::time::Duration::from_millis(1000),
-                            move || {
-                                libadwaita::prelude::AdwDialogExt::close(&window);
-                            },
-                        );
-                    }
+            if let Some(window) = window.upgrade() && let Some(overlay) = overlay.upgrade() {
+                if let Err(e) = save_config(&config_rc.borrow()) {
+                    error!("Failed to save reset configuration: {}", e);
+                    let toast = Toast::builder()
+                        .title("Failed to save reset settings")
+                        .timeout(3)
+                        .build();
+                    overlay.add_toast(toast);
+                } else {
+                    info!("Configuration reset and saved successfully");
+                    let toast = Toast::builder()
+                        .title("Settings reset to defaults")
+                        .timeout(2)
+                        .build();
+                    overlay.add_toast(toast);
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(1000),
+                        move || {
+                            libadwaita::prelude::AdwDialogExt::close(&window);
+                        },
+                    );
                 }
             }
         }

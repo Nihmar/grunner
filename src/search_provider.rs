@@ -416,17 +416,17 @@ fn parse_icon_variant(val: &OwnedValue) -> Option<IconData> {
             // or ("file-icon", {"file": "path"})
             Value::Structure(s) => {
                 let fields = s.fields();
-                if fields.len() >= 2 {
-                    if let Value::Str(type_name) = &fields[0] {
-                        match type_name.as_str() {
-                            "themed-icon" => {
-                                return extract_themed(&fields[1]);
-                            }
-                            "file-icon" => {
-                                return extract_file(&fields[1]);
-                            }
-                            _ => {}
+                if fields.len() >= 2
+                    && let Value::Str(type_name) = &fields[0]
+                {
+                    match type_name.as_str() {
+                        "themed-icon" => {
+                            return extract_themed(&fields[1]);
                         }
+                        "file-icon" => {
+                            return extract_file(&fields[1]);
+                        }
+                        _ => {}
                     }
                 }
                 // Unknown structure — walk fields looking for something usable
@@ -484,12 +484,10 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
             Value::Dict(d) => {
                 // First, try to find the "names" key explicitly
                 for (k, val) in d.iter() {
-                    if let (Value::Str(key), v2) = (k, val) {
-                        if key.as_str() == "names" {
-                            if let Some(name) = first_name_from_array(v2) {
-                                return Some(name);
-                            }
-                        }
+                    if let (Value::Str(key), v2) = (k, val) && key.as_str() == "names"
+                        && let Some(name) = first_name_from_array(v2)
+                    {
+                        return Some(name);
                     }
                 }
 
@@ -540,12 +538,8 @@ fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
             Value::Dict(d) => {
                 // Look for "file" key explicitly
                 for (k, val) in d.iter() {
-                    if let Value::Str(key) = k {
-                        if key.as_str() == "file" {
-                            if let Some(p) = walk(val) {
-                                return Some(p);
-                            }
-                        }
+                    if let Value::Str(key) = k && key.as_str() == "file" && let Some(p) = walk(val) {
+                        return Some(p);
                     }
                 }
 
@@ -753,18 +747,16 @@ fn build_result(
     let name = take_str(&mut meta, "name").unwrap_or_else(|| id.clone());
     let description = take_str(&mut meta, "description").unwrap_or_default();
 
-    if let Some(val) = meta.get("clipboardText") {
-        if let Ok(text) = String::try_from(val.clone()) {
-            if let Some(display) = Display::default() {
-                let clipboard = display.clipboard(); // ← no Option here!
-                clipboard.set_text(&text);
-                info!(
-                    "Copied '{}' to clipboard from search provider metadata",
-                    text
-                );
-            } else {
-                warn!("No default GDK Display available — cannot copy to clipboard");
-            }
+    if let Some(val) = meta.get("clipboardText") && let Ok(text) = String::try_from(val.clone()) {
+        if let Some(display) = Display::default() {
+            let clipboard = display.clipboard(); // ← no Option here!
+            clipboard.set_text(&text);
+            info!(
+                "Copied '{}' to clipboard from search provider metadata",
+                text
+            );
+        } else {
+            warn!("No default GDK Display available — cannot copy to clipboard");
         }
     }
 

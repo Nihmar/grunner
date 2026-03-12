@@ -84,15 +84,13 @@ pub fn build_tab(
                 #[strong]
                 vault_row,
                 move |dialog, response| {
-                    if response == gtk4::ResponseType::Accept {
-                        if let Some(file) = dialog.file() {
-                            let folder_path = file.path().unwrap_or_default();
-                            // Store as tilde path for portability
-                            let display_path = contract_home(&folder_path);
-                            vault_row.set_text(&display_path);
-                            if let Some(obs) = config_rc.borrow_mut().obsidian.as_mut() {
-                                obs.vault = display_path;
-                            }
+                    if response == gtk4::ResponseType::Accept && let Some(file) = dialog.file() {
+                        let folder_path = file.path().unwrap_or_default();
+                        // Store as tilde path for portability
+                        let display_path = contract_home(&folder_path);
+                        vault_row.set_text(&display_path);
+                        if let Some(obs) = config_rc.borrow_mut().obsidian.as_mut() {
+                            obs.vault = display_path;
                         }
                     }
                     dialog.destroy();

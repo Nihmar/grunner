@@ -112,26 +112,24 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         let overlay = overlay.downgrade();
         let config_rc = Rc::clone(&config_rc);
         move |_| {
-            if let Some(window) = window.upgrade() {
-                if let Some(overlay) = overlay.upgrade() {
-                    if let Err(e) = save_config(&config_rc.borrow()) {
-                        error!("Failed to save configuration: {}", e);
-                        let toast = Toast::builder()
-                            .title("Failed to save settings")
-                            .timeout(3)
-                            .build();
-                        overlay.add_toast(toast);
-                    } else {
-                        info!("Configuration saved successfully");
-                        let toast = Toast::builder().title("Settings saved").timeout(2).build();
-                        overlay.add_toast(toast);
-                        glib::timeout_add_local_once(
-                            std::time::Duration::from_millis(1000),
-                            move || {
-                                libadwaita::prelude::AdwDialogExt::close(&window);
-                            },
-                        );
-                    }
+            if let Some(window) = window.upgrade() && let Some(overlay) = overlay.upgrade() {
+                if let Err(e) = save_config(&config_rc.borrow()) {
+                    error!("Failed to save configuration: {}", e);
+                    let toast = Toast::builder()
+                        .title("Failed to save settings")
+                        .timeout(3)
+                        .build();
+                    overlay.add_toast(toast);
+                } else {
+                    info!("Configuration saved successfully");
+                    let toast = Toast::builder().title("Settings saved").timeout(2).build();
+                    overlay.add_toast(toast);
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(1000),
+                        move || {
+                            libadwaita::prelude::AdwDialogExt::close(&window);
+                        },
+                    );
                 }
             }
         }

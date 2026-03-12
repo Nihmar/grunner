@@ -14,7 +14,6 @@ use crate::settings_window;
 use crate::utils::expand_home;
 use chrono::Local;
 use gtk4::prelude::DisplayExt;
-use libadwaita;
 use log::{debug, error, info, warn};
 use std::fs;
 use std::fs::File;
@@ -60,7 +59,7 @@ pub fn which(prog: &str) -> Option<PathBuf> {
 pub static TERMINAL: OnceLock<Option<String>> = OnceLock::new();
 
 fn terminal() -> &'static Option<String> {
-    TERMINAL.get_or_init(|| find_terminal_impl())
+    TERMINAL.get_or_init(find_terminal_impl)
 }
 
 /// Implementation of terminal emulator discovery
@@ -420,12 +419,10 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             };
 
             // Write optional text content to the note
-            if let Some(t) = text {
-                if !t.is_empty() {
-                    debug!("Writing {} characters to note", t.len());
-                    if let Err(e) = writeln!(file, "{}", t) {
-                        error!("Failed to write text to note {:?}: {}", path, e);
-                    }
+            if let Some(t) = text && !t.is_empty() {
+                debug!("Writing {} characters to note", t.len());
+                if let Err(e) = writeln!(file, "{}", t) {
+                    error!("Failed to write text to note {:?}: {}", path, e);
                 }
             }
 
@@ -463,12 +460,10 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             };
 
             // Append optional text to the daily note
-            if let Some(t) = text {
-                if !t.is_empty() {
-                    debug!("Appending {} characters to daily note", t.len());
-                    if let Err(e) = writeln!(file, "{}", t) {
-                        error!("Failed to append text to daily note {:?}: {}", path, e);
-                    }
+            if let Some(t) = text && !t.is_empty() {
+                debug!("Appending {} characters to daily note", t.len());
+                if let Err(e) = writeln!(file, "{}", t) {
+                    error!("Failed to append text to daily note {:?}: {}", path, e);
                 }
             }
 
@@ -488,31 +483,27 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             debug!("Quick note path: {:?}", path);
 
             // Ensure parent directory exists
-            if let Some(parent) = path.parent() {
-                if let Err(e) = fs::create_dir_all(parent) {
-                    error!(
-                        "Failed to create quick note parent directory {:?}: {}",
-                        parent, e
-                    );
-                    return;
-                }
+            if let Some(parent) = path.parent() && let Err(e) = fs::create_dir_all(parent) {
+                error!(
+                    "Failed to create quick note parent directory {:?}: {}",
+                    parent, e
+                );
+                return;
             }
 
             // Append text to quick note if provided
-            if let Some(t) = text {
-                if !t.is_empty() {
-                    debug!("Appending {} characters to quick note", t.len());
-                    let mut file =
-                        match fs::OpenOptions::new().create(true).append(true).open(&path) {
-                            Ok(f) => f,
-                            Err(e) => {
-                                error!("Failed to open quick note file {:?}: {}", path, e);
-                                return;
-                            }
-                        };
-                    if let Err(e) = writeln!(file, "{}", t) {
-                        error!("Failed to write to quick note {:?}: {}", path, e);
-                    }
+            if let Some(t) = text && !t.is_empty() {
+                debug!("Appending {} characters to quick note", t.len());
+                let mut file =
+                    match fs::OpenOptions::new().create(true).append(true).open(&path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            error!("Failed to open quick note file {:?}: {}", path, e);
+                            return;
+                        }
+                    };
+                if let Err(e) = writeln!(file, "{}", t) {
+                    error!("Failed to write to quick note {:?}: {}", path, e);
                 }
             }
 
