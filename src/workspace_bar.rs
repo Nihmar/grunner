@@ -311,17 +311,31 @@ fn populate(
     icon_theme: &gtk4::IconTheme,
     app_window: &ApplicationWindow,
 ) {
+    log::debug!(
+        "[workspace_bar] populate called with {} window(s), scroll visible={}",
+        windows.len(),
+        scroll.is_visible()
+    );
+
     // Clear existing buttons (fast — GObjects are reference-counted).
     while let Some(child) = buttons_box.first_child() {
         buttons_box.remove(&child);
     }
 
     if windows.is_empty() {
+        log::debug!("[workspace_bar] no windows, hiding scroll");
         scroll.set_visible(false);
         return;
     }
 
     for info in windows {
+        log::debug!(
+            "[workspace_bar] creating button id={} title={:?} icon={:?}",
+            info.id,
+            info.title,
+            info.icon_name
+        );
+
         let btn = Button::new();
         btn.add_css_class("workspace-window-btn");
         btn.set_tooltip_text(Some(&info.title));
@@ -330,7 +344,13 @@ fn populate(
         let inner = GtkBox::new(Orientation::Horizontal, 4);
         inner.add_css_class("workspace-window-btn-inner");
 
-        let icon = Image::from_icon_name(&resolve_icon(&info.icon_name, icon_theme));
+        let resolved_icon = resolve_icon(&info.icon_name, icon_theme);
+        log::debug!(
+            "[workspace_bar] resolved icon {:?} → {:?}",
+            info.icon_name,
+            resolved_icon
+        );
+        let icon = Image::from_icon_name(&resolved_icon);
         icon.add_css_class("workspace-window-icon");
         inner.append(&icon);
 
@@ -356,6 +376,7 @@ fn populate(
         buttons_box.append(&btn);
     }
 
+    log::debug!("[workspace_bar] populate done, showing scroll");
     scroll.set_visible(true);
 }
 
@@ -381,6 +402,7 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     let scroll = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Automatic)
         .vscrollbar_policy(PolicyType::Never)
+        .min_content_height(1)
         .build();
     scroll.add_css_class("workspace-bar");
     scroll.set_visible(false);
@@ -389,7 +411,11 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     buttons_box.add_css_class("workspace-bar-buttons");
     scroll.set_child(Some(&buttons_box));
 
-    window.connect_show(clone!(
+    // Use connect_map instead of connect_show — for top-level ApplicationWindows,
+    // connect_map fires reliably when the compositor maps the window (every time
+    // the launcher is shown).  connect_show may not propagate correctly through
+    // GTK4-rs signal wrappers for decorated=false top-level windows.
+    window.connect_map(clone!(
         #[weak]
         scroll,
         #[weak]
@@ -397,7 +423,7 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
         #[weak]
         window,
         move |_| {
-            log::debug!("[workspace_bar] connect_show fired");
+            log::debug!("[workspace_bar] connect_map fired, launching fetch thread");
 
             let (tx, rx) = std::sync::mpsc::channel::<Vec<WindowInfo>>();
 
