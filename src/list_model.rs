@@ -12,6 +12,7 @@
 
 use crate::actions::which;
 use crate::config::ObsidianConfig;
+use crate::global_state::get_home_dir;
 use crate::items::AppItem;
 use crate::items::CommandItem;
 use crate::items::SearchResultItem;
@@ -959,9 +960,9 @@ impl AppListModel {
             cmd
         } else {
             // find "$HOME" -type f -ipath "*$argument*" 2>/dev/null
-            let home = std::env::var("HOME").unwrap_or_default();
+            let home = get_home_dir();
             let mut cmd = std::process::Command::new("find");
-            cmd.arg(&home)
+            cmd.arg(home)
                 .arg("-type")
                 .arg("f")
                 .arg("-iname")
@@ -978,20 +979,20 @@ impl AppListModel {
     fn run_file_grep(&self, argument: &str) {
         let command = if which("rg").is_some() {
             // rg --with-filename --line-number --no-heading -S "$argument" ~ 2>/dev/null | head -20
-            let home = std::env::var("HOME").unwrap_or_default();
+            let home = get_home_dir();
             let mut cmd = std::process::Command::new("rg");
             cmd.arg("--with-filename")
                 .arg("--line-number")
                 .arg("--no-heading")
                 .arg("-S")
                 .arg(argument)
-                .arg(&home)
+                .arg(home)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null());
             cmd
         } else {
             // grep -r -i -n -I -H -- "$argument" "$HOME" 2>/dev/null | head -20
-            let home = std::env::var("HOME").unwrap_or_default();
+            let home = get_home_dir();
             let mut cmd = std::process::Command::new("grep");
             cmd.arg("-r")
                 .arg("-i")
@@ -1000,7 +1001,7 @@ impl AppListModel {
                 .arg("-H")
                 .arg("--")
                 .arg(argument)
-                .arg(&home)
+                .arg(home)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null());
             cmd

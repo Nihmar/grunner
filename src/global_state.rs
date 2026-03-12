@@ -12,7 +12,11 @@ static HOME_DIR: OnceLock<String> = OnceLock::new();
 
 /// Get the home directory, caching the result for performance
 pub fn get_home_dir() -> &'static str {
-    HOME_DIR.get_or_init(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()))
+    HOME_DIR.get_or_init(|| {
+        std::env::var_os("HOME")
+            .and_then(|s| s.into_string().ok())
+            .unwrap_or_else(|| ".".into())
+    })
 }
 
 // ─── Tokio Runtime ──────────────────────────────────────────────────────────

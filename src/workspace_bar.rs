@@ -8,6 +8,7 @@
 //!
 //! The bar auto-refreshes every time the Grunner launcher window becomes visible.
 
+use crate::global_state::get_home_dir;
 use glib::clone;
 use gtk4::{
     Box as GtkBox, Button, Image, Label, Orientation, PolicyType, ScrolledWindow, gdk, prelude::*,
@@ -214,7 +215,7 @@ async fn activate_window(id: u64) {
 
 /// Resolve app name and icon from desktop file using wm_class
 fn resolve_from_desktop(wm_class: &str) -> Option<(String, String)> {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = get_home_dir();
 
     let filename = format!("{}.desktop", wm_class);
     let search_dirs = [

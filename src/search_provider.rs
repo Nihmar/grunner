@@ -14,6 +14,7 @@
 //! The module uses a combination of async/await (via Tokio) and D-Bus (via zbus)
 //! to communicate with search providers while keeping the UI responsive.
 
+use crate::global_state::get_home_dir;
 use futures::stream::{FuturesUnordered, StreamExt};
 use gtk4::gdk::Display;
 use gtk4::prelude::*;
@@ -139,7 +140,7 @@ pub struct SearchResult {
 /// # Returns
 /// Vector of discovered `SearchProvider` instances, ready for querying.
 pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = get_home_dir();
     // Standard directories where GNOME Shell search providers are installed
     let dirs: Vec<PathBuf> = vec![
         PathBuf::from("/usr/share/gnome-shell/search-providers"),
@@ -309,7 +310,7 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
 /// # Returns
 /// Icon name string, or empty string if not found.
 pub fn resolve_app_icon(desktop_id: &str) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = get_home_dir();
 
     // Ensure we have the .desktop extension
     let filename = if desktop_id.ends_with(".desktop") {

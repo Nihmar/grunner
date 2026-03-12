@@ -4,6 +4,7 @@
 //! the application. Currently, it contains path manipulation utilities
 //! for handling user home directory expansion.
 
+use crate::global_state::get_home_dir;
 use std::path::PathBuf;
 
 /// Expand a path starting with `~` to the user's home directory
@@ -36,7 +37,7 @@ use std::path::PathBuf;
 /// Relies on the `HOME` environment variable. If `HOME` is not set,
 /// defaults to an empty string, which may result in unexpected paths.
 pub fn expand_home(path: &str) -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = get_home_dir();
 
     if let Some(rest) = path.strip_prefix("~/") {
         // Path like "~/Documents" - join home directory with rest of path
@@ -71,7 +72,7 @@ pub fn expand_home(path: &str) -> PathBuf {
 /// # // contract_home(Path::new("/etc/fstab")) → "/etc/fstab"
 /// ```
 pub fn contract_home(path: &std::path::Path) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = get_home_dir();
     let home_path = std::path::Path::new(&home);
 
     if let Ok(relative) = path.strip_prefix(home_path) {

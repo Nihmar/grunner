@@ -48,14 +48,16 @@
   - Proper separation of sync/async concerns
 
 ## Priority 5: Dependencies & Modernization (Low)
-- [ ] **Update dependencies**:
-  - `tokio` to latest 1.x (security patches)
-  - `zbus` to latest version (check for 6.x breaking changes)
-  - `gtk4`/`libadwaita` to latest compatible versions
-- [ ] **Use modern Rust features**:
-  - `std::env::var_os` instead of `var`
-  - `std::path::Path` methods for file operations
-  - Async closures (Rust 2024)
+- [x] **Update dependencies**:
+  - `tokio` updated to 1.50.0 (from 1.49.0)
+  - `zbus` already at latest 5.14.0
+  - `gtk4` already at latest 0.11.0
+  - `libadwaita` already at latest 0.9.1
+- [x] **Use modern Rust features**:
+  - Updated all `std::env::var("HOME")` to use cached `get_home_dir()` from `global_state`
+  - `std::path::Path` methods already used correctly (`.join()`, `Path::new()`)
+  - No async closures needed currently (not a common pattern in this codebase)
+  - All environment variable lookups now go through centralized global state caching
 
 ## Priority 6: User Experience (Low)
 - [ ] **Improve configuration handling** - Atomic file creation to prevent race conditions
