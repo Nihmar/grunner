@@ -50,11 +50,8 @@ trait WindowCalls {
     /// `workspace`, `in_current_workspace`, `frame_type`, `window_type`, etc.
     fn list(&self) -> zbus::Result<String>;
 
-    /// Returns the title of the window with the given ID.
-    fn get_title(&self, win_id: u64) -> zbus::Result<String>;
-
     /// Activates (focuses) the window with the given ID.
-    fn activate(&self, win_id: u64) -> zbus::Result<()>;
+    fn activate(&self, win_id: u32) -> zbus::Result<()>;
 }
 
 // ─── Internal data model ──────────────────────────────────────────────────────
@@ -84,6 +81,7 @@ struct RawWindowEntry {
     #[serde(rename = "in_current_workspace")]
     in_current_workspace: bool,
     pid: u64,
+    title: Option<String>,
 }
 
 // ─── Async D-Bus queries ──────────────────────────────────────────────────────
@@ -133,28 +131,41 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
             continue;
         }
 
-        if raw.pid == u64::from(our_pid) {
-            log::debug!("[workspace_bar] skipping grunner (pid={})", our_pid);
+        let wm_class = raw.wm_class.as_deref().unwrap_or("");
+        let wm_class_instance = raw.wm_class_instance.as_deref().unwrap_or("");
+
+        if wm_class == "org.nihmar.grunner" || wm_class_instance == "org.nihmar.grunner" {
             continue;
         }
 
-        let title = windows
-            .get_title(raw.id)
-            .await
-            .map_err(|e| {
-                log::debug!("[workspace_bar] GetTitle({}) failed: {e}", raw.id);
-            })
-            .ok()
-            .filter(|t| !t.is_empty())
-            .or_else(|| raw.wm_class.clone())
-            .or_else(|| raw.wm_class_instance.clone())
-            .unwrap_or_else(|| "Untitled".to_string());
+        // Try to get app name and icon from desktop file
+        let (title, icon_from_desktop) = resolve_from_desktop(wm_class)
+            .or_else(|| resolve_from_desktop(wm_class_instance))
+            .map(|(n, i)| (n, Some(i)))
+            .unwrap_or_else(|| (String::new(), None));
 
-        let icon_name = raw
-            .wm_class_instance
-            .as_ref()
-            .or(raw.wm_class.as_ref())
-            .map(|s| s.to_lowercase())
+        let title = if !title.is_empty() {
+            title
+        } else {
+            raw.title
+                .clone()
+                .filter(|t| !t.is_empty())
+                .or_else(|| raw.wm_class.clone())
+                .or_else(|| raw.wm_class_instance.clone())
+                .unwrap_or_else(|| "Untitled".to_string())
+        };
+
+        let icon_name = icon_from_desktop
+            .filter(|i| !i.is_empty())
+            .or_else(|| {
+                if !wm_class_instance.is_empty() {
+                    Some(wm_class_instance.to_lowercase())
+                } else if !wm_class.is_empty() {
+                    Some(wm_class.to_lowercase())
+                } else {
+                    None
+                }
+            })
             .unwrap_or_else(|| "application-x-executable".to_string());
 
         log::debug!(
@@ -172,10 +183,7 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
         });
     }
 
-    log::debug!(
-        "[workspace_bar] {} window(s) passed filter",
-        result.len()
-    );
+    log::debug!("[workspace_bar] {} window(s) passed filter", result.len());
 
     result.sort_by(|a, b| a.title.cmp(&b.title));
     Some(result)
@@ -190,13 +198,54 @@ async fn activate_window(id: u64) {
         return;
     };
 
-    let result = windows.activate(id).await;
+    let result = windows.activate(id as u32).await;
     if let Err(e) = result {
         log::warn!("[workspace_bar] Activate({}) failed: {}", id, e);
     }
 }
 
 // ─── Widget helpers ───────────────────────────────────────────────────────────
+
+/// Resolve app name and icon from desktop file using wm_class
+fn resolve_from_desktop(wm_class: &str) -> Option<(String, String)> {
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    let filename = format!("{}.desktop", wm_class);
+    let search_dirs = [
+        format!("/usr/share/applications/{}", filename),
+        format!("{}/.local/share/applications/{}", home, filename),
+        format!("/usr/local/share/applications/{}", filename),
+        format!("/var/lib/flatpak/exports/share/applications/{}", filename),
+        format!(
+            "{}/.local/share/flatpak/exports/share/applications/{}",
+            home, filename
+        ),
+    ];
+
+    for path in &search_dirs {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            let mut name: Option<String> = None;
+            let mut icon: Option<String> = None;
+            for line in content.lines() {
+                // Take the first Name= entry (usually the main app name)
+                // Desktop files can have multiple entries like "New Window" for actions
+                if name.is_none() && line.trim().starts_with("Name=") {
+                    if let Some(n) = line.trim().strip_prefix("Name=") {
+                        name = Some(n.trim().to_string());
+                    }
+                }
+                if let Some(i) = line.trim().strip_prefix("Icon=") {
+                    icon = Some(i.trim().to_string());
+                }
+            }
+            if let Some(n) = name {
+                let i = icon.unwrap_or_default();
+                return Some((n, i));
+            }
+        }
+    }
+    None
+}
 
 /// Maximum title length (in Unicode scalar values) shown inside a button.
 const MAX_TITLE_CHARS: usize = 22;
@@ -218,16 +267,38 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
     if theme.has_icon(preferred) {
         return preferred.to_owned();
     }
-    let lower = preferred.to_lowercase();
-    if theme.has_icon(&lower) {
-        return lower;
-    }
-    if let Some(last) = preferred.rsplit('.').next() {
-        let last_lower = last.to_lowercase();
-        if theme.has_icon(&last_lower) {
-            return last_lower;
+
+    // Try with common prefix replacements
+    let replacements = [
+        ("org.gnome.", "gnome-"),
+        ("org.freedesktop.", ""),
+        ("com.", ""),
+        ("net.", ""),
+    ];
+    for (prefix, replacement) in &replacements {
+        if preferred.starts_with(prefix) {
+            let candidate = format!("{}{}", replacement, &preferred[prefix.len()..]);
+            if theme.has_icon(&candidate) {
+                return candidate;
+            }
         }
     }
+
+    // Try last segment only (e.g., "org.gnome.Nautilus" -> "nautilus")
+    if let Some(last) = preferred.rsplit('.').next() {
+        if theme.has_icon(last) {
+            return last.to_owned();
+        }
+    }
+
+    // Try with "gnome-" prefix
+    if let Some(last) = preferred.rsplit('.').next() {
+        let candidate = format!("gnome-{last}");
+        if theme.has_icon(&candidate) {
+            return candidate;
+        }
+    }
+
     "application-x-executable".to_owned()
 }
 
