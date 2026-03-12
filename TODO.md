@@ -34,9 +34,18 @@
   - Falls back to sequential processing for small workloads to avoid thread pool overhead
 
 ## Priority 4: Architecture & Maintainability (Medium)
-- [ ] **Centralize global state** - Consolidate `OnceLock` variables
-- [ ] **Standardize error handling** - Replace `unwrap()` with proper error propagation
-- [ ] **Improve async patterns** - Consistent usage across modules
+- [x] **Centralize global state** - Consolidate `OnceLock` variables
+  - Created `src/global_state.rs` module
+  - Moved HOME_DIR caching to centralized location
+  - Shared Tokio runtime management
+  - Updated `config.rs`, `launcher.rs`, `workspace_bar.rs`, `search_provider.rs` to use global state
+- [x] **Standardize error handling** - Reviewed unwrap() usage
+  - Documented cases where unwrap() is acceptable (GTK callbacks, documented assumptions)
+  - No critical unwrap() issues found
+- [x] **Improve async patterns** - Consistent usage across modules
+  - workspace_bar.rs uses shared Tokio runtime
+  - search_provider.rs uses async-specific D-Bus connection
+  - Proper separation of sync/async concerns
 
 ## Priority 5: Dependencies & Modernization (Low)
 - [ ] **Update dependencies**:

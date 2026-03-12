@@ -10,6 +10,7 @@
 //! - Proper handling of desktop entry specifications
 //! - Filtering of non-application and hidden entries
 
+use crate::global_state::get_home_dir;
 use jwalk::WalkDir;
 use log::{debug, error, info, trace};
 use rayon::prelude::*;
@@ -17,16 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use std::time::SystemTime;
-
-/// Cached home directory to avoid repeated environment variable lookups
-static HOME_DIR: OnceLock<String> = OnceLock::new();
-
-/// Get the home directory, caching the result for performance
-fn get_home_dir() -> &'static str {
-    HOME_DIR.get_or_init(|| std::env::var("HOME").unwrap_or_else(|_| ".".into()))
-}
 
 /// Represents a parsed desktop application entry
 ///

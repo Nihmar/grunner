@@ -5,6 +5,7 @@
 
 pub mod actions;
 pub mod config;
+pub mod global_state;
 pub mod items;
 pub mod launcher;
 pub mod logging;

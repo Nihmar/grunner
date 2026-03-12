@@ -11,21 +11,11 @@
 //! - Obsidian vault integration settings
 //! - Search provider filtering
 
+use crate::global_state::get_home_dir;
 use crate::utils::expand_home;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::OnceLock;
-
-/// Cached home directory to avoid repeated environment variable lookups
-static HOME_DIR: OnceLock<String> = OnceLock::new();
-
-/// Get the home directory, caching the result for performance
-fn get_home_dir() -> &'static str {
-    HOME_DIR.get_or_init(|| {
-        std::env::var("HOME").unwrap_or_else(|_| ".".into())
-    })
-}
 
 /// Default window width in pixels
 pub const DEFAULT_WINDOW_WIDTH: i32 = 640;

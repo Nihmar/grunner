@@ -1,6 +1,7 @@
 mod actions;
 mod app_mode;
 mod config;
+mod global_state;
 mod item_activation;
 mod items;
 mod launcher;

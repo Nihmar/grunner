@@ -58,6 +58,7 @@ pub fn which(prog: &str) -> Option<PathBuf> {
 /// It searches for available terminal emulators in a specific order of preference.
 pub static TERMINAL: OnceLock<Option<String>> = OnceLock::new();
 
+/// Get the cached terminal emulator or find and cache it
 fn terminal() -> &'static Option<String> {
     TERMINAL.get_or_init(find_terminal_impl)
 }

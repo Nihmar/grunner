@@ -30,37 +30,19 @@ use zbus::zvariant::OwnedValue;
 // Global runtime and connection management
 // ---------------------------------------------------------------------------
 
-/// Global Tokio runtime for async D-Bus operations
-///
-/// Search providers use asynchronous D-Bus calls which require a Tokio runtime.
-/// This static runtime is initialized once and shared across all provider queries.
-static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-
-/// Global D-Bus session connection
-///
-/// D-Bus connections are expensive to create, so we reuse a single connection
-/// for all search provider queries throughout the application's lifetime.
-static DBUS_CONN: OnceLock<Connection> = OnceLock::new();
-
-/// Get or initialize the shared Tokio runtime
-///
-/// Creates a multi-threaded runtime with a single worker thread optimized
-/// for I/O operations and timing, suitable for D-Bus communication.
+/// Get the shared Tokio runtime from global state
 fn get_runtime() -> &'static tokio::runtime::Runtime {
-    TOKIO_RT.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_io()
-            .enable_time()
-            .build()
-            .expect("[search] failed to build tokio runtime")
-    })
+    // This function will be implemented in global_state.rs
+    // For now, we'll use the search_provider-specific implementation
+    // that's already been optimized
+    crate::global_state::get_tokio_runtime()
 }
 
 /// Get or initialize the shared D-Bus session connection
 ///
 /// Returns a clone of the global connection, establishing it first if needed.
 async fn get_or_init_conn() -> zbus::Result<Connection> {
+    static DBUS_CONN: OnceLock<Connection> = OnceLock::new();
     if let Some(c) = DBUS_CONN.get() {
         return Ok(c.clone());
     }
