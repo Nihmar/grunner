@@ -328,8 +328,8 @@ fn populate(
     }
 
     if windows.is_empty() {
-        log::debug!("[workspace_bar] no windows, hiding scroll");
-        scroll.set_visible(false);
+        log::debug!("[workspace_bar] no windows, showing empty bar");
+        scroll.set_visible(true);
         return;
     }
 
@@ -391,7 +391,7 @@ fn populate(
 ///
 /// The returned widget:
 /// - Is **invisible** until the first refresh completes (no flicker on cold start).
-/// - Stays **hidden** when the current workspace has no open windows.
+/// - Shows an empty bar when there are no open windows.
 /// - **Auto-refreshes** every time it is mapped (i.e. every time the Grunner
 ///   launcher window is made visible) so it always reflects current state.
 ///
