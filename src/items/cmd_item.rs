@@ -10,8 +10,8 @@
 //! - File paths with line numbers
 //! - Search results that can be executed or opened
 
-use glib::Object;
 use glib::subclass::prelude::*;
+use glib::Object;
 use std::cell::RefCell;
 
 /// Internal implementation module for GTK object subclassing
@@ -78,6 +78,7 @@ impl CommandItem {
     ///
     /// # Examples
     /// ```rust
+    /// use grunner::items::CommandItem;
     /// let cmd = CommandItem::new("ls -la".to_string());
     /// let cmd = CommandItem::new("/path/to/file.rs:42".to_string());
     /// ```

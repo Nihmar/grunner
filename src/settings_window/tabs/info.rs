@@ -178,6 +178,7 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
                 cfg.app_dirs = default_config.app_dirs.clone();
                 cfg.search_provider_blacklist = default_config.search_provider_blacklist.clone();
                 cfg.obsidian = default_config.obsidian;
+                cfg.workspace_bar_enabled = default_config.workspace_bar_enabled;
             }
 
             if let Some(window) = window.upgrade() && let Some(overlay) = overlay.upgrade() {

@@ -339,3 +339,113 @@ quick_note = ""
         dirs = dirs,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_app_dirs() {
+        let dirs = default_app_dirs();
+        assert_eq!(dirs.len(), 5);
+        assert!(dirs[0].contains("/usr/share/applications"));
+        assert!(dirs[1].contains("/usr/local/share/applications"));
+        assert!(dirs[2].contains("~/.local/share/applications"));
+        assert!(dirs[3].contains("/var/lib/flatpak/exports/share/applications"));
+        assert!(dirs[4].contains("~/.local/share/flatpak/exports/share/applications"));
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
+        assert_eq!(config.window_height, DEFAULT_WINDOW_HEIGHT);
+        assert_eq!(config.max_results, DEFAULT_MAX_RESULTS);
+        assert_eq!(config.command_debounce_ms, DEFAULT_COMMAND_DEBOUNCE_MS);
+        assert!(config.app_dirs.len() > 0);
+        assert!(config.workspace_bar_enabled);
+        assert!(config.obsidian.is_none());
+    }
+
+    #[test]
+    fn test_default_toml_generation() {
+        let toml = default_toml();
+        assert!(toml.contains("workspace_bar_enabled = true"));
+        assert!(toml.contains("max_results"));
+        assert!(toml.contains("command_debounce_ms"));
+    }
+
+    #[test]
+    fn test_apply_toml_workspace_bar_enabled() {
+        // Test enabling workspace bar
+        let toml = r#"
+            [search]
+            workspace_bar_enabled = true
+        "#;
+        let config = apply_toml(toml);
+        assert!(config.workspace_bar_enabled);
+
+        // Test disabling workspace bar
+        let toml = r#"
+            [search]
+            workspace_bar_enabled = false
+        "#;
+        let config = apply_toml(toml);
+        assert!(!config.workspace_bar_enabled);
+    }
+
+    #[test]
+    fn test_apply_toml_window_settings() {
+        let toml = r#"
+            [window]
+            width = 800
+            height = 600
+        "#;
+        let config = apply_toml(toml);
+        assert_eq!(config.window_width, 800);
+        assert_eq!(config.window_height, 600);
+    }
+
+    #[test]
+    fn test_apply_toml_search_settings() {
+        let toml = r#"
+            [search]
+            max_results = 100
+            command_debounce_ms = 500
+        "#;
+        let config = apply_toml(toml);
+        assert_eq!(config.max_results, 100);
+        assert_eq!(config.command_debounce_ms, 500);
+    }
+
+    #[test]
+    fn test_apply_toml_invalid_values() {
+        // Negative width should be ignored
+        let toml = r#"
+            [window]
+            width = -100
+        "#;
+        let config = apply_toml(toml);
+        assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
+
+        // Zero max_results should be ignored
+        let toml = r#"
+            [search]
+            max_results = 0
+        "#;
+        let config = apply_toml(toml);
+        assert_eq!(config.max_results, DEFAULT_MAX_RESULTS);
+    }
+
+    #[test]
+    fn test_obsidian_config() {
+        let obsidian = ObsidianConfig {
+            vault: "~/obsidian".to_string(),
+            daily_notes_folder: "daily".to_string(),
+            new_notes_folder: "new".to_string(),
+            quick_note: "quick.md".to_string(),
+        };
+        assert_eq!(obsidian.vault, "~/obsidian");
+        assert_eq!(obsidian.daily_notes_folder, "daily");
+    }
+}

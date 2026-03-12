@@ -4,6 +4,10 @@ version = "1.0.0"
 edition = "2024"
 description = "A rofi-like application launcher for GNOME, written in Rust"
 
+[lib]
+name = "grunner"
+path = "src/lib.rs"
+
 [[bin]]
 name = "grunner"
 path = "src/main.rs"

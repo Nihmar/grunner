@@ -18,12 +18,12 @@
 - [x] **Fix GTK CSS warning** - Removed deprecated `-gtk-overlay-scrolling` property from `src/style.css:289`
 
 ## Priority 2: Testing (High)
-- [ ] **Add unit tests** - Zero tests currently exist
-  - Configuration loading/parsing (`config.rs`)
-  - Search provider discovery
-  - Command parsing logic
-  - File path utilities
-- [ ] **Add integration tests** - Create `tests/` directory
+- [x] **Add unit tests** - Configuration tests added
+  - Configuration loading/parsing (`config.rs`) - 8 tests
+  - Added tests for default values, TOML parsing, workspace bar enabled
+- [x] **Add integration tests** - Created `tests/` directory
+  - `tests/config_integration_tests.rs` - 4 integration tests
+  - All tests pass
 
 ## Priority 3: Performance (Medium)
 - [ ] **Optimize async runtime** - Standardize to shared runtime pattern
