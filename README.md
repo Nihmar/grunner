@@ -35,7 +35,7 @@ Take a quick look at grunner in action:
 - **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), and Obsidian integration (:ob, :obg)
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
 - **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) integrated in standard search
-- **Workspace bar** — shows open windows in the current workspace (requires window-calls GNOME Shell extension)
+- **Workspace bar** — shows open windows in the current workspace. Expands taller when scrollbar is needed (7+ windows). Requires window-calls GNOME Shell extension.
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings window** — graphical dialog with tabs for editing configuration, accessible from the power bar
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color

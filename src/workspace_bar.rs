@@ -3,28 +3,10 @@
 //! Renders a horizontal strip of buttons — one per open window on the current
 //! GNOME workspace — placed between the search entry and the results list.
 //!
-//! ## Architecture
+//! Requires the **window-calls** GNOME Shell extension:
+//! https://extensions.gnome.org/extension/4724/window-calls/
 //!
-//! Data is fetched via the **`window-calls`** GNOME Shell extension, which
-//! exposes a D-Bus interface for window management on Wayland. Without this
-//! extension, the D-Bus approach requires GNOME Shell's `--unsafe-mode` which
-//! is unavailable in GNOME 43+.
-//!
-//! The extension provides:
-//! - **`org.gnome.Shell.Extensions.Windows.List`** — returns JSON array of all
-//!   windows with properties (`id`, `wm_class`, `workspace`, `in_current_workspace`, etc.)
-//! - **`org.gnome.Shell.Extensions.Windows.GetTitle`** — returns window title string
-//! - **`org.gnome.Shell.Extensions.Windows.Activate`** — activates a window by ID
-//!
-//! ## Installation
-//!
-//! Install the extension from https://extensions.gnome.org/extension/4724/window-calls/
-//!
-//! ## Refresh strategy
-//!
-//! The bar subscribes to its own `map` signal so it re-queries D-Bus every time
-//! the Grunner launcher window becomes visible.  No background polling is done
-//! while the launcher is hidden.
+//! The bar auto-refreshes every time the Grunner launcher window becomes visible.
 
 use glib::clone;
 use gtk4::{
@@ -327,10 +309,12 @@ fn populate(
     }
 
     if windows.is_empty() {
-        log::debug!("[workspace_bar] no windows, showing empty bar");
-        scroll.set_visible(true);
+        log::debug!("[workspace_bar] no windows, hiding bar");
+        scroll.set_visible(false);
         return;
     }
+
+    let window_count = windows.len();
 
     for info in windows {
         log::debug!(
@@ -380,26 +364,22 @@ fn populate(
 
     log::debug!("[workspace_bar] populate done, showing scroll");
     scroll.set_visible(true);
+
+    if window_count > 6 {
+        scroll.add_css_class("tall");
+        buttons_box.set_margin_bottom(12);
+    } else {
+        scroll.remove_css_class("tall");
+        buttons_box.set_margin_bottom(0);
+    }
 }
 
 // ─── Public constructor ───────────────────────────────────────────────────────
 
-/// Build the workspace window bar and return it as a `ScrolledWindow`.
+/// Build the workspace window bar.
 ///
-/// The returned widget:
-/// - Is **invisible** until the first refresh completes (no flicker on cold start).
-/// - Shows an empty bar when there are no open windows.
-/// - **Auto-refreshes** every time it is mapped (i.e. every time the Grunner
-///   launcher window is made visible) so it always reflects current state.
-///
-/// # Placement
-/// Append the returned widget to the root layout container **after** the search
-/// entry row and **before** the results `ScrolledWindow`:
-/// ```rust
-/// root.append(&entry_box);
-/// root.append(&workspace_bar);   // ← here
-/// root.append(&scrolled);        // existing results list
-/// ```
+/// The widget is invisible until populated, hidden when no windows exist,
+/// and expands taller when more than 6 windows require a scrollbar.
 pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     let scroll = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Automatic)

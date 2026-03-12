@@ -45,17 +45,17 @@ cargo test
 # Run tests with output (show println! output)
 cargo test -- --nocapture
 
-# Run a specific test
+# Run a specific test (partial name match)
 cargo test test_function_name
 
 # Run tests in a specific module
 cargo test module_name::
 
-# Run integration tests (none currently)
+# Run integration tests
 cargo test --tests
 ```
 
-**Note:** There are currently no unit tests in the codebase, but new features should include tests. Tests that require a display can be run with `export DISPLAY=:0` (or appropriate display).
+**Note:** Tests that require a display can be run with `export DISPLAY=:0` (or appropriate display).
 
 ## Code Style Guidelines
 
@@ -89,6 +89,8 @@ use log::{debug, error, info};
 use crate::utils::expand_home;
 use crate::config::Config;
 ```
+
+For GTK/libadwaita code, prefer `use gtk4::prelude::*` and `use libadwaita::prelude::*` to bring in common trait methods.
 
 ### Error Handling
 - Use `Result<T, E>` for fallible operations.
@@ -131,8 +133,15 @@ GRUNNER_LOG=off cargo run          # disable logging
 
 ### Pattern Matching
 - Prefer `match` over `if let` when handling multiple variants.
-- Use `if let` for single‑case extraction.
+- Use `if let` for single-case extraction.
 - Use `unwrap_or`, `unwrap_or_else`, `map`, `and_then` where appropriate.
+
+### GObject/GTK4 Patterns
+- Use `glib::clone!` macro for closure captures in signals.
+- Use `imp()` pattern for GObject properties: `self.imp().property.borrow()`.
+- Use `#[derive(glib::GObject)]` for new GObject types.
+- Prefer builder pattern for constructing GTK widgets: `Widget::builder().property(value).build()`.
+- Use `prelude::*` imports for GTK trait methods.
 
 ### Constants & Configuration
 - Define constants in the appropriate module (e.g., `config.rs`).
