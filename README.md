@@ -330,6 +330,56 @@ For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md
 
 ---
 
+## Testing
+
+grunner includes comprehensive test coverage for core functionality:
+
+### Unit Tests
+
+- **Configuration tests** (`config.rs`): 8 unit tests covering:
+  - Default configuration values
+  - TOML parsing and validation
+  - Invalid value handling
+  - Workspace bar enabled by default
+
+- **Integration tests**: 4 tests covering:
+  - Configuration loading and defaults
+  - Default app directories
+  - Config path generation
+  - Workspace bar setting
+
+### Running Tests
+
+```bash
+# Run all tests (unit, integration, and doctests)
+cargo test
+
+# Run tests with output (show println! output)
+cargo test -- --nocapture
+
+# Run specific test module
+cargo test config::tests
+
+# Run integration tests only
+cargo test --tests
+```
+
+### Code Quality
+
+```bash
+# Run clippy lints
+cargo clippy
+
+# Format code
+cargo fmt
+
+# Verify build
+cargo build
+cargo build --release
+```
+
+---
+
 ## Theming
 
 Styles are defined in `style.css` and embedded in the binary at compile time. grunner uses libadwaita 1.6+ CSS custom properties, so it automatically inherits the system light/dark preference and accent color without any extra configuration. To apply custom styles, modify `src/style.css` and recompile.
