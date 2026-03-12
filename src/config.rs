@@ -325,7 +325,8 @@ app_dirs = [
 # Use the DesktopId as it appears in the provider's .ini file.
 provider_blacklist = []
 
-# Enable workspace window bar (requires GNOME Shell with --unsafe-mode or appropriate permissions).
+# Enable workspace window bar (requires window-calls GNOME Shell extension).
+# Install from: https://extensions.gnome.org/extension/4724/window-calls/
 workspace_bar_enabled = true
 
 [obsidian]

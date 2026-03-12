@@ -5,21 +5,20 @@
 //!
 //! ## Architecture
 //!
-//! Data is fetched asynchronously via two GNOME D-Bus interfaces:
+//! Data is fetched via the **`window-calls`** GNOME Shell extension, which
+//! exposes a D-Bus interface for window management on Wayland. Without this
+//! extension, the D-Bus approach requires GNOME Shell's `--unsafe-mode` which
+//! is unavailable in GNOME 43+.
 //!
-//! - **`org.gnome.Shell.Introspect`** (`GetWindows`) — the full window list with
-//!   per-window properties (`title`, `workspace-index`, `wm-class`, …).
-//! - **`org.gnome.Mutter.WorkspaceManager`** (`CurrentWorkspace` property) —
-//!   the index of the active workspace so we can filter to only that workspace.
+//! The extension provides:
+//! - **`org.gnome.Shell.Extensions.Windows.List`** — returns JSON array of all
+//!   windows with properties (`id`, `wm_class`, `workspace`, `in_current_workspace`, etc.)
+//! - **`org.gnome.Shell.Extensions.Windows.GetTitle`** — returns window title string
+//! - **`org.gnome.Shell.Extensions.Windows.Activate`** — activates a window by ID
 //!
-//! Window activation is attempted via **`org.gnome.Shell.Eval`** (JavaScript
-//! executed inside GNOME Shell).
+//! ## Installation
 //!
-//! > **GNOME ≥ 43 note:** `Shell.Eval` requires the shell to be started with
-//! > `--unsafe-mode`.  Without it the D-Bus call returns an error and the window
-//! > button will still hide Grunner, but the target window may not come to the
-//! > foreground.  A future improvement could drive activation via a dedicated
-//! > GNOME Shell extension instead.
+//! Install the extension from https://extensions.gnome.org/extension/4724/window-calls/
 //!
 //! ## Refresh strategy
 //!
@@ -32,53 +31,30 @@ use gtk4::{
     Box as GtkBox, Button, Image, Label, Orientation, PolicyType, ScrolledWindow, gdk, prelude::*,
 };
 use libadwaita::ApplicationWindow;
-use std::collections::HashMap;
-use zbus::{Connection, proxy, zvariant::OwnedValue};
+use serde::Deserialize;
+use zbus::{Connection, proxy};
 
 // ─── D-Bus proxy definitions ──────────────────────────────────────────────────
 
-/// Proxy for `org.gnome.Shell.Introspect` — window enumeration.
+/// Proxy for `org.gnome.Shell.Extensions.Windows` — window enumeration via
+/// the window-calls GNOME Shell extension.
 #[proxy(
-    interface = "org.gnome.Shell.Introspect",
+    interface = "org.gnome.Shell.Extensions.Windows",
     default_service = "org.gnome.Shell",
-    default_path = "/org/gnome/Shell/Introspect"
+    default_path = "/org/gnome/Shell/Extensions/Windows"
 )]
-trait ShellIntrospect {
-    /// Returns every open window as `window_id → { property_name → value }`.
+trait WindowCalls {
+    /// Returns JSON array of all windows with their properties.
     ///
-    /// Relevant property keys and D-Bus types:
-    /// - `"title"` — `s`
-    /// - `"wm-class"` — `s`
-    /// - `"app-id"` — `s`  (desktop-file stem, empty for many X11 apps)
-    /// - `"sandboxed-app-id"` — `s`  (Flatpak reverse-domain ID when present)
-    /// - `"workspace-index"` — `u`  (0-based workspace number)
-    /// - `"is-on-all-workspaces"` — `b`
-    fn get_windows(&self) -> zbus::Result<HashMap<u64, HashMap<String, OwnedValue>>>;
-}
+    /// Each entry contains: `id`, `wm_class`, `wm_class_instance`, `pid`,
+    /// `workspace`, `in_current_workspace`, `frame_type`, `window_type`, etc.
+    fn list(&self) -> zbus::Result<String>;
 
-/// Proxy for `org.gnome.Mutter.WorkspaceManager` — active workspace index.
-#[proxy(
-    interface = "org.gnome.Mutter.WorkspaceManager",
-    default_service = "org.gnome.Mutter",
-    default_path = "/org/gnome/Mutter/WorkspaceManager"
-)]
-trait MutterWorkspaceManager {
-    /// 0-based index of the currently visible workspace.
-    #[zbus(property)]
-    fn current_workspace(&self) -> zbus::Result<u32>;
-}
+    /// Returns the title of the window with the given ID.
+    fn get_title(&self, win_id: u64) -> zbus::Result<String>;
 
-/// Proxy for `org.gnome.Shell` — JavaScript evaluation (used for window activation).
-#[proxy(
-    interface = "org.gnome.Shell",
-    default_service = "org.gnome.Shell",
-    default_path = "/org/gnome/Shell"
-)]
-trait GnomeShell {
-    /// Evaluate a JS expression inside the running GNOME Shell process.
-    ///
-    /// Returns `(success: bool, result_string: String)`.
-    fn eval(&self, script: &str) -> zbus::Result<(bool, String)>;
+    /// Activates (focuses) the window with the given ID.
+    fn activate(&self, win_id: u64) -> zbus::Result<()>;
 }
 
 // ─── Internal data model ──────────────────────────────────────────────────────
@@ -86,182 +62,138 @@ trait GnomeShell {
 /// Lightweight representation of a single open window.
 #[derive(Debug, Clone)]
 struct WindowInfo {
-    /// Internal Mutter window ID (used in the `Shell.Eval` activation script).
+    /// Window ID used by Mutter (used for activation).
     id: u64,
     /// Human-readable window title as set by the client application.
     title: String,
     /// Best-effort GTK icon theme name derived from the window's app identity.
     ///
-    /// Resolution order: Flatpak `sandboxed-app-id` → generic `app-id` →
-    /// lowercase `wm-class` → `"application-x-executable"` fallback.
+    /// Resolution order: lowercase `wm_class_instance` → lowercase `wm_class` →
+    /// `"application-x-executable"` fallback.
     icon_name: String,
 }
 
-// ─── zvariant helpers — unwrap one level of Value::Value if present ──────────
-
-fn unwrap_value(v: &OwnedValue) -> &zbus::zvariant::Value<'_> {
-    use zbus::zvariant::Value;
-    match &**v {
-        Value::Value(inner) => inner.as_ref(),
-        other => other,
-    }
-}
-
-fn val_str(v: &OwnedValue) -> Option<String> {
-    use zbus::zvariant::Value;
-    match unwrap_value(v) {
-        Value::Str(s) => Some(s.to_string()),
-        _ => None,
-    }
-}
-
-fn val_u32(v: &OwnedValue) -> Option<u32> {
-    use zbus::zvariant::Value;
-    match unwrap_value(v) {
-        Value::U32(n) => Some(*n),
-        Value::I32(n) => Some(*n as u32), // defensive: some builds expose i32
-        _ => None,
-    }
-}
-
-fn val_bool(v: &OwnedValue) -> Option<bool> {
-    use zbus::zvariant::Value;
-    match unwrap_value(v) {
-        Value::Bool(b) => Some(*b),
-        _ => None,
-    }
+/// Raw window entry from the extension's List method.
+#[derive(Debug, Deserialize)]
+struct RawWindowEntry {
+    id: u64,
+    #[serde(rename = "wm_class")]
+    wm_class: Option<String>,
+    #[serde(rename = "wm_class_instance")]
+    wm_class_instance: Option<String>,
+    #[serde(rename = "in_current_workspace")]
+    in_current_workspace: bool,
+    pid: u64,
 }
 
 // ─── Async D-Bus queries ──────────────────────────────────────────────────────
 
-/// Query GNOME Shell for all windows on the active workspace.
+/// Query the window-calls extension for all windows on the active workspace.
 ///
-/// Returns `None` on any D-Bus error (e.g. not running under GNOME Shell,
-/// or the service is not yet available at startup).  The bar will simply
-/// remain hidden in that case rather than showing an error.
+/// Returns `None` on any D-Bus error (e.g. extension not installed).
+/// The bar will simply remain hidden in that case.
 async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
+    let our_pid = std::process::id();
+
     let conn = Connection::session()
         .await
         .map_err(|e| log::warn!("[workspace_bar] D-Bus session connect failed: {e}"))
         .ok()?;
 
-    let introspect = ShellIntrospectProxy::new(&conn)
-        .await
-        .map_err(|e| log::warn!("[workspace_bar] ShellIntrospect proxy failed: {e}"))
-        .ok()?;
-
-    let ws_mgr = MutterWorkspaceManagerProxy::new(&conn)
-        .await
-        .map_err(|e| log::warn!("[workspace_bar] WorkspaceManager proxy failed: {e}"))
-        .ok()?;
-
-    let raw = introspect
-        .get_windows()
+    let windows = WindowCallsProxy::new(&conn)
         .await
         .map_err(|e| {
-            log::warn!("[workspace_bar] GetWindows() failed: {e}");
-            if format!("{e}").contains("AccessDenied") {
-                log::warn!("[workspace_bar] Permission denied. GNOME Shell may need to be started with --unsafe-mode, or a GNOME Shell extension may be required.");
-            }
+            log::warn!(
+                "[workspace_bar] WindowCalls proxy failed: {e}. Is the window-calls \
+                 extension installed? (https://extensions.gnome.org/extension/4724/window-calls/)"
+            );
         })
         .ok()?;
 
-    let current_ws = ws_mgr
-        .current_workspace()
+    let json = windows
+        .list()
         .await
-        .map_err(|e| log::warn!("[workspace_bar] CurrentWorkspace failed: {e}"))
+        .map_err(|e| log::warn!("[workspace_bar] WindowCalls.List failed: {e}"))
+        .ok()?;
+
+    let raw_windows: Vec<RawWindowEntry> = serde_json::from_str(&json)
+        .map_err(|e| log::warn!("[workspace_bar] Failed to parse window list JSON: {e}"))
         .ok()?;
 
     log::debug!(
-        "[workspace_bar] GetWindows returned {} entries, current_ws={}",
-        raw.len(),
-        current_ws
+        "[workspace_bar] List returned {} entries, our_pid={}",
+        raw_windows.len(),
+        our_pid
     );
 
-    let mut windows: Vec<WindowInfo> = raw
-        .into_iter()
-        .filter_map(|(id, props): (u64, HashMap<String, OwnedValue>)| {
-            let title = props.get("title").and_then(val_str)?;
-            if title.is_empty() {
-                return None;
-            }
+    let mut result = Vec::new();
 
-            let on_all = props
-                .get("is-on-all-workspaces")
-                .and_then(val_bool)
-                .unwrap_or(false);
+    for raw in raw_windows {
+        if !raw.in_current_workspace {
+            continue;
+        }
 
-            // If the property is missing entirely, include the window rather
-            // than silently discarding it — better to over-show than under-show.
-            let ws_idx = props
-                .get("workspace-index")
-                .and_then(val_u32)
-                .unwrap_or(current_ws); // absent → assume current workspace
+        if raw.pid == u64::from(our_pid) {
+            log::debug!("[workspace_bar] skipping grunner (pid={})", our_pid);
+            continue;
+        }
 
-            log::debug!(
-                "[workspace_bar]  id={id} ws={ws_idx} on_all={on_all} title={title:?} \
-                 props_keys={:?}",
-                props.keys().collect::<Vec<_>>()
-            );
-
-            if !on_all && ws_idx != current_ws {
-                return None;
-            }
-
-            let icon_name = props
-                .get("sandboxed-app-id")
-                .and_then(val_str)
-                .filter(|s: &String| !s.is_empty())
-                .or_else(|| {
-                    props
-                        .get("app-id")
-                        .and_then(val_str)
-                        .filter(|s: &String| !s.is_empty())
-                })
-                .or_else(|| {
-                    props
-                        .get("wm-class")
-                        .and_then(val_str)
-                        .map(|s: String| s.to_lowercase())
-                })
-                .unwrap_or_else(|| "application-x-executable".to_string());
-
-            Some(WindowInfo {
-                id,
-                title,
-                icon_name,
+        let title = windows
+            .get_title(raw.id)
+            .await
+            .map_err(|e| {
+                log::debug!("[workspace_bar] GetTitle({}) failed: {e}", raw.id);
             })
-        })
-        .collect();
+            .ok()
+            .filter(|t| !t.is_empty())
+            .or_else(|| raw.wm_class.clone())
+            .or_else(|| raw.wm_class_instance.clone())
+            .unwrap_or_else(|| "Untitled".to_string());
 
-    log::debug!("[workspace_bar] {} window(s) passed filter", windows.len());
+        let icon_name = raw
+            .wm_class_instance
+            .as_ref()
+            .or(raw.wm_class.as_ref())
+            .map(|s| s.to_lowercase())
+            .unwrap_or_else(|| "application-x-executable".to_string());
 
-    windows.sort_by(|a, b| a.title.cmp(&b.title));
-    Some(windows)
+        log::debug!(
+            "[workspace_bar]  id={} pid={} ws=current title={:?} icon={:?}",
+            raw.id,
+            raw.pid,
+            title,
+            icon_name
+        );
+
+        result.push(WindowInfo {
+            id: raw.id,
+            title,
+            icon_name,
+        });
+    }
+
+    log::debug!(
+        "[workspace_bar] {} window(s) passed filter",
+        result.len()
+    );
+
+    result.sort_by(|a, b| a.title.cmp(&b.title));
+    Some(result)
 }
 
-/// Ask GNOME Shell to bring a window to the foreground using its Mutter ID.
-///
-/// Executes a short JavaScript snippet via `org.gnome.Shell.Eval`.
-/// Silently does nothing if the call fails (see module-level note on GNOME ≥ 43).
+/// Ask the window-calls extension to bring a window to the foreground.
 async fn activate_window(id: u64) {
     let Ok(conn) = Connection::session().await else {
         return;
     };
-    let Ok(shell) = GnomeShellProxy::new(&conn).await else {
+    let Ok(windows) = WindowCallsProxy::new(&conn).await else {
         return;
     };
 
-    // Find the MetaWindow by its internal ID and call activate(timestamp=0).
-    let script = format!(
-        "global.get_window_actors()\
-         .map(a=>a.get_meta_window())\
-         .find(w=>w.get_id()=={id})\
-         ?.activate(0);"
-    );
-    // Ignore the result — failure is non-fatal (window may still be raised
-    // via the OS compositor even when Eval is restricted).
-    let _ = shell.eval(&script).await;
+    let result = windows.activate(id).await;
+    if let Err(e) = result {
+        log::warn!("[workspace_bar] Activate({}) failed: {}", id, e);
+    }
 }
 
 // ─── Widget helpers ───────────────────────────────────────────────────────────
@@ -283,16 +215,13 @@ fn truncate(s: &str, max: usize) -> String {
 /// Resolve the best matching icon name available in `theme`, trying a few
 /// common variations of `preferred` before falling back to a generic icon.
 fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
-    // Direct match (covers Flatpak IDs like "org.gnome.Nautilus")
     if theme.has_icon(preferred) {
         return preferred.to_owned();
     }
-    // Lowercase variant (covers wm-class values like "Nautilus" → "nautilus")
     let lower = preferred.to_lowercase();
     if theme.has_icon(&lower) {
         return lower;
     }
-    // Last segment only, lowercase (covers "org.gnome.Nautilus" → "nautilus")
     if let Some(last) = preferred.rsplit('.').next() {
         let last_lower = last.to_lowercase();
         if theme.has_icon(&last_lower) {
@@ -322,7 +251,6 @@ fn populate(
         scroll.is_visible()
     );
 
-    // Clear existing buttons (fast — GObjects are reference-counted).
     while let Some(child) = buttons_box.first_child() {
         buttons_box.remove(&child);
     }
@@ -345,7 +273,6 @@ fn populate(
         btn.add_css_class("workspace-window-btn");
         btn.set_tooltip_text(Some(&info.title));
 
-        // Horizontal inner layout: [icon] [label]
         let inner = GtkBox::new(Orientation::Horizontal, 4);
         inner.add_css_class("workspace-window-btn-inner");
 
@@ -365,7 +292,6 @@ fn populate(
 
         btn.set_child(Some(&inner));
 
-        // On click: ask the compositor to focus the window, then hide Grunner.
         let win_id = info.id;
         btn.connect_clicked(clone!(
             #[weak]
@@ -416,10 +342,6 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     buttons_box.add_css_class("workspace-bar-buttons");
     scroll.set_child(Some(&buttons_box));
 
-    // Use connect_map instead of connect_show — for top-level ApplicationWindows,
-    // connect_map fires reliably when the compositor maps the window (every time
-    // the launcher is shown).  connect_show may not propagate correctly through
-    // GTK4-rs signal wrappers for decorated=false top-level windows.
     window.connect_map(clone!(
         #[weak]
         scroll,
@@ -432,7 +354,6 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
 
             let (tx, rx) = std::sync::mpsc::channel::<Vec<WindowInfo>>();
 
-            // Spawn background thread with its own tokio rt to drive zbus.
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
@@ -446,7 +367,6 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
                 let _ = tx.send(windows);
             });
 
-            // Poll from the GTK main thread, identical to how ui.rs polls app loading.
             glib::idle_add_local_once(clone!(
                 #[weak]
                 scroll,
@@ -483,7 +403,6 @@ fn poll_windows(
             populate(&buttons_box, &scroll, windows, &icon_theme, &window);
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => {
-            // Thread not done yet — reschedule.
             glib::idle_add_local_once(move || poll_windows(rx, scroll, buttons_box, window));
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
