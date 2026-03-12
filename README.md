@@ -35,6 +35,7 @@ Take a quick look at grunner in action:
 - **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), and Obsidian integration (:ob, :obg)
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
 - **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) integrated in standard search
+- **Workspace bar** — shows open windows in the current workspace (requires window-calls GNOME Shell extension)
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings window** — graphical dialog with tabs for editing configuration, accessible from the power bar
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
@@ -79,6 +80,7 @@ For optimal performance with `:fg` file search, install `ripgrep`.
 | Terminal emulator        | Apps with `Terminal=true`                     | Auto-detected in order: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm` |
 | `obsidian`               | `:ob` / `:obg` commands                       | Must be launchable via `xdg-open obsidian://…`                                                                                     |
 | `systemctl` / `loginctl` | Power bar (suspend, reboot, poweroff, logout) | Standard on systemd-based distros                                                                                                  |
+| window-calls extension  | Workspace bar                                 | GNOME Shell extension for showing open windows. Install from https://extensions.gnome.org/extension/4724/window-calls/             |
 
 ---
 
@@ -259,14 +261,15 @@ quick_note = "Quick.md"
 
 ### Configuration reference
 
-| Key                           | Type             | Default     | Description                                     |
-| ----------------------------- | ---------------- | ----------- | ----------------------------------------------- |
+| Key                           | Type             | Default     | Description                                      |
+| ----------------------------- | ---------------- | ----------- | ------------------------------------------------ |
 | `window.width`                | integer          | `640`       | Window width in pixels                          |
 | `window.height`               | integer          | `480`       | Window height in pixels                         |
 | `search.max_results`          | integer          | `64`        | Maximum results displayed                       |
-| `search.command_debounce_ms`  | integer          | `300`       | Debounce delay for colon commands (ms)          |
+| `search.command_debounce_ms`  | integer          | `300`       | Debounce delay for colon commands (ms)           |
 | `search.app_dirs`             | array of strings | (see above) | Directories to scan for `.desktop` files        |
-| `search.provider_blacklist`   | array of strings | `[]`        | List of GNOME Shell search providers to exclude |
+| `search.provider_blacklist`   | array of strings | `[]`        | List of GNOME Shell search providers to exclude  |
+| `search.workspace_bar_enabled`| boolean          | `true`      | Enable workspace bar (requires extension)        |
 | `obsidian.vault`              | string           | —           | Path to Obsidian vault root                     |
 | `obsidian.daily_notes_folder` | string           | —           | Daily notes subfolder                           |
 | `obsidian.new_notes_folder`   | string           | —           | New notes subfolder                             |

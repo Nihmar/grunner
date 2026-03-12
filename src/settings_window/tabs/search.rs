@@ -5,7 +5,7 @@ use super::make_tab_page;
 use crate::config::Config;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
-use libadwaita::{PreferencesGroup, PreferencesRow, SpinRow};
+use libadwaita::{PreferencesGroup, PreferencesRow, SpinRow, SwitchRow};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -130,6 +130,26 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     blacklist_row.set_child(Some(&blacklist_scrolled));
     blacklist_group.add(&blacklist_row);
     inner.append(&blacklist_group);
+
+    // ── Workspace Bar ───────────────────────────────────────────────────────────
+    let workspace_group = PreferencesGroup::builder()
+        .title("Workspace Bar")
+        .description("Shows open windows in the current workspace")
+        .build();
+
+    let workspace_switch = SwitchRow::builder()
+        .title("Enable Workspace Bar")
+        .subtitle("Requires window-calls GNOME Shell extension (https://extensions.gnome.org/extension/4724/window-calls/)")
+        .build();
+    workspace_switch.set_active(config_rc.borrow().workspace_bar_enabled);
+    workspace_switch.connect_notify_local(Some("active"), {
+        let config_rc = Rc::clone(config_rc);
+        move |row, _| {
+            config_rc.borrow_mut().workspace_bar_enabled = row.is_active();
+        }
+    });
+    workspace_group.add(&workspace_switch);
+    inner.append(&workspace_group);
 
     notebook.append_page(&scroll, Some(&gtk4::Label::new(Some("Search"))));
 }

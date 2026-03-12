@@ -168,3 +168,11 @@ Follow the conventional commit style: `<type>(<scope>): <subject>` with optional
 - Logging is essential for debugging; include appropriate `debug!`/`info!` statements in new code.
 - No Cursor or Copilot‑specific rules are present in the repository.
 
+## Runtime Dependencies
+
+### GNOME Shell Extensions
+
+- **window-calls** (required for workspace bar feature): https://extensions.gnome.org/extension/4724/window-calls/
+
+  This extension provides D-Bus access to window information on Wayland. Without it, the workspace bar will not display open windows.
+
