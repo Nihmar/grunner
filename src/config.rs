@@ -79,6 +79,8 @@ pub struct Config {
     pub command_debounce_ms: u32,
     /// List of search provider IDs to exclude from results
     pub search_provider_blacklist: Vec<String>,
+    /// Whether the workspace window bar is enabled (default: true)
+    pub workspace_bar_enabled: bool,
 }
 
 impl Default for Config {
@@ -103,6 +105,7 @@ impl Default for Config {
             obsidian: None,
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
             search_provider_blacklist: Vec::new(),
+            workspace_bar_enabled: true,
         }
     }
 }
@@ -141,6 +144,8 @@ struct SearchConfig {
     command_debounce_ms: Option<u32>,
     /// Optional search provider blacklist
     provider_blacklist: Option<Vec<String>>,
+    /// Optional workspace bar enabled flag (default: true)
+    workspace_bar_enabled: Option<bool>,
 }
 
 /// Get the path to the user's configuration file
@@ -264,6 +269,10 @@ fn apply_toml(content: &str) -> Config {
             debug!("Setting search_provider_blacklist to {:?}", blacklist);
             cfg.search_provider_blacklist = blacklist;
         }
+        if let Some(enabled) = search.workspace_bar_enabled {
+            debug!("Setting workspace_bar_enabled to {}", enabled);
+            cfg.workspace_bar_enabled = enabled;
+        }
     }
 
     // Apply Obsidian settings if present
@@ -315,6 +324,9 @@ app_dirs = [
 # List of GNOME Shell search providers to exclude.
 # Use the DesktopId as it appears in the provider's .ini file.
 provider_blacklist = []
+
+# Enable workspace window bar (requires GNOME Shell with --unsafe-mode or appropriate permissions).
+workspace_bar_enabled = true
 
 [obsidian]
 vault = ""

@@ -33,7 +33,7 @@ use gtk4::{
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow};
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -101,6 +101,8 @@ fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
 /// * `app` - The GTK Application instance
 /// * `cfg` - Application configuration loaded from file or defaults
 pub fn build_ui(app: &Application, cfg: &Config) {
+    debug!("Workspace bar enabled: {}", cfg.workspace_bar_enabled);
+    info!("Workspace bar enabled: {}", cfg.workspace_bar_enabled);
     // -----------------------------------------------------------------------
     // 1. Display and CSS Setup
     // -----------------------------------------------------------------------
@@ -212,7 +214,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     // Build workspace/window bar (shown between search entry and results when
     // there are open windows on the current workspace; hidden otherwise).
-    let workspace_bar = build_workspace_bar(&window);
+    let workspace_bar = if cfg.workspace_bar_enabled {
+        Some(build_workspace_bar(&window))
+    } else {
+        info!("Workspace bar disabled via configuration");
+        None
+    };
 
     // Create list view factory for rendering result items
     let factory = model.create_factory();
@@ -230,7 +237,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     // Assemble all UI components in order:
     //   search entry → workspace bar → results → obsidian bar → power bar
-    root.append(&workspace_bar);
+    if let Some(ref workspace_bar) = workspace_bar {
+        root.append(workspace_bar);
+    }
     root.append(&scrolled);
     root.append(&obsidian_bar);
     root.append(&power_bar);

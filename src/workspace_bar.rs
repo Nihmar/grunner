@@ -158,7 +158,12 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
     let raw = introspect
         .get_windows()
         .await
-        .map_err(|e| log::warn!("[workspace_bar] GetWindows() failed: {e}"))
+        .map_err(|e| {
+            log::warn!("[workspace_bar] GetWindows() failed: {e}");
+            if format!("{e}").contains("AccessDenied") {
+                log::warn!("[workspace_bar] Permission denied. GNOME Shell may need to be started with --unsafe-mode, or a GNOME Shell extension may be required.");
+            }
+        })
         .ok()?;
 
     let current_ws = ws_mgr
@@ -175,7 +180,7 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
 
     let mut windows: Vec<WindowInfo> = raw
         .into_iter()
-        .filter_map(|(id, props)| {
+        .filter_map(|(id, props): (u64, HashMap<String, OwnedValue>)| {
             let title = props.get("title").and_then(val_str)?;
             if title.is_empty() {
                 return None;
@@ -206,18 +211,18 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
             let icon_name = props
                 .get("sandboxed-app-id")
                 .and_then(val_str)
-                .filter(|s| !s.is_empty())
+                .filter(|s: &String| !s.is_empty())
                 .or_else(|| {
                     props
                         .get("app-id")
                         .and_then(val_str)
-                        .filter(|s| !s.is_empty())
+                        .filter(|s: &String| !s.is_empty())
                 })
                 .or_else(|| {
                     props
                         .get("wm-class")
                         .and_then(val_str)
-                        .map(|s| s.to_lowercase())
+                        .map(|s: String| s.to_lowercase())
                 })
                 .unwrap_or_else(|| "application-x-executable".to_string());
 
