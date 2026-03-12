@@ -16,6 +16,7 @@ use glib::ExitCode;
 use gtk4::prelude::*;
 use libadwaita::Application;
 use std::env;
+mod workspace_bar; // ← one line, alongside the other mods
 
 /// Application ID for D-Bus and GNOME Shell integration
 const APP_ID: &str = "org.nihmar.grunner";

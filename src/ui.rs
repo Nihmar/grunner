@@ -21,6 +21,7 @@ use crate::launcher;
 use crate::list_model::AppListModel;
 use crate::obsidian_bar::build_obsidian_bar;
 use crate::power_bar::build_power_bar;
+use crate::workspace_bar::build_workspace_bar;
 use glib::clone;
 
 use gtk4::gdk;
@@ -209,6 +210,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // Build power/settings action bar (always visible at bottom)
     let power_bar = build_power_bar(&window, &entry, &icon_theme);
 
+    // Build workspace/window bar (shown between search entry and results when
+    // there are open windows on the current workspace; hidden otherwise).
+    let workspace_bar = build_workspace_bar(&window);
+
     // Create list view factory for rendering result items
     let factory = model.create_factory();
     // Create list view with selection model and custom factory
@@ -223,7 +228,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .child(&list_view)
         .build();
 
-    // Assemble all UI components in order
+    // Assemble all UI components in order:
+    //   search entry → workspace bar → results → obsidian bar → power bar
+    root.append(&workspace_bar);
     root.append(&scrolled);
     root.append(&obsidian_bar);
     root.append(&power_bar);
