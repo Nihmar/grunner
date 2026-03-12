@@ -352,17 +352,17 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
         move |_| {
             log::debug!("[workspace_bar] connect_map fired, launching fetch thread");
 
-            let (tx, rx) = std::sync::mpsc::channel::<Vec<WindowInfo>>();
+            let (tx, rx) = std::sync::mpsc::channel::<Option<Vec<WindowInfo>>>();
 
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .expect("[workspace_bar] failed to build tokio runtime");
-                let windows = rt.block_on(fetch_workspace_windows()).unwrap_or_default();
+                let windows = rt.block_on(fetch_workspace_windows());
                 log::debug!(
-                    "[workspace_bar] background thread sending {} window(s)",
-                    windows.len()
+                    "[workspace_bar] background thread result: {:?}",
+                    windows.as_ref().map(|w| w.len())
                 );
                 let _ = tx.send(windows);
             });
@@ -385,13 +385,13 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
 }
 
 fn poll_windows(
-    rx: std::sync::mpsc::Receiver<Vec<WindowInfo>>,
+    rx: std::sync::mpsc::Receiver<Option<Vec<WindowInfo>>>,
     scroll: ScrolledWindow,
     buttons_box: GtkBox,
     window: ApplicationWindow,
 ) {
     match rx.try_recv() {
-        Ok(windows) => {
+        Ok(Some(windows)) => {
             log::debug!(
                 "[workspace_bar] poll_windows received {} window(s)",
                 windows.len()
@@ -401,6 +401,10 @@ fn poll_windows(
             };
             let icon_theme = gtk4::IconTheme::for_display(&display);
             populate(&buttons_box, &scroll, windows, &icon_theme, &window);
+        }
+        Ok(None) => {
+            log::debug!("[workspace_bar] extension not available, hiding bar");
+            scroll.set_visible(false);
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => {
             glib::idle_add_local_once(move || poll_windows(rx, scroll, buttons_box, window));
