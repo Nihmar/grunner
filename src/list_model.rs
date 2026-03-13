@@ -524,9 +524,9 @@ pub struct AppListModel {
     /// Cached GNOME Shell search providers
     search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
     /// List of search provider IDs to exclude
-    search_provider_blacklist: RefCell<Vec<String>>,
+    search_provider_blacklist: Rc<RefCell<Vec<String>>>,
     /// List of custom script commands
-    commands: RefCell<Vec<crate::config::CommandConfig>>,
+    commands: Rc<RefCell<Vec<crate::config::CommandConfig>>>,
 }
 
 impl AppListModel {
@@ -566,8 +566,8 @@ impl AppListModel {
             search_debounce_ms: DEFAULT_SEARCH_DEBOUNCE_MS,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
-            search_provider_blacklist: RefCell::new(search_provider_blacklist),
-            commands: RefCell::new(commands),
+            search_provider_blacklist: Rc::new(RefCell::new(search_provider_blacklist)),
+            commands: Rc::new(RefCell::new(commands)),
         }
     }
 
@@ -585,11 +585,6 @@ impl AppListModel {
     ///
     /// This updates all configurable settings without restarting the app.
     pub fn apply_config(&self, config: &crate::config::Config) {
-        eprintln!(
-            "DEBUG apply_config: commands count = {}",
-            config.commands.len()
-        );
-
         // Update max_results
         self.max_results.set(config.max_results);
 
@@ -601,11 +596,6 @@ impl AppListModel {
 
         // Update commands
         *self.commands.borrow_mut() = config.commands.clone();
-
-        eprintln!(
-            "DEBUG apply_config: commands updated to {}",
-            self.commands.borrow().len()
-        );
 
         // Repopulate if in CustomScript mode
         if self.active_mode.get() == ActiveMode::CustomScript {
