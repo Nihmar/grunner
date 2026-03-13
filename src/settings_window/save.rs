@@ -3,7 +3,7 @@
 //! Kept separate from the UI code so serialisation logic can be
 //! read and tested independently of GTK.
 
-use crate::config::{self, Config, ObsidianConfig};
+use crate::config::{self, CommandConfig, Config, ObsidianConfig};
 use log::debug;
 use serde::Serialize;
 use std::fs;
@@ -24,6 +24,7 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
         window: WindowConfig,
         search: SearchConfig,
         obsidian: Option<ObsidianConfig>,
+        commands: Vec<CommandConfig>,
     }
 
     #[derive(Serialize)]
@@ -38,6 +39,7 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
         app_dirs: Vec<String>,
         command_debounce_ms: u32,
         provider_blacklist: Vec<String>,
+        workspace_bar_enabled: bool,
     }
 
     // Convert app_dirs back to strings (without home expansion)
@@ -57,8 +59,10 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
             app_dirs,
             command_debounce_ms: config.command_debounce_ms,
             provider_blacklist: config.search_provider_blacklist.clone(),
+            workspace_bar_enabled: config.workspace_bar_enabled,
         },
         obsidian: config.obsidian.clone(),
+        commands: config.commands.clone(),
     };
 
     let toml_string = toml::to_string_pretty(&toml_config)

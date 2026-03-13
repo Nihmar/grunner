@@ -103,6 +103,27 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
                     warn!("Obsidian configuration missing for file activation");
                 }
             }
+            // Custom script mode: execute saved or custom commands
+            AppMode::CustomScript => {
+                let command_to_run = if let Some((_name, cmd)) = line.split_once(" | ") {
+                    // Saved command format: "Name | Command"
+                    cmd.trim()
+                } else if let Some(stripped) = line.strip_prefix("Run: ") {
+                    // Custom command format: "Run: <command>"
+                    stripped.trim()
+                } else {
+                    // Fallback: try to run the whole line
+                    line.trim()
+                };
+
+                if !command_to_run.is_empty() {
+                    info!("Executing custom script command: {}", command_to_run);
+                    // Run the command and then start an interactive shell
+                    // This keeps the terminal open with the command output visible
+                    let command_with_shell = format!("{}; exec $SHELL", command_to_run);
+                    launch_app(&command_with_shell, true); // Always run in terminal
+                }
+            }
             // Other modes: open files or execute commands
             _ => {
                 open_file_or_line(&line);

@@ -3,6 +3,7 @@
 //! Each public module exposes a single `build_tab` function that appends
 //! one page to the shared `gtk4::Notebook`.
 
+pub mod commands;
 pub mod general;
 pub mod info;
 pub mod obsidian;

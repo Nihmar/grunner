@@ -59,6 +59,17 @@ pub struct ObsidianConfig {
     pub quick_note: String,
 }
 
+/// Custom script command configuration
+///
+/// This struct holds a saved command with a name and the command to execute.
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct CommandConfig {
+    /// Name displayed in the launcher (e.g., "Update System")
+    pub name: String,
+    /// Command to execute (e.g., "sudo apt update")
+    pub command: String,
+}
+
 /// Main configuration structure for Grunner
 ///
 /// This struct holds all configurable application settings.
@@ -82,6 +93,8 @@ pub struct Config {
     pub search_provider_blacklist: Vec<String>,
     /// Whether the workspace window bar is enabled (default: true)
     pub workspace_bar_enabled: bool,
+    /// List of custom script commands for :sh mode
+    pub commands: Vec<CommandConfig>,
 }
 
 impl Default for Config {
@@ -107,6 +120,7 @@ impl Default for Config {
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
             search_provider_blacklist: Vec::new(),
             workspace_bar_enabled: true,
+            commands: Vec::new(),
         }
     }
 }
@@ -123,6 +137,8 @@ struct TomlConfig {
     search: Option<SearchConfig>,
     /// Obsidian integration settings
     obsidian: Option<ObsidianConfig>,
+    /// Custom script commands
+    commands: Option<Vec<CommandConfig>>,
 }
 
 /// Window configuration section in TOML
@@ -282,6 +298,12 @@ fn apply_toml(content: &str) -> Config {
         cfg.obsidian = Some(obs);
     }
 
+    // Apply custom script commands if present
+    if let Some(cmds) = toml_cfg.commands {
+        debug!("Setting custom script commands: {} commands", cmds.len());
+        cfg.commands = cmds;
+    }
+
     cfg
 }
 
@@ -335,6 +357,17 @@ vault = ""
 daily_notes_folder = ""
 new_notes_folder = ""
 quick_note = ""
+
+# Custom script commands for :sh mode
+# These commands will appear when you type :sh in the launcher
+# Example:
+# [[commands]]
+# name = "Update System"
+# command = "sudo apt update"
+#
+# [[commands]]
+# name = "Update Flatpaks"
+# command = "flatpak update"
 "#,
         width = DEFAULT_WINDOW_WIDTH,
         height = DEFAULT_WINDOW_HEIGHT,
@@ -450,5 +483,39 @@ mod tests {
         };
         assert_eq!(obsidian.vault, "~/obsidian");
         assert_eq!(obsidian.daily_notes_folder, "daily");
+    }
+
+    #[test]
+    fn test_apply_toml_missing_commands() {
+        // Test that missing commands field defaults to empty Vec
+        let toml = r#"
+            [window]
+            width = 800
+            height = 600
+        "#;
+        let config = apply_toml(toml);
+        assert!(config.commands.is_empty());
+        assert_eq!(config.commands.len(), 0);
+    }
+
+    #[test]
+    fn test_apply_toml_with_commands() {
+        // Test that commands field is correctly parsed
+        let toml = r#"
+            [[commands]]
+            name = "Test Command"
+            command = "echo test"
+        "#;
+        let config = apply_toml(toml);
+        assert_eq!(config.commands.len(), 1);
+        assert_eq!(config.commands[0].name, "Test Command");
+        assert_eq!(config.commands[0].command, "echo test");
+    }
+
+    #[test]
+    fn test_config_default_has_empty_commands() {
+        // Test that default config has empty commands Vec
+        let config = Config::default();
+        assert!(config.commands.is_empty());
     }
 }

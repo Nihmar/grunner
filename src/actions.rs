@@ -121,9 +121,13 @@ pub fn launch_app(exec: &str, terminal: bool) {
                 "konsole" | "alacritty" | "foot" => {
                     cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
                 }
-                // Kitty uses "--" separator
+                // Kitty uses "--" separator and supports --hold
                 "kitty" => {
-                    cmd.arg("--").arg("sh").arg("-c").arg(&clean);
+                    cmd.arg("--hold").arg("--").arg("sh").arg("-c").arg(&clean);
+                }
+                // Ghostty uses "-e" separator
+                "ghostty" => {
+                    cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
                 }
                 // Default to "-e" for unknown terminals
                 _ => {

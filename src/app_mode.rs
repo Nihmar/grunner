@@ -22,6 +22,8 @@ pub enum AppMode {
     Obsidian,
     /// Obsidian grep search mode triggered by `:obg` prefix
     ObsidianGrep,
+    /// Custom script mode triggered by `:sh` prefix
+    CustomScript,
 }
 
 impl AppMode {
@@ -37,6 +39,7 @@ impl AppMode {
     /// - `:obg` prefix → `ObsidianGrep` (grep search within Obsidian notes)
     /// - `:ob` prefix → `Obsidian` (simple Obsidian note search)
     /// - `:f` or `:fg` prefix → `FileSearch` (file system search or content grep)
+    /// - `:sh` prefix → `CustomScript` (run custom scripts/commands)
     /// - No prefix or unrecognized prefix → `Normal` (default application search)
     ///
     /// Note: Order matters - `:obg` must be checked before `:ob` since both start with `:ob`
@@ -47,6 +50,8 @@ impl AppMode {
             Self::Obsidian
         } else if text.starts_with(":f") {
             Self::FileSearch
+        } else if text.starts_with(":sh") {
+            Self::CustomScript
         } else {
             Self::Normal
         }
@@ -64,11 +69,13 @@ impl AppMode {
     /// # Icon Mappings
     /// - `FileSearch` → "text-x-generic" (generic text file icon)
     /// - `Obsidian`/`ObsidianGrep` → Uses the provided `obsidian_icon`
+    /// - `CustomScript` → "utilities-terminal" (terminal icon)
     /// - `Normal` → `None` (no special icon)
     pub fn icon_name<'a>(&self, obsidian_icon: &'a str) -> Option<&'a str> {
         match self {
             Self::FileSearch => Some("text-x-generic"),
             Self::Obsidian | Self::ObsidianGrep => Some(obsidian_icon),
+            Self::CustomScript => Some("utilities-terminal"),
             Self::Normal => None,
         }
     }
@@ -83,5 +90,50 @@ impl AppMode {
     /// action bar with buttons for vault actions, new notes, etc.
     pub fn show_obsidian_bar(&self) -> bool {
         matches!(self, Self::Obsidian | Self::ObsidianGrep)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_mode_from_text() {
+        assert_eq!(AppMode::from_text(":sh"), AppMode::CustomScript);
+        assert_eq!(AppMode::from_text(":sh "), AppMode::CustomScript);
+        assert_eq!(AppMode::from_text(":sh ls"), AppMode::CustomScript);
+        assert_eq!(AppMode::from_text(":ob"), AppMode::Obsidian);
+        assert_eq!(AppMode::from_text(":obg"), AppMode::ObsidianGrep);
+        assert_eq!(AppMode::from_text(":f"), AppMode::FileSearch);
+        assert_eq!(AppMode::from_text(":fg"), AppMode::FileSearch);
+        assert_eq!(AppMode::from_text(""), AppMode::Normal);
+        assert_eq!(AppMode::from_text("hello"), AppMode::Normal);
+    }
+
+    #[test]
+    fn test_app_mode_icon_name() {
+        let obsidian_icon = "obsidian-icon";
+        assert_eq!(
+            AppMode::CustomScript.icon_name(obsidian_icon),
+            Some("utilities-terminal")
+        );
+        assert_eq!(
+            AppMode::FileSearch.icon_name(obsidian_icon),
+            Some("text-x-generic")
+        );
+        assert_eq!(
+            AppMode::Obsidian.icon_name(obsidian_icon),
+            Some(obsidian_icon)
+        );
+        assert_eq!(AppMode::Normal.icon_name(obsidian_icon), None);
+    }
+
+    #[test]
+    fn test_app_mode_show_obsidian_bar() {
+        assert!(AppMode::Obsidian.show_obsidian_bar());
+        assert!(AppMode::ObsidianGrep.show_obsidian_bar());
+        assert!(!AppMode::CustomScript.show_obsidian_bar());
+        assert!(!AppMode::FileSearch.show_obsidian_bar());
+        assert!(!AppMode::Normal.show_obsidian_bar());
     }
 }

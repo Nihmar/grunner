@@ -129,6 +129,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         cfg.obsidian.clone(),
         cfg.command_debounce_ms,
         cfg.search_provider_blacklist.clone(),
+        cfg.commands.clone(),
     );
 
     // Track current application mode for UI rendering and action handling

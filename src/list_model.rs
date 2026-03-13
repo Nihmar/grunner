@@ -12,7 +12,7 @@
 
 use crate::actions::which;
 use crate::calculator;
-use crate::config::ObsidianConfig;
+use crate::config::{CommandConfig, ObsidianConfig};
 use crate::global_state::get_home_dir;
 use crate::items::AppItem;
 use crate::items::CommandItem;
@@ -26,7 +26,7 @@ use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
 use gtk4::{ListItem, SignalListItemFactory, SingleSelection};
-use log::error;
+use log::{debug, error};
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -57,7 +57,7 @@ fn parse_colon_command(query: &str) -> (&str, &str) {
 ///
 /// This enum determines how items in the list should be displayed
 /// and what icons/descriptions should be shown for each result type.
-#[derive(Clone, Copy, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 enum ActiveMode {
     /// Default mode - no special rendering
     #[default]
@@ -68,6 +68,8 @@ enum ActiveMode {
     ObsidianFile,
     /// Obsidian grep (ripgrep with grep fallback) search results
     ObsidianGrep,
+    /// Custom script mode for :sh command
+    CustomScript,
 }
 
 /// Set description label text with visibility handling
@@ -147,6 +149,25 @@ fn bind_command_item(
         } else {
             name_label.set_text(&line);
             set_desc(desc_label, "Calculator result");
+        }
+        return;
+    }
+
+    // Handle custom script commands (format: "Name | Command" or "Run: Command")
+    if mode == ActiveMode::CustomScript {
+        image.set_icon_name(Some("utilities-terminal"));
+        if let Some((name, command)) = line.split_once(" | ") {
+            // Saved command format: "Name | Command"
+            name_label.set_text(name.trim());
+            set_desc(desc_label, command.trim());
+        } else if let Some(stripped) = line.strip_prefix("Run: ") {
+            // Custom command format: "Run: <command>"
+            name_label.set_text("Run command");
+            set_desc(desc_label, stripped); // Skip "Run: "
+        } else {
+            // Fallback for unknown format
+            name_label.set_text(&line);
+            set_desc(desc_label, "");
         }
         return;
     }
@@ -504,6 +525,8 @@ pub struct AppListModel {
     search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
     /// List of search provider IDs to exclude
     search_provider_blacklist: Vec<String>,
+    /// List of custom script commands
+    commands: Vec<crate::config::CommandConfig>,
 }
 
 impl AppListModel {
@@ -514,11 +537,13 @@ impl AppListModel {
     /// * `obsidian_cfg` - Optional Obsidian configuration
     /// * `command_debounce_ms` - Debounce delay for command execution
     /// * `search_provider_blacklist` - List of provider IDs to exclude
+    /// * `commands` - List of custom script commands
     pub fn new(
         max_results: usize,
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
         search_provider_blacklist: Vec<String>,
+        commands: Vec<crate::config::CommandConfig>,
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
@@ -542,6 +567,7 @@ impl AppListModel {
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
             search_provider_blacklist,
+            commands,
         }
     }
 
@@ -818,11 +844,20 @@ impl AppListModel {
     /// Handle colon-prefixed commands by routing to appropriate handlers
     fn handle_colon_command(&self, query: &str) {
         let (cmd_part, arg) = parse_colon_command(query);
+        debug!(
+            "handle_colon_command: query='{}', cmd_part='{}', arg='{}'",
+            query, cmd_part, arg
+        );
+        debug!("Active mode: {:?}", self.active_mode.get());
 
         match cmd_part {
             "ob" | "obg" => self.handle_obsidian(cmd_part, arg),
             "f" => self.handle_file_search(arg),
             "fg" => self.handle_file_grep(arg),
+            "sh" => {
+                debug!("Calling handle_sh with arg: '{}'", arg);
+                self.handle_sh(arg);
+            }
             _ => {
                 if !cmd_part.is_empty() {
                     self.show_error_item(format!("Unknown command: :{}", cmd_part));
@@ -930,6 +965,61 @@ impl AppListModel {
         self.schedule_command(move || {
             model_clone.run_file_grep(&arg);
         });
+    }
+
+    fn handle_sh(&self, arg: &str) {
+        debug!("Setting active_mode to CustomScript");
+        self.active_mode.set(ActiveMode::CustomScript);
+        self.clear_store();
+
+        debug!(
+            "handle_sh called with arg: '{}', commands count: {}",
+            arg,
+            self.commands.len()
+        );
+
+        // Debug: print all commands
+        for (i, cmd) in self.commands.iter().enumerate() {
+            debug!(
+                "Command {}: name='{}', command='{}'",
+                i, cmd.name, cmd.command
+            );
+        }
+
+        // Filter saved commands based on argument
+        let filtered_commands: Vec<&CommandConfig> = self
+            .commands
+            .iter()
+            .filter(|cmd| {
+                if arg.is_empty() {
+                    true
+                } else {
+                    // Simple substring match for name or command
+                    cmd.name.to_lowercase().contains(&arg.to_lowercase())
+                        || cmd.command.to_lowercase().contains(&arg.to_lowercase())
+                }
+            })
+            .collect();
+
+        debug!("Filtered commands count: {}", filtered_commands.len());
+
+        // Add filtered commands to store
+        for cmd in filtered_commands {
+            // Format as "Name | Command" for display
+            let item_str = format!("{} | {}", cmd.name, cmd.command);
+            debug!("Adding command item: {}", item_str);
+            self.store.append(&CommandItem::new(item_str));
+            debug!("Store now has {} items", self.store.n_items());
+        }
+
+        // If user typed a command that doesn't match saved ones, add "Run: ..." option
+        if !arg.is_empty() {
+            let run_item_str = format!("Run: {}", arg);
+            self.store.append(&CommandItem::new(run_item_str));
+        }
+
+        debug!("Final store count: {}", self.store.n_items());
+        debug!("Active mode is now: {:?}", self.active_mode.get());
     }
 
     /// Run a subprocess command and collect its output in a background thread
