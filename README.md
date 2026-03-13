@@ -26,6 +26,7 @@ Take a quick look at grunner in action:
 | **Settings window** – General tab                                                                  | ![General tab](screenshots/settings_2.png)                                                                  |
 | **Settings window** – Search tab                                                                   | ![Search tab](screenshots/settings_3.png)                                                                   |
 | **Settings window** – Obsidian tab                                                                 | ![Obsidian tab](screenshots/settings_4.png)                                                                 |
+| **Settings window** – Commands tab (custom terminal commands for `:sh`)                            | ![Commands tab](screenshots/settings_5.png)                                                                |
 
 ---
 
@@ -33,14 +34,16 @@ Take a quick look at grunner in action:
 
 - **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
 - **Calculator fallback** — automatically evaluates mathematical expressions and displays results with a calculator icon; press Enter to copy result to clipboard
-- **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), and Obsidian integration (:ob, :obg)
+- **Colon commands** — built-in fixed commands for file search (`:f`), full-text grep (`:fg`), and Obsidian integration (`:ob`, `:obg`)
+- **Terminal commands (`:sh`)** — run custom shell commands directly from the launcher. Configure your own commands in the settings or add new ones on the fly. Each command can specify a working directory and whether to keep the terminal open after execution.
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
 - **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) integrated in standard search
 - **Workspace bar** — shows open windows in the current workspace. Expands taller when scrollbar is needed (7+ windows). Requires window-calls GNOME Shell extension.
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings window** — graphical dialog with tabs for editing configuration, accessible from the power bar
+- **Hot reload** — changes to settings (including terminal commands) take effect immediately after saving, without needing to restart the app
 - **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
-- **Configurable** — a single TOML file controls window size, search directories, result limits, debounce timing, and Obsidian paths
+- **Configurable** — a single TOML file controls window size, search directories, result limits, debounce timing, custom commands, and Obsidian paths
 - **Comprehensive logging** — integrated logging system with journald, syslog, file, and stderr backends, configurable via environment variables with panic capture for debugging
 
 ---
@@ -231,11 +234,27 @@ Searches the content of all Markdown files in your vault using `rg` if available
 :obg project alpha
 ```
 
+#### `:sh [filter]` — terminal commands (custom commands)
+
+Lists all custom script commands configured in your settings. Use `[filter]` to search through your commands by name or command text. Press `Enter` to execute the selected command in your terminal.
+
+```
+:sh git
+```
+
+Commands are configured in the Settings window under the **Commands** tab, or directly in the TOML config file. Each command has:
+- **Name**: Display label shown in the list
+- **Command**: Shell command to execute
+- **Working directory**: (optional) Directory to run the command in
+- **Keep terminal open**: (default: true) Whether to keep the terminal open after the command finishes
+
 ---
 
 ## Configuration
 
 grunner stores its configuration at `~/.config/grunner/grunner.toml`. The file is created automatically with defaults on first run. You can edit settings graphically by clicking the **Settings** button in the bottom-left of the window, which opens a settings dialog with tabs for different configuration categories (as seen in the screenshots). From the settings dialog, you can also open the configuration file directly in your default editor.
+
+**Hot reload**: Changes made in the settings window (including adding or editing terminal commands) take effect immediately after clicking Save — no restart required!
 
 All keys are optional; missing keys fall back to built-in defaults.
 
@@ -277,6 +296,21 @@ daily_notes_folder = "Daily"
 new_notes_folder = "Inbox"
 # Path to the quick-note file, relative to the vault root.
 quick_note = "Quick.md"
+
+# Custom script commands for :sh mode
+# These commands will appear when you type :sh in the launcher
+[[commands]]
+name = "Update System"
+command = "sudo pacman -Syu"
+# Optional: working directory (empty = home)
+# working_dir = "~/"
+# Optional: keep terminal open after command (default: true)
+keep_open = true
+
+[[commands]]
+name = "Git Status"
+command = "git status"
+keep_open = true
 ```
 
 ### Configuration reference
@@ -294,6 +328,10 @@ quick_note = "Quick.md"
 | `obsidian.daily_notes_folder` | string           | —           | Daily notes subfolder                           |
 | `obsidian.new_notes_folder`   | string           | —           | New notes subfolder                             |
 | `obsidian.quick_note`         | string           | —           | Quick-note file path (relative to vault)        |
+| `commands[].name`             | string           | —           | Display name for terminal command               |
+| `commands[].command`          | string           | —           | Shell command to execute                        |
+| `commands[].working_dir`      | string (optional)| —           | Working directory for the command                |
+| `commands[].keep_open`        | boolean          | `true`      | Keep terminal open after command finishes       |
 
 ### Logging Configuration
 
