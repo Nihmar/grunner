@@ -10,8 +10,8 @@
 //! - File paths with line numbers
 //! - Search results that can be executed or opened
 
-use glib::Object;
 use glib::subclass::prelude::*;
+use glib::Object;
 use std::cell::RefCell;
 
 /// Internal implementation module for GTK object subclassing
@@ -33,6 +33,10 @@ mod imp {
         /// This stores the actual command string that will be displayed
         /// in the UI and potentially executed when selected.
         pub line: RefCell<String>,
+        /// Working directory for command execution (None = home directory)
+        pub working_dir: RefCell<Option<String>>,
+        /// Whether to keep the terminal open after executing
+        pub keep_open: RefCell<bool>,
     }
 
     /// GTK object subclass implementation
@@ -80,13 +84,34 @@ impl CommandItem {
     /// ```rust
     /// use grunner::items::CommandItem;
     /// let cmd = CommandItem::new("ls -la".to_string());
-    /// let cmd = CommandItem::new("/path/to/file.rs:42".to_string());
     /// ```
     pub fn new(line: String) -> Self {
+        Self::new_with_options(line, None, true)
+    }
+
+    /// Create a new CommandItem with full options
+    ///
+    /// # Arguments
+    /// * `line` - The command line text to store
+    /// * `working_dir` - Optional working directory (None = home directory)
+    /// * `keep_open` - Whether to keep the terminal open after execution
+    ///
+    /// # Returns
+    /// A new `CommandItem` GTK object populated with the command text.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use grunner::items::CommandItem;
+    /// let cmd = CommandItem::new_with_options("ls -la".to_string(), None, true);
+    /// let cmd = CommandItem::new_with_options("/path/to/file.rs:42".to_string(), Some("/home/user".to_string()), false);
+    /// ```
+    pub fn new_with_options(line: String, working_dir: Option<String>, keep_open: bool) -> Self {
         // Create a new GTK object instance
         let obj: Self = Object::new();
         // Initialize the internal data with the command line text
         *obj.imp().line.borrow_mut() = line;
+        *obj.imp().working_dir.borrow_mut() = working_dir;
+        *obj.imp().keep_open.borrow_mut() = keep_open;
         obj
     }
 
@@ -100,5 +125,21 @@ impl CommandItem {
     /// or by action handlers to execute the command.
     pub fn line(&self) -> String {
         self.imp().line.borrow().clone()
+    }
+
+    /// Get the working directory for this command
+    ///
+    /// # Returns
+    /// The working directory as an Option (None = home directory).
+    pub fn working_dir(&self) -> Option<String> {
+        self.imp().working_dir.borrow().clone()
+    }
+
+    /// Get whether to keep the terminal open after execution
+    ///
+    /// # Returns
+    /// True if the terminal should stay open, false otherwise.
+    pub fn keep_open(&self) -> bool {
+        *self.imp().keep_open.borrow()
     }
 }

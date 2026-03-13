@@ -20,8 +20,8 @@ use crate::items::SearchResultItem;
 use crate::launcher::DesktopApp;
 use crate::search_provider::{self, SearchProvider};
 use crate::utils::expand_home;
-use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
@@ -1008,14 +1008,20 @@ impl AppListModel {
             // Format as "Name | Command" for display
             let item_str = format!("{} | {}", cmd.name, cmd.command);
             debug!("Adding command item: {}", item_str);
-            self.store.append(&CommandItem::new(item_str));
+            self.store.append(&CommandItem::new_with_options(
+                item_str,
+                cmd.working_dir.clone(),
+                cmd.keep_open,
+            ));
             debug!("Store now has {} items", self.store.n_items());
         }
 
         // If user typed a command that doesn't match saved ones, add "Run: ..." option
         if !arg.is_empty() {
             let run_item_str = format!("Run: {}", arg);
-            self.store.append(&CommandItem::new(run_item_str));
+            // Custom commands default to keep_open=true
+            self.store
+                .append(&CommandItem::new_with_options(run_item_str, None, true));
         }
 
         debug!("Final store count: {}", self.store.n_items());

@@ -61,13 +61,24 @@ pub struct ObsidianConfig {
 
 /// Custom script command configuration
 ///
-/// This struct holds a saved command with a name and the command to execute.
+/// This struct holds a saved command with a name, the command to execute,
+/// optional working directory, and whether to keep the terminal open.
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct CommandConfig {
     /// Name displayed in the launcher (e.g., "Update System")
     pub name: String,
     /// Command to execute (e.g., "sudo apt update")
     pub command: String,
+    /// Working directory (empty = home directory)
+    #[serde(default)]
+    pub working_dir: Option<String>,
+    /// Whether to keep the terminal open after executing the command
+    #[serde(default = "default_keep_open")]
+    pub keep_open: bool,
+}
+
+fn default_keep_open() -> bool {
+    true
 }
 
 /// Main configuration structure for Grunner

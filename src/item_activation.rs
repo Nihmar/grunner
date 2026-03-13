@@ -63,7 +63,7 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
             app_item.exec(),
             app_item.terminal()
         );
-        launch_app(&app_item.exec(), app_item.terminal());
+        launch_app(&app_item.exec(), app_item.terminal(), None);
     }
     // Handle command line items (file paths, grep results, calculator results, etc.)
     else if let Ok(cmd_item) = obj.clone().downcast::<CommandItem>() {
@@ -118,10 +118,17 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
 
                 if !command_to_run.is_empty() {
                     info!("Executing custom script command: {}", command_to_run);
-                    // Run the command and then start an interactive shell
-                    // This keeps the terminal open with the command output visible
-                    let command_with_shell = format!("{}; exec $SHELL", command_to_run);
-                    launch_app(&command_with_shell, true); // Always run in terminal
+                    let working_dir = cmd_item.working_dir();
+                    let keep_open = cmd_item.keep_open();
+
+                    // Build command: optionally keep terminal open after execution
+                    let final_command = if keep_open {
+                        format!("{}; exec $SHELL", command_to_run)
+                    } else {
+                        command_to_run.to_string()
+                    };
+
+                    launch_app(&final_command, true, working_dir);
                 }
             }
             // Other modes: open files or execute commands

@@ -99,11 +99,15 @@ fn find_terminal() -> Option<String> {
 /// # Arguments
 /// * `exec` - Command string to execute
 /// * `terminal` - Whether to run the command inside a terminal emulator
+/// * `working_dir` - Optional working directory (None = current directory)
 ///
 /// If `terminal` is true, launches the command inside the discovered terminal emulator.
 /// Different terminals have different argument syntax for running commands.
-pub fn launch_app(exec: &str, terminal: bool) {
-    debug!("Launching application: {} (terminal: {})", exec, terminal);
+pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
+    debug!(
+        "Launching application: {} (terminal: {}, working_dir: {:?})",
+        exec, terminal, working_dir
+    );
     let clean = launcher::clean_exec(exec);
     debug!("Cleaned execution command: {}", clean);
 
@@ -112,6 +116,9 @@ pub fn launch_app(exec: &str, terminal: bool) {
         if let Some(term) = find_terminal() {
             info!("Using terminal emulator: {}", term);
             let mut cmd = std::process::Command::new(&term);
+            if let Some(ref dir) = working_dir {
+                cmd.current_dir(dir);
+            }
             match term.as_str() {
                 // GNOME and XFCE terminals use "--" separator
                 "gnome-terminal" | "xfce4-terminal" => {
@@ -153,6 +160,9 @@ pub fn launch_app(exec: &str, terminal: bool) {
         // Run directly without terminal
         let mut cmd = std::process::Command::new("sh");
         cmd.arg("-c").arg(&clean);
+        if let Some(ref dir) = working_dir {
+            cmd.current_dir(dir);
+        }
         debug!("Spawning command directly: {:?}", cmd);
         if let Err(e) = cmd.spawn() {
             error!("Failed to launch command '{}': {}", clean, e);
