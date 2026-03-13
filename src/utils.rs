@@ -36,6 +36,7 @@ use std::path::PathBuf;
 /// # Environment
 /// Relies on the `HOME` environment variable. If `HOME` is not set,
 /// defaults to an empty string, which may result in unexpected paths.
+#[must_use]
 pub fn expand_home(path: &str) -> PathBuf {
     let home = get_home_dir();
 
@@ -71,6 +72,7 @@ pub fn expand_home(path: &str) -> PathBuf {
 /// # // contract_home(Path::new("/home/alice/Documents")) → "~/Documents"
 /// # // contract_home(Path::new("/etc/fstab")) → "/etc/fstab"
 /// ```
+#[must_use]
 pub fn contract_home(path: &std::path::Path) -> String {
     let home = get_home_dir();
     let home_path = std::path::Path::new(&home);

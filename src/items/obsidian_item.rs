@@ -6,8 +6,8 @@
 //! GTK object subclassing to make Obsidian action data accessible to GTK's
 //! property system and list views.
 
-use glib::Object;
 use glib::subclass::prelude::*;
+use glib::Object;
 use std::cell::RefCell;
 
 /// Enum representing different Obsidian actions that can be performed
@@ -40,9 +40,9 @@ mod imp {
     /// that will be used when performing the Obsidian action.
     #[derive(Default)]
     pub struct ObsidianActionItem {
-        /// The type of Obsidian action to perform, wrapped in RefCell for interior mutability
+        /// The type of Obsidian action to perform, wrapped in `RefCell` for interior mutability
         pub action: RefCell<ObsidianAction>,
-        /// Optional argument text (e.g., note content), wrapped in RefCell for interior mutability
+        /// Optional argument text (e.g., note content), wrapped in `RefCell` for interior mutability
         pub arg: RefCell<Option<String>>,
     }
 
@@ -55,7 +55,7 @@ mod imp {
     impl ObjectSubclass for ObsidianActionItem {
         /// Unique type name for GTK's type system
         const NAME: &'static str = "GrunnerObsidianActionItem";
-        /// Associated parent type (the public ObsidianActionItem struct)
+        /// Associated parent type (the public `ObsidianActionItem` struct)
         type Type = super::ObsidianActionItem;
     }
 
@@ -79,14 +79,15 @@ glib::wrapper! {
 }
 
 impl ObsidianActionItem {
-    /// Create a new ObsidianActionItem from an action and optional argument
+    /// Create a new `ObsidianActionItem` from an action and optional argument
     ///
     /// # Arguments
-    /// * `action` - The ObsidianAction variant to perform
+    /// * `action` - The `ObsidianAction` variant to perform
     /// * `arg` - Optional text argument for the action (e.g., note content)
     ///
     /// # Returns
     /// A new `ObsidianActionItem` GTK object populated with the action data.
+    #[must_use]
     pub fn new(action: ObsidianAction, arg: Option<String>) -> Self {
         // Create a new GTK object instance
         let obj: Self = Object::new();
@@ -100,6 +101,7 @@ impl ObsidianActionItem {
     ///
     /// # Returns
     /// The `ObsidianAction` variant that this item represents.
+    #[must_use]
     pub fn action(&self) -> ObsidianAction {
         *self.imp().action.borrow()
     }
@@ -114,6 +116,7 @@ impl ObsidianActionItem {
     /// For `NewNote`, this is the initial note content.
     /// For `DailyNote` and `QuickNote`, this is text to append.
     /// For `OpenVault`, this is typically `None`.
+    #[must_use]
     pub fn arg(&self) -> Option<String> {
         self.imp().arg.borrow().clone()
     }

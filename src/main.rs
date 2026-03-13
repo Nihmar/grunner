@@ -37,10 +37,35 @@ fn main() -> glib::ExitCode {
     let args: Vec<String> = env::args().collect();
 
     // Handle version flag requests
-    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
+    if args.contains(&"--version".to_string())
+        || args.contains(&"-v".to_string())
+        || args.contains(&"-V".to_string())
+    {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
     }
+
+    // Show help
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        println!("grunner - a fast, keyboard-driven application launcher");
+        println!();
+        println!("Usage: grunner [OPTIONS]");
+        println!();
+        println!("Options:");
+        println!("  -h, --help            Show this help message");
+        println!("  -v, --version         Show version information");
+        println!("  -s, --simple          Simple mode: only app search, hide power bar");
+        println!("      --list-providers  List available GNOME Shell search providers");
+        println!();
+        println!("Environment variables:");
+        println!("  GRUNNER_SIMPLE=1      Enable simple mode (recommended, more reliable than -s)");
+        return ExitCode::SUCCESS;
+    }
+
+    // Check for simple mode flag (--simple) or environment variable
+    // Note: GTK may intercept -s, so GRUNNER_SIMPLE env var is recommended
+    let disable_modes = args.iter().any(|a| a == "-s" || a == "--simple")
+        || std::env::var("GRUNNER_SIMPLE").is_ok();
 
     // Handle list-providers flag requests
     if args.contains(&"--list-providers".to_string()) {
@@ -85,7 +110,10 @@ fn main() -> glib::ExitCode {
     log::info!("Grunner {} starting up", env!("CARGO_PKG_VERSION"));
 
     // Load application configuration from file
-    let cfg = config::load();
+    let mut cfg = config::load();
+
+    // Apply command-line flags
+    cfg.disable_modes = disable_modes;
 
     // Create the GTK application with the specified application ID
     let app = Application::builder().application_id(APP_ID).build();

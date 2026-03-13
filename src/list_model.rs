@@ -527,6 +527,8 @@ pub struct AppListModel {
     search_provider_blacklist: Rc<RefCell<Vec<String>>>,
     /// List of custom script commands
     commands: Rc<RefCell<Vec<crate::config::CommandConfig>>>,
+    /// Whether all special modes (colon commands) are disabled
+    disable_modes: bool,
 }
 
 impl AppListModel {
@@ -538,12 +540,14 @@ impl AppListModel {
     /// * `command_debounce_ms` - Debounce delay for command execution
     /// * `search_provider_blacklist` - List of provider IDs to exclude
     /// * `commands` - List of custom script commands
+    /// * `disable_modes` - Whether to disable all special modes (colon commands)
     pub fn new(
         max_results: usize,
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
         search_provider_blacklist: Vec<String>,
         commands: Vec<crate::config::CommandConfig>,
+        disable_modes: bool,
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
         let selection = SingleSelection::new(Some(store.clone()));
@@ -568,6 +572,7 @@ impl AppListModel {
             search_providers: Rc::new(std::cell::OnceCell::new()),
             search_provider_blacklist: Rc::new(RefCell::new(search_provider_blacklist)),
             commands: Rc::new(RefCell::new(commands)),
+            disable_modes,
         }
     }
 
@@ -794,8 +799,8 @@ impl AppListModel {
         self.cancel_debounce();
         self.cancel_search_debounce();
 
-        // Handle colon-prefixed commands
-        if query.starts_with(':') {
+        // Handle colon-prefixed commands (skip if modes are disabled)
+        if !self.disable_modes && query.starts_with(':') {
             self.handle_colon_command(query);
             return;
         }

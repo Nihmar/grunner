@@ -4,7 +4,7 @@
 //! GNOME workspace — placed between the search entry and the results list.
 //!
 //! Requires the **window-calls** GNOME Shell extension:
-//! https://extensions.gnome.org/extension/4724/window-calls/
+//! <https://extensions.gnome.org/extension/4724/window-calls/>
 //!
 //! The bar auto-refreshes every time the Grunner launcher window becomes visible.
 
@@ -110,7 +110,7 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
         .map_err(|e| {
             log::warn!(
                 "[workspace_bar] WindowCalls proxy failed: {e}. Is the window-calls \
-                 extension installed? (https://extensions.gnome.org/extension/4724/window-calls/)"
+                 extension installed? (<https://extensions.gnome.org/extension/4724/window-calls/>)"
             );
         })
         .ok()?;
@@ -213,7 +213,7 @@ async fn activate_window(id: u64) {
 
 // ─── Widget helpers ───────────────────────────────────────────────────────────
 
-/// Resolve app name and icon from desktop file using wm_class
+/// Resolve app name and icon from desktop file using `wm_class`
 fn resolve_from_desktop(wm_class: &str) -> Option<(String, String)> {
     let home = get_home_dir();
 
@@ -406,6 +406,7 @@ fn populate(
 ///
 /// The widget is invisible until populated, hidden when no windows exist,
 /// and expands taller when more than 6 windows require a scrollbar.
+#[must_use]
 pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     let scroll = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Automatic)

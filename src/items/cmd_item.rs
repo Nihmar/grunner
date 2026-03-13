@@ -10,8 +10,8 @@
 //! - File paths with line numbers
 //! - Search results that can be executed or opened
 
-use glib::Object;
 use glib::subclass::prelude::*;
+use glib::Object;
 use std::cell::RefCell;
 
 /// Internal implementation module for GTK object subclassing
@@ -28,7 +28,7 @@ mod imp {
     /// Rust's borrowing rules within GTK's ownership model.
     #[derive(Default)]
     pub struct CommandItem {
-        /// The command line text wrapped in RefCell for interior mutability
+        /// The command line text wrapped in `RefCell` for interior mutability
         ///
         /// This stores the actual command string that will be displayed
         /// in the UI and potentially executed when selected.
@@ -48,7 +48,7 @@ mod imp {
     impl ObjectSubclass for CommandItem {
         /// Unique type name for GTK's type system
         const NAME: &'static str = "GrunnerCommandItem";
-        /// Associated parent type (the public CommandItem struct)
+        /// Associated parent type (the public `CommandItem` struct)
         type Type = super::CommandItem;
     }
 
@@ -72,7 +72,7 @@ glib::wrapper! {
 }
 
 impl CommandItem {
-    /// Create a new CommandItem from a command line string
+    /// Create a new `CommandItem` from a command line string
     ///
     /// # Arguments
     /// * `line` - The command line text to store
@@ -85,11 +85,12 @@ impl CommandItem {
     /// use grunner::items::CommandItem;
     /// let cmd = CommandItem::new("ls -la".to_string());
     /// ```
+    #[must_use]
     pub fn new(line: String) -> Self {
         Self::new_with_options(line, None, true)
     }
 
-    /// Create a new CommandItem with full options
+    /// Create a new `CommandItem` with full options
     ///
     /// # Arguments
     /// * `line` - The command line text to store
@@ -105,6 +106,7 @@ impl CommandItem {
     /// let cmd = CommandItem::new_with_options("ls -la".to_string(), None, true);
     /// let cmd = CommandItem::new_with_options("/path/to/file.rs:42".to_string(), Some("/home/user".to_string()), false);
     /// ```
+    #[must_use]
     pub fn new_with_options(line: String, working_dir: Option<String>, keep_open: bool) -> Self {
         // Create a new GTK object instance
         let obj: Self = Object::new();
@@ -123,6 +125,7 @@ impl CommandItem {
     /// # Usage
     /// This is typically called by UI code to display the command
     /// or by action handlers to execute the command.
+    #[must_use]
     pub fn line(&self) -> String {
         self.imp().line.borrow().clone()
     }
@@ -131,6 +134,7 @@ impl CommandItem {
     ///
     /// # Returns
     /// The working directory as an Option (None = home directory).
+    #[must_use]
     pub fn working_dir(&self) -> Option<String> {
         self.imp().working_dir.borrow().clone()
     }
@@ -139,6 +143,7 @@ impl CommandItem {
     ///
     /// # Returns
     /// True if the terminal should stay open, false otherwise.
+    #[must_use]
     pub fn keep_open(&self) -> bool {
         *self.imp().keep_open.borrow()
     }

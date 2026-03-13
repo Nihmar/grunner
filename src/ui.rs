@@ -131,6 +131,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         cfg.command_debounce_ms,
         cfg.search_provider_blacklist.clone(),
         cfg.commands.clone(),
+        cfg.disable_modes,
     );
 
     // Register config reloader for hot-reload from settings
@@ -218,14 +219,24 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     let icon_theme = gtk4::IconTheme::for_display(&display);
 
     // Build power/settings action bar (always visible at bottom)
-    let power_bar = build_power_bar(&window, &entry, &icon_theme);
+    // Only show power bar when special modes are enabled
+    let power_bar = if cfg.disable_modes {
+        None
+    } else {
+        Some(build_power_bar(&window, &entry, &icon_theme))
+    };
 
     // Build workspace/window bar (shown between search entry and results when
     // there are open windows on the current workspace; hidden otherwise).
-    let workspace_bar = if cfg.workspace_bar_enabled {
+    // Also hidden when simple mode is enabled.
+    let workspace_bar = if cfg.workspace_bar_enabled && !cfg.disable_modes {
         Some(build_workspace_bar(&window))
     } else {
-        info!("Workspace bar disabled via configuration");
+        if cfg.disable_modes {
+            info!("Workspace bar disabled (simple mode)");
+        } else {
+            info!("Workspace bar disabled via configuration");
+        }
         None
     };
 
@@ -250,7 +261,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     }
     root.append(&scrolled);
     root.append(&obsidian_bar);
-    root.append(&power_bar);
+    if let Some(ref pb) = power_bar {
+        root.append(pb);
+    }
 
     // Set root container as window content
     window.set_content(Some(&root));

@@ -5,8 +5,8 @@
 //! GTK object subclassing to make application data accessible to GTK's property
 //! system and list views.
 
-use glib::Object;
 use glib::subclass::prelude::*;
+use glib::Object;
 use std::cell::RefCell;
 
 use crate::launcher::DesktopApp;
@@ -43,7 +43,7 @@ mod imp {
     /// Rust's borrowing rules within GTK's ownership model.
     #[derive(Default)]
     pub struct AppItem {
-        /// Mutable application data wrapped in RefCell for interior mutability
+        /// Mutable application data wrapped in `RefCell` for interior mutability
         pub data: RefCell<AppItemInner>,
     }
 
@@ -56,7 +56,7 @@ mod imp {
     impl ObjectSubclass for AppItem {
         /// Unique type name for GTK's type system
         const NAME: &'static str = "GrunnerAppItem";
-        /// Associated parent type (the public AppItem struct)
+        /// Associated parent type (the public `AppItem` struct)
         type Type = super::AppItem;
     }
 
@@ -80,13 +80,14 @@ glib::wrapper! {
 }
 
 impl AppItem {
-    /// Create a new AppItem from a DesktopApp
+    /// Create a new `AppItem` from a `DesktopApp`
     ///
     /// # Arguments
     /// * `app` - The `DesktopApp` struct containing desktop entry data
     ///
     /// # Returns
     /// A new `AppItem` GTK object populated with the application data.
+    #[must_use]
     pub fn new(app: &DesktopApp) -> Self {
         // Create a new GTK object instance
         let obj: Self = Object::new();
@@ -104,26 +105,31 @@ impl AppItem {
     }
 
     /// Get the application's display name
+    #[must_use]
     pub fn name(&self) -> String {
         self.imp().data.borrow().name.clone()
     }
 
     /// Get the application's description/comment
+    #[must_use]
     pub fn description(&self) -> String {
         self.imp().data.borrow().description.clone()
     }
 
     /// Get the application's icon name or path
+    #[must_use]
     pub fn icon(&self) -> String {
         self.imp().data.borrow().icon.clone()
     }
 
     /// Get the command to execute when launching the application
+    #[must_use]
     pub fn exec(&self) -> String {
         self.imp().data.borrow().exec.clone()
     }
 
     /// Check if the application should run in a terminal
+    #[must_use]
     pub fn terminal(&self) -> bool {
         self.imp().data.borrow().terminal
     }

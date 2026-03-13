@@ -28,6 +28,7 @@ pub fn get_home_dir() -> &'static str {
 static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 /// Get or initialize the shared Tokio runtime
+#[must_use]
 pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
     TOKIO_RT.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
@@ -41,8 +42,10 @@ pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
 
 // ─── Config Hot-Reload ──────────────────────────────────────────────────────
 
+type ConfigReloader = Box<dyn Fn(&Config)>;
+
 thread_local! {
-    static CONFIG_RELOADER: RefCell<Option<Box<dyn Fn(&Config)>>> = RefCell::new(None);
+    static CONFIG_RELOADER: RefCell<Option<ConfigReloader>> = RefCell::new(None);
 }
 
 pub fn set_config_reloader<F>(reloader: F)

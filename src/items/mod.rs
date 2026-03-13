@@ -1,6 +1,6 @@
-//! GObject wrapper types for GTK list models.
+//! `GObject` wrapper types for GTK list models.
 //!
-//! Each sub-module provides a thin GObject subclass used to store
+//! Each sub-module provides a thin `GObject` subclass used to store
 //! domain data inside a `gtk4::ListStore`.  All public types are
 //! re-exported here so call sites can continue to write
 //! `use crate::items::AppItem` (or whatever they imported before)

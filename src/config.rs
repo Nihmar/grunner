@@ -33,6 +33,7 @@ pub const DEFAULT_COMMAND_DEBOUNCE_MS: u32 = 300;
 /// - System-wide application directories
 /// - User-local application directories
 /// - Flatpak application directories (both system and user)
+#[must_use]
 pub fn default_app_dirs() -> Vec<String> {
     vec![
         "/usr/share/applications".into(),
@@ -106,6 +107,9 @@ pub struct Config {
     pub workspace_bar_enabled: bool,
     /// List of custom script commands for :sh mode
     pub commands: Vec<CommandConfig>,
+    /// Disable all special modes (colon commands) and hide power bar
+    /// Activated via --d / -D command-line flag
+    pub disable_modes: bool,
 }
 
 impl Default for Config {
@@ -132,6 +136,7 @@ impl Default for Config {
             search_provider_blacklist: Vec::new(),
             workspace_bar_enabled: true,
             commands: Vec::new(),
+            disable_modes: false,
         }
     }
 }
@@ -182,6 +187,7 @@ struct SearchConfig {
 /// `$HOME/.config/grunner/grunner.toml`
 ///
 /// Returns: `PathBuf` to the configuration file
+#[must_use]
 pub fn config_path() -> PathBuf {
     let home = get_home_dir();
     PathBuf::from(home)
@@ -200,6 +206,7 @@ pub fn config_path() -> PathBuf {
 /// 5. Returns the final configuration
 ///
 /// Returns: `Config` struct with loaded or default settings
+#[must_use]
 pub fn load() -> Config {
     let path = config_path();
 

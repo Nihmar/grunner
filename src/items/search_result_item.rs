@@ -72,7 +72,7 @@ mod imp {
     impl ObjectSubclass for SearchResultItem {
         /// Unique type name for GTK's type system
         const NAME: &'static str = "SearchResultItem";
-        /// Associated parent type (the public SearchResultItem struct)
+        /// Associated parent type (the public `SearchResultItem` struct)
         type Type = super::SearchResultItem;
         /// Parent type in the GTK object hierarchy
         type ParentType = glib::Object;
@@ -98,7 +98,7 @@ glib::wrapper! {
 }
 
 impl SearchResultItem {
-    /// Create a new SearchResultItem with all metadata fields
+    /// Create a new `SearchResultItem` with all metadata fields
     ///
     /// # Arguments
     /// * `id` - Unique identifier for the result within the provider
@@ -143,16 +143,19 @@ impl SearchResultItem {
     }
 
     /// Get the unique identifier for this result
+    #[must_use]
     pub fn id(&self) -> String {
         self.imp().id.borrow().clone()
     }
 
     /// Get the display name for this result
+    #[must_use]
     pub fn name(&self) -> String {
         self.imp().name.borrow().clone()
     }
 
     /// Get the descriptive text for this result
+    #[must_use]
     pub fn description(&self) -> String {
         self.imp().description.borrow().clone()
     }
@@ -160,6 +163,7 @@ impl SearchResultItem {
     /// Get the themed icon name for this result
     ///
     /// Returns empty string if no themed icon is available.
+    #[must_use]
     pub fn icon_themed(&self) -> String {
         self.imp().icon_themed.borrow().clone()
     }
@@ -167,6 +171,7 @@ impl SearchResultItem {
     /// Get the file-based icon path for this result
     ///
     /// Returns empty string if no file icon is available.
+    #[must_use]
     pub fn icon_file(&self) -> String {
         self.imp().icon_file.borrow().clone()
     }
@@ -174,6 +179,7 @@ impl SearchResultItem {
     /// Get the provider application icon name
     ///
     /// Used as a fallback icon when result-specific icons are not available.
+    #[must_use]
     pub fn app_icon_name(&self) -> String {
         self.imp().app_icon_name.borrow().clone()
     }
@@ -181,6 +187,7 @@ impl SearchResultItem {
     /// Get the D-Bus bus name of the search provider
     ///
     /// Required for activating this result via D-Bus.
+    #[must_use]
     pub fn bus_name(&self) -> String {
         self.imp().bus_name.borrow().clone()
     }
@@ -188,6 +195,7 @@ impl SearchResultItem {
     /// Get the D-Bus object path of the search provider
     ///
     /// Required for activating this result via D-Bus.
+    #[must_use]
     pub fn object_path(&self) -> String {
         self.imp().object_path.borrow().clone()
     }
@@ -195,6 +203,7 @@ impl SearchResultItem {
     /// Get the original search terms that produced this result
     ///
     /// These terms are passed back to the provider when activating the result.
+    #[must_use]
     pub fn terms(&self) -> Vec<String> {
         self.imp().terms.borrow().clone()
     }

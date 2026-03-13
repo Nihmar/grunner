@@ -139,6 +139,7 @@ pub struct SearchResult {
 ///
 /// # Returns
 /// Vector of discovered `SearchProvider` instances, ready for querying.
+#[must_use]
 pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
     let home = get_home_dir();
     // Standard directories where GNOME Shell search providers are installed
@@ -201,7 +202,7 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
     providers
 }
 
-/// Parse a single .ini file into a SearchProvider
+/// Parse a single .ini file into a `SearchProvider`
 ///
 /// GNOME Shell search provider .ini files contain D-Bus addressing
 /// information and metadata in a simple key=value format.
@@ -309,6 +310,7 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
 ///
 /// # Returns
 /// Icon name string, or empty string if not found.
+#[must_use]
 pub fn resolve_app_icon(desktop_id: &str) -> String {
     let home = get_home_dir();
 
@@ -433,7 +435,7 @@ fn parse_icon_variant(val: &OwnedValue) -> Option<IconData> {
     inner(val.deref())
 }
 
-/// Extract themed icon name from a GThemedIcon payload
+/// Extract themed icon name from a `GThemedIcon` payload
 ///
 /// The payload is the second field of (sa{sv}) structure, which is a dict `a{sv}`.
 /// We look for a key "names" whose value is an array of strings (icon names).
@@ -492,7 +494,7 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
     walk(val).map(IconData::Themed)
 }
 
-/// Extract file path from a GFileIcon payload
+/// Extract file path from a `GFileIcon` payload
 ///
 /// The payload is the second field of (sa{sv}) structure. We look for
 /// a key "file" or a string value containing a file path.
@@ -573,7 +575,7 @@ pub fn run_search_streaming(
 
 /// Async implementation of streaming search across all providers
 ///
-/// Queries all providers concurrently using FuturesUnordered, which allows
+/// Queries all providers concurrently using `FuturesUnordered`, which allows
 /// results to be processed as soon as they arrive from any provider.
 async fn query_all_streaming(
     providers: &[SearchProvider],
@@ -643,8 +645,8 @@ async fn query_all_streaming(
 /// Query a single search provider
 ///
 /// Performs the actual D-Bus calls to a provider:
-/// 1. GetInitialResultSet - gets result IDs for the search terms
-/// 2. GetResultMetas - gets metadata for the result IDs
+/// 1. `GetInitialResultSet` - gets result IDs for the search terms
+/// 2. `GetResultMetas` - gets metadata for the result IDs
 ///
 /// Each call has a timeout to prevent hanging on unresponsive providers.
 async fn query_one(
@@ -721,7 +723,7 @@ async fn query_one(
     Ok(results)
 }
 
-/// Build a SearchResult from D-Bus metadata
+/// Build a `SearchResult` from D-Bus metadata
 ///
 /// Extracts fields from the D-Bus dictionary and handles missing or
 /// malformed data with reasonable defaults.

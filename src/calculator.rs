@@ -30,6 +30,7 @@ use log::debug;
 /// assert_eq!(evaluate("(2 + 3) * 4"), Some("20".to_string()));
 /// assert_eq!(evaluate("invalid"), None);
 /// ```
+#[must_use]
 pub fn evaluate(expr: &str) -> Option<String> {
     // Trim whitespace
     let expr = expr.trim();
@@ -125,6 +126,9 @@ fn format_result(result: f64) -> String {
 }
 
 /// Evaluate an arithmetic expression using the shunting yard algorithm
+///
+/// # Errors
+/// Returns an error if the expression is invalid or contains mismatched parentheses.
 fn evaluate_expression(expr: &str) -> Result<f64, String> {
     let tokens = tokenize(expr)?;
     let rpn = shunting_yard(&tokens)?;
@@ -132,6 +136,9 @@ fn evaluate_expression(expr: &str) -> Result<f64, String> {
 }
 
 /// Tokenize the expression into numbers and operators
+///
+/// # Errors
+/// Returns an error if the expression contains invalid characters or malformed numbers.
 fn tokenize(expr: &str) -> Result<Vec<Token>, String> {
     let mut tokens = Vec::new();
     let mut chars = expr.chars().peekable();
@@ -236,14 +243,16 @@ impl Operator {
     /// Check if operator is left-associative
     fn is_left_associative(&self) -> bool {
         match self {
-            Operator::Power => false,      // Power is right-associative
-            Operator::UnaryMinus => false, // Unary minus is right-associative
+            Operator::Power | Operator::UnaryMinus => false, // Power and UnaryMinus are right-associative
             _ => true,
         }
     }
 }
 
 /// Convert infix expression to Reverse Polish Notation using shunting yard algorithm
+///
+/// # Errors
+/// Returns an error if there are mismatched parentheses.
 fn shunting_yard(tokens: &[Token]) -> Result<Vec<Token>, String> {
     let mut output = Vec::new();
     let mut stack = Vec::new();
@@ -299,6 +308,9 @@ fn shunting_yard(tokens: &[Token]) -> Result<Vec<Token>, String> {
 }
 
 /// Evaluate a Reverse Polish Notation expression
+///
+/// # Errors
+/// Returns an error if there are insufficient operands or division by zero.
 fn evaluate_rpn(rpn: &[Token]) -> Result<f64, String> {
     let mut stack = Vec::new();
 

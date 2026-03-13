@@ -28,7 +28,7 @@ pub fn build_tab(
         .description("Overview of features and usage")
         .build();
 
-    let explanation_text = r#"Grunner is a GTK4 application launcher with advanced search capabilities and system integration.
+    let explanation_text = "Grunner is a GTK4 application launcher with advanced search capabilities and system integration.
 
 ## Default Search
 Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row.
@@ -60,7 +60,7 @@ At the bottom of the main window:
 • Log out — End current user session
 
 ## Search Providers
-Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching."#;
+Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching.";
 
     let explanation_label = gtk4::Label::builder()
         .wrap(true)

@@ -19,27 +19,27 @@ use log::{debug, info, warn};
 
 /// Parse and open Obsidian grep result lines
 ///
-/// This function handles grep output lines in the format "file:line:context"
+/// This function handles grep output lines in the format `<file:line:context>`
 /// and opens them in Obsidian at the appropriate line number.
 ///
 /// # Arguments
 /// * `line` - The grep result line to parse
 /// * `cfg` - Obsidian configuration for vault path and settings
 pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
-    debug!("Processing Obsidian grep line: {}", line);
+    debug!("Processing Obsidian grep line: {line}");
     if let Some((file_path, rest)) = line.split_once(':') {
         if let Some((line_num, _)) = rest.split_once(':') {
             // File with line number: open at specific line
-            info!("Opening Obsidian file at line: {}:{}", file_path, line_num);
+            info!("Opening Obsidian file at line: {file_path}:{line_num}");
             open_obsidian_file_line(file_path, line_num, cfg);
         } else {
             // File without line number: open file
-            info!("Opening Obsidian file: {}", file_path);
+            info!("Opening Obsidian file: {file_path}");
             open_obsidian_file_path(file_path, cfg);
         }
     } else {
         // Not a grep format line: try to open as plain file
-        info!("Opening Obsidian file (non-grep format): {}", line);
+        info!("Opening Obsidian file (non-grep format): {line}");
         open_obsidian_file_path(line, cfg);
     }
 }
@@ -55,9 +55,9 @@ pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) 
 /// * `model` - The application list model containing configuration and state
 /// * `mode` - The current application mode (Normal, Obsidian, FileSearch, etc.)
 pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, timestamp: u32) {
-    debug!("Activating item in mode {:?}", mode);
+    debug!("Activating item in mode {mode:?}");
     // Handle desktop application items
-    if let Ok(app_item) = obj.clone().downcast::<AppItem>() {
+    if let Ok(app_item) = obj.downcast_ref::<AppItem>() {
         info!(
             "Launching application: {} (terminal: {})",
             app_item.exec(),
@@ -66,9 +66,9 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
         launch_app(&app_item.exec(), app_item.terminal(), None);
     }
     // Handle command line items (file paths, grep results, calculator results, etc.)
-    else if let Ok(cmd_item) = obj.clone().downcast::<CommandItem>() {
+    else if let Ok(cmd_item) = obj.downcast_ref::<CommandItem>() {
         let line = cmd_item.line();
-        debug!("Activating command line item: {} in mode {:?}", line, mode);
+        debug!("Activating command line item: {line} in mode {mode:?}");
 
         // Check if this is a calculator result and copy to clipboard
         if is_calculator_result(&line) {

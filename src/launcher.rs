@@ -155,9 +155,8 @@ fn save_cache(apps: &[DesktopApp]) {
         if let Err(e) = fs::create_dir_all(dir) {
             error!("Failed to create cache directory {:?}: {}", dir, e);
             return;
-        } else {
-            debug!("Created cache directory: {:?}", dir);
         }
+        debug!("Created cache directory: {:?}", dir);
     }
 
     // Serialize and write cache
@@ -295,6 +294,7 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
 ///
 /// # Returns
 /// Vector of `DesktopApp` instances ready for display and launching
+#[must_use]
 pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     // First attempt to load from cache
     if let Some(cached) = try_load_cache(dirs) {
@@ -319,7 +319,7 @@ pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
 /// Parse a single `.desktop` file into a `DesktopApp` struct
 ///
 /// This function implements a subset of the Desktop Entry Specification:
-/// https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html
+/// <https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html>
 ///
 /// It extracts only the fields needed by Grunner and filters out:
 /// - Non-application entries (Type != "Application")
@@ -398,7 +398,8 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     if app_type != "Application" {
         trace!(
             "Skipping non-application entry (type: {}) in {:?}",
-            app_type, path
+            app_type,
+            path
         );
         return None;
     }
@@ -423,7 +424,8 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
 
     trace!(
         "Successfully parsed desktop application: {} from {:?}",
-        name, path
+        name,
+        path
     );
     Some(DesktopApp {
         name,
@@ -452,6 +454,7 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
 /// - `%d`, `%D` - Directory arguments
 /// - `%n`, `%N` - Translated names
 /// - `%i`, `%c`, `%k`, `%v`, `%m` - Various other codes
+#[must_use]
 pub fn clean_exec(exec: &str) -> String {
     exec.split_whitespace()
         .filter(|token| {

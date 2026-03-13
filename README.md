@@ -153,10 +153,22 @@ Launch `grunner`. The window appears with a search bar focused and ready for inp
 | Key                     | Action                                         |
 | ----------------------- | ---------------------------------------------- |
 | Type anything           | Filter applications (fuzzy search)             |
-| `Enter`                 | Launch selected app / activate selected result |
-| `↑` / `↓`               | Move selection up / down                       |
-| `Page Up` / `Page Down` | Jump 10 items up / down                        |
-| `Escape`                | Close the launcher                             |
+| `Enter`                | Launch selected app / activate selected result |
+| `↑` / `↓`              | Move selection up / down                       |
+| `Page Up` / `Page Down`| Jump 10 items up / down                        |
+| `Escape`               | Close the launcher                             |
+
+### Command-line options
+
+| Option                   | Description                                                              |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `-h`, `--help`           | Show help message                                                        |
+| `-v`, `--version`        | Show version information                                                 |
+| `-s`, `--simple`         | Simple mode: only show app search; hide power bar and disable colon commands (`:f`, `:fg`, `:ob`, `:obg`, `:sh`) |
+| `--list-providers`       | List available GNOME Shell search providers                              |
+| `GRUNNER_SIMPLE=1`       | Environment variable to enable simple mode (recommended)                |
+
+**Note:** Due to GTK argument handling, the `-s` flag may show a warning. Use `GRUNNER_SIMPLE=1` environment variable for reliable operation.
 
 ---
 
