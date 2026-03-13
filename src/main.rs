@@ -1,5 +1,6 @@
 mod actions;
 mod app_mode;
+mod calculator;
 mod config;
 mod global_state;
 mod item_activation;

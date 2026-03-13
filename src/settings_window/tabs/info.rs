@@ -181,7 +181,9 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
                 cfg.workspace_bar_enabled = default_config.workspace_bar_enabled;
             }
 
-            if let Some(window) = window.upgrade() && let Some(overlay) = overlay.upgrade() {
+            if let Some(window) = window.upgrade()
+                && let Some(overlay) = overlay.upgrade()
+            {
                 if let Err(e) = save_config(&config_rc.borrow()) {
                     error!("Failed to save reset configuration: {}", e);
                     let toast = Toast::builder()

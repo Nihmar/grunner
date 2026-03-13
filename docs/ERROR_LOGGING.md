@@ -510,5 +510,5 @@ All source files in the Grunner project have been updated to use the logging mac
 
 ---
 
-*Last Updated: Grunner v0.7.0*
+*Last Updated: Grunner v1.1.0*
 *Implementation Status: Complete and Integrated*

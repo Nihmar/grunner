@@ -32,6 +32,7 @@ Take a quick look at grunner in action:
 ## Features
 
 - **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
+- **Calculator fallback** — automatically evaluates mathematical expressions and displays results with a calculator icon; press Enter to copy result to clipboard
 - **Colon commands** — built-in fixed commands for file search (:f), full-text grep (:fg), and Obsidian integration (:ob, :obg)
 - **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
 - **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) integrated in standard search
@@ -161,6 +162,25 @@ Launch `grunner`. The window appears with a search bar focused and ready for inp
 ### Default — application search
 
 Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row. The search also includes results from GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching.
+
+#### Calculator fallback
+
+When you enter a mathematical expression (like `2+2`, `10*5`, `(2+3)*4`), grunner automatically evaluates it and displays the result. The result is shown with a calculator icon, and pressing Enter copies the result to the clipboard. This serves as a fallback when GNOME's calculator is blacklisted or not available as a smart provider.
+
+**Supported operations:**
+- Basic arithmetic: `+`, `-`, `*`, `/`, `%` (modulo)
+- Exponentiation: `^`
+- Parentheses for grouping: `(2+3)*4`
+- Unary minus: `-5 + 3`, `5 + -3`
+
+**Examples:**
+```
+2 + 2          → 4
+10 * 5         → 50
+(2 + 3) * 4    → 20
+10 / 3         → 3.3333333333
+2 ^ 3          → 8
+```
 
 ### Colon commands
 
@@ -306,27 +326,28 @@ For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md
 
 ## Architecture overview
 
-| File                    | Purpose                                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------- |
-| `main.rs`               | Entry point; loads config, creates the GTK application, and calls `build_ui`                |
-| `ui.rs`                 | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
-| `list_model.rs`         | Central search model; dispatches queries to the correct mode and populates the `ListStore`  |
-| `launcher.rs`           | Scans `.desktop` files, parses them, and deduplicates entries                               |
-| `app_mode.rs`           | Application mode detection and management (Normal, FileSearch, SearchProvider, Obsidian)    |
-| `item_activation.rs`    | Item activation logic based on item type and application mode                               |
-| `obsidian_bar.rs`       | Obsidian action bar UI component with buttons for vault operations                          |
-| `power_bar.rs`          | Power action bar UI component with system management buttons                                |
-| `settings_window.rs`    | Settings dialog UI with configuration editing and validation                                |
-| `utils.rs`              | Utility functions for path expansion, shell escaping, and home directory resolution         |
-| `search_provider.rs`    | D-Bus client for GNOME Shell search providers (discovery + query + activation)              |
-| `actions.rs`            | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs        |
-| `config.rs`             | TOML config loading with defaults and `~` expansion                                         |
-| `logging.rs`            | Logging configuration and initialization with journald, syslog, file, and stderr backends   |
-| `app_item.rs`           | GObject wrapper for application entries                                                     |
-| `cmd_item.rs`           | GObject wrapper for command output lines                                                    |
-| `obsidian_item.rs`      | GObject wrapper for Obsidian action entries                                                 |
-| `search_result_item.rs` | GObject wrapper for GNOME Shell search provider results                                     |
-| `style.css`             | libadwaita CSS using `var(--accent-color)` and `var(--window-bg-color)`                     |
+| File                         | Purpose                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `main.rs`                    | Entry point; loads config, creates the GTK application, and calls `build_ui`                |
+| `lib.rs`                     | Library exports for internal modules                                                        |
+| `ui.rs`                      | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
+| `list_model.rs`              | Central search model; dispatches queries to the correct mode and populates the `ListStore`  |
+| `launcher.rs`                | Scans `.desktop` files, parses them, and deduplicates entries                               |
+| `app_mode.rs`                | Application mode detection and management (Normal, FileSearch, Obsidian)                    |
+| `item_activation.rs`         | Item activation logic based on item type and application mode                               |
+| `calculator.rs`              | Mathematical expression evaluator using shunting yard algorithm (used in default search)    |
+| `obsidian_bar.rs`            | Obsidian action bar UI component with buttons for vault operations                          |
+| `power_bar.rs`               | Power action bar UI component with system management buttons                                |
+| `settings_window/`           | Settings dialog UI with configuration editing and validation                                |
+| `utils.rs`                   | Utility functions for path expansion, shell escaping, and home directory resolution         |
+| `global_state.rs`            | Global state management (Tokio runtime, home directory, etc.)                               |
+| `search_provider.rs`         | D-Bus client for GNOME Shell search providers (discovery + query + activation)              |
+| `actions.rs`                 | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs        |
+| `config.rs`                  | TOML config loading with defaults and `~` expansion                                         |
+| `logging.rs`                 | Logging configuration and initialization with journald, syslog, file, and stderr backends   |
+| `items/`                     | GObject wrappers for different item types                                                   |
+| `workspace_bar.rs`           | Workspace bar UI component showing open windows                                             |
+| `style.css`                  | libadwaita CSS using `var(--accent-color)` and `var(--window-bg-color)`                     |
 
 ---
 
@@ -335,6 +356,14 @@ For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md
 grunner includes comprehensive test coverage for core functionality:
 
 ### Unit Tests
+
+- **Calculator tests** (`calculator.rs`): 6 unit tests covering:
+  - Basic arithmetic operations (+, -, *, /)
+  - Operator precedence and parentheses
+  - Floating point calculations
+  - Invalid expression handling
+  - Unary minus and exponentiation
+  - Edge cases (modulo, negative numbers)
 
 - **Configuration tests** (`config.rs`): 8 unit tests covering:
   - Default configuration values

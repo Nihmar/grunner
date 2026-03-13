@@ -11,6 +11,7 @@
 //! all search modes, executes commands, and updates the GTK list store.
 
 use crate::actions::which;
+use crate::calculator;
 use crate::config::ObsidianConfig;
 use crate::global_state::get_home_dir;
 use crate::items::AppItem;
@@ -19,8 +20,8 @@ use crate::items::SearchResultItem;
 use crate::launcher::DesktopApp;
 use crate::search_provider::{self, SearchProvider};
 use crate::utils::expand_home;
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
@@ -135,6 +136,21 @@ fn bind_command_item(
 ) {
     let line = item.line();
 
+    // Check if this is a calculator result (format: "expression = result")
+    // Calculator results contain only valid calculator characters
+    if is_calculator_result(&line) {
+        image.set_icon_name(Some("accessories-calculator"));
+        // Extract just the result part for display
+        if let Some((_expr, result)) = line.split_once('=') {
+            name_label.set_text(result.trim());
+            set_desc(desc_label, &format!("Calc: {}", line));
+        } else {
+            name_label.set_text(&line);
+            set_desc(desc_label, "Calculator result");
+        }
+        return;
+    }
+
     // Handle Obsidian grep results (file:line:content format)
     if mode == ActiveMode::ObsidianGrep {
         image.set_icon_name(Some(obsidian_icon));
@@ -208,6 +224,56 @@ fn bind_command_item(
     image.set_icon_name(Some("system-search"));
     name_label.set_text(&line);
     set_desc(desc_label, "");
+}
+
+/// Check if a line is a calculator result
+///
+/// A calculator result has the format "expression = result" where:
+/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses)
+/// - there's an equals sign in the middle
+fn is_calculator_result(line: &str) -> bool {
+    // Check if line contains '='
+    if !line.contains('=') {
+        return false;
+    }
+
+    // Split at the equals sign
+    let parts: Vec<&str> = line.split('=').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+
+    let expr = parts[0].trim();
+    let result = parts[1].trim();
+
+    // Expression should not be empty
+    if expr.is_empty() {
+        return false;
+    }
+
+    // Check if expression contains only valid calculator characters
+    if !expr.chars().all(|c| {
+        c.is_ascii_digit()
+            || c == '.'
+            || c == '+'
+            || c == '-'
+            || c == '*'
+            || c == '/'
+            || c == '%'
+            || c == '^'
+            || c == '('
+            || c == ')'
+            || c.is_whitespace()
+    }) {
+        return false;
+    }
+
+    // Check if result looks like a number (starts with digit or minus for negative numbers)
+    if !result.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    true
 }
 
 /// Bind search provider result item data to UI widgets
@@ -696,16 +762,23 @@ impl AppListModel {
                 self.store.append(&AppItem::new(app));
             }
         } else {
-            // Use optimized search with prefix matching for simple queries
-            let results = self.search_apps_optimized(query, &apps, self.max_results);
+            // Check if query is a mathematical expression
+            if let Some(result) = calculator::evaluate(query) {
+                // Add calculator result to the store
+                let calculator_result = format!("{} = {}", query, result);
+                self.store.append(&CommandItem::new(calculator_result));
+            } else {
+                // Use optimized search with prefix matching for simple queries
+                let results = self.search_apps_optimized(query, &apps, self.max_results);
 
-            // Add matched applications to the store
-            for app in results {
-                self.store.append(&AppItem::new(app));
+                // Add matched applications to the store
+                for app in results {
+                    self.store.append(&AppItem::new(app));
+                }
+
+                // Schedule search provider query to mimic GNOME Search behavior
+                self.schedule_provider_search(query.to_string(), false);
             }
-
-            // Schedule search provider query to mimic GNOME Search behavior
-            self.schedule_provider_search(query.to_string(), false);
         }
 
         // Auto-select first item if we have results

@@ -236,7 +236,8 @@ fn resolve_from_desktop(wm_class: &str) -> Option<(String, String)> {
             for line in content.lines() {
                 // Take the first Name= entry (usually the main app name)
                 // Desktop files can have multiple entries like "New Window" for actions
-                if name.is_none() && line.trim().starts_with("Name=")
+                if name.is_none()
+                    && line.trim().starts_with("Name=")
                     && let Some(n) = line.trim().strip_prefix("Name=")
                 {
                     name = Some(n.trim().to_string());
@@ -292,7 +293,9 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
     }
 
     // Try last segment only (e.g., "org.gnome.Nautilus" -> "nautilus")
-    if let Some(last) = preferred.rsplit('.').next() && theme.has_icon(last) {
+    if let Some(last) = preferred.rsplit('.').next()
+        && theme.has_icon(last)
+    {
         return last.to_owned();
     }
 

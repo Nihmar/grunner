@@ -1,7 +1,7 @@
 //! Integration tests for configuration module
 
 use grunner::config::{
-    default_app_dirs, Config, DEFAULT_MAX_RESULTS, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH,
+    Config, DEFAULT_MAX_RESULTS, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, default_app_dirs,
 };
 
 #[test]

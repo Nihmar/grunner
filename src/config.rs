@@ -182,7 +182,9 @@ pub fn load() -> Config {
             "Configuration file not found at {:?}, creating default",
             path
         );
-        if let Some(dir) = path.parent() && std::fs::create_dir_all(dir).is_ok() {
+        if let Some(dir) = path.parent()
+            && std::fs::create_dir_all(dir).is_ok()
+        {
             debug!("Created configuration directory: {:?}", dir);
         }
         if std::fs::write(&path, default_toml()).is_ok() {

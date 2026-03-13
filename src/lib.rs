@@ -4,6 +4,7 @@
 //! It includes configuration management, search providers, and other utilities.
 
 pub mod actions;
+pub mod calculator;
 pub mod config;
 pub mod global_state;
 pub mod items;

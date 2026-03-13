@@ -14,7 +14,7 @@ use crate::items::CommandItem;
 use crate::items::ObsidianActionItem;
 use crate::items::SearchResultItem;
 use crate::list_model::AppListModel;
-use gtk4::prelude::Cast;
+use gtk4::prelude::{Cast, DisplayExt};
 use log::{debug, info, warn};
 
 /// Parse and open Obsidian grep result lines
@@ -65,10 +65,27 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
         );
         launch_app(&app_item.exec(), app_item.terminal());
     }
-    // Handle command line items (file paths, grep results, etc.)
+    // Handle command line items (file paths, grep results, calculator results, etc.)
     else if let Ok(cmd_item) = obj.clone().downcast::<CommandItem>() {
         let line = cmd_item.line();
         debug!("Activating command line item: {} in mode {:?}", line, mode);
+
+        // Check if this is a calculator result and copy to clipboard
+        if is_calculator_result(&line) {
+            // Extract the result part (after the equals sign)
+            if let Some((_expr, result)) = line.split_once('=') {
+                let result_text = result.trim().to_string();
+                info!("Copying calculator result to clipboard: {}", result_text);
+
+                // Copy to clipboard
+                if let Some(display) = gtk4::gdk::Display::default() {
+                    let clipboard = display.clipboard();
+                    clipboard.set_text(&result_text);
+                }
+            }
+            return;
+        }
+
         match mode {
             // Obsidian grep mode: open grep results in Obsidian
             AppMode::ObsidianGrep => {
@@ -119,4 +136,54 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
             crate::search_provider::activate_result(&bus, &path, &id, &terms, timestamp);
         });
     }
+}
+
+/// Check if a line is a calculator result
+///
+/// A calculator result has the format "expression = result" where:
+/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses)
+/// - there's an equals sign in the middle
+fn is_calculator_result(line: &str) -> bool {
+    // Check if line contains '='
+    if !line.contains('=') {
+        return false;
+    }
+
+    // Split at the equals sign
+    let parts: Vec<&str> = line.split('=').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+
+    let expr = parts[0].trim();
+    let result = parts[1].trim();
+
+    // Expression should not be empty
+    if expr.is_empty() {
+        return false;
+    }
+
+    // Check if expression contains only valid calculator characters
+    if !expr.chars().all(|c| {
+        c.is_ascii_digit()
+            || c == '.'
+            || c == '+'
+            || c == '-'
+            || c == '*'
+            || c == '/'
+            || c == '%'
+            || c == '^'
+            || c == '('
+            || c == ')'
+            || c.is_whitespace()
+    }) {
+        return false;
+    }
+
+    // Check if result looks like a number (starts with digit or minus for negative numbers)
+    if !result.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    true
 }

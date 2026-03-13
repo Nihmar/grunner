@@ -10,8 +10,8 @@
 //! - File paths with line numbers
 //! - Search results that can be executed or opened
 
-use glib::subclass::prelude::*;
 use glib::Object;
+use glib::subclass::prelude::*;
 use std::cell::RefCell;
 
 /// Internal implementation module for GTK object subclassing

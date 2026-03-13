@@ -398,8 +398,7 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     if app_type != "Application" {
         trace!(
             "Skipping non-application entry (type: {}) in {:?}",
-            app_type,
-            path
+            app_type, path
         );
         return None;
     }
@@ -424,8 +423,7 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
 
     trace!(
         "Successfully parsed desktop application: {} from {:?}",
-        name,
-        path
+        name, path
     );
     Some(DesktopApp {
         name,

@@ -467,7 +467,8 @@ fn extract_themed(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
             Value::Dict(d) => {
                 // First, try to find the "names" key explicitly
                 for (k, val) in d.iter() {
-                    if let (Value::Str(key), v2) = (k, val) && key.as_str() == "names"
+                    if let (Value::Str(key), v2) = (k, val)
+                        && key.as_str() == "names"
                         && let Some(name) = first_name_from_array(v2)
                     {
                         return Some(name);
@@ -521,7 +522,10 @@ fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
             Value::Dict(d) => {
                 // Look for "file" key explicitly
                 for (k, val) in d.iter() {
-                    if let Value::Str(key) = k && key.as_str() == "file" && let Some(p) = walk(val) {
+                    if let Value::Str(key) = k
+                        && key.as_str() == "file"
+                        && let Some(p) = walk(val)
+                    {
                         return Some(p);
                     }
                 }
@@ -730,7 +734,9 @@ fn build_result(
     let name = take_str(&mut meta, "name").unwrap_or_else(|| id.clone());
     let description = take_str(&mut meta, "description").unwrap_or_default();
 
-    if let Some(val) = meta.get("clipboardText") && let Ok(text) = String::try_from(val.clone()) {
+    if let Some(val) = meta.get("clipboardText")
+        && let Ok(text) = String::try_from(val.clone())
+    {
         if let Some(display) = Display::default() {
             let clipboard = display.clipboard(); // ← no Option here!
             clipboard.set_text(&text);

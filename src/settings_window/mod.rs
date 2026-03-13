@@ -112,7 +112,9 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         let overlay = overlay.downgrade();
         let config_rc = Rc::clone(&config_rc);
         move |_| {
-            if let Some(window) = window.upgrade() && let Some(overlay) = overlay.upgrade() {
+            if let Some(window) = window.upgrade()
+                && let Some(overlay) = overlay.upgrade()
+            {
                 if let Err(e) = save_config(&config_rc.borrow()) {
                     error!("Failed to save configuration: {}", e);
                     let toast = Toast::builder()

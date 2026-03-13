@@ -84,7 +84,9 @@ pub fn build_tab(
                 #[strong]
                 vault_row,
                 move |dialog, response| {
-                    if response == gtk4::ResponseType::Accept && let Some(file) = dialog.file() {
+                    if response == gtk4::ResponseType::Accept
+                        && let Some(file) = dialog.file()
+                    {
                         let folder_path = file.path().unwrap_or_default();
                         // Store as tilde path for portability
                         let display_path = contract_home(&folder_path);

@@ -138,25 +138,39 @@ When suggesting a feature, please include:
 ```
 grunner/
 ├── src/
-│   ├── main.rs          # Entry point
-│   ├── ui.rs            # Main UI builder
-│   ├── list_model.rs    # Search model
-│   ├── launcher.rs      # .desktop file scanning
-│   ├── app_mode.rs      # Mode detection
-│   ├── item_activation.rs # Activation logic
-│   ├── obsidian_bar.rs  # Obsidian action bar
-│   ├── power_bar.rs     # Power actions
-│   ├── settings_window.rs # Settings dialog
-│   ├── utils.rs         # Utility functions
-│   ├── search_provider.rs # D-Bus client
-│   ├── actions.rs       # Launch, power, open file
-│   ├── config.rs        # TOML loading
-│   ├── logging.rs       # Logging system
-│   ├── app_item.rs      # App entry wrapper
-│   ├── cmd_item.rs      # Command output wrapper
-│   ├── obsidian_item.rs # Obsidian entry wrapper
-│   ├── search_result_item.rs # Search result wrapper
-│   └── style.css        # Theme styles
+│   ├── main.rs              # Entry point
+│   ├── lib.rs               # Library exports
+│   ├── ui.rs                # Main UI builder
+│   ├── list_model.rs        # Search model
+│   ├── launcher.rs          # .desktop file scanning
+│   ├── app_mode.rs          # Mode detection
+│   ├── item_activation.rs   # Activation logic
+│   ├── calculator.rs        # Mathematical expression evaluator
+│   ├── obsidian_bar.rs      # Obsidian action bar
+│   ├── power_bar.rs         # Power actions
+│   ├── settings_window/     # Settings dialog directory
+│   │   ├── mod.rs
+│   │   ├── save.rs
+│   │   └── tabs/            # Settings tabs
+│   │       ├── mod.rs
+│   │       ├── info.rs
+│   │       ├── general.rs
+│   │       ├── search.rs
+│   │       └── obsidian.rs
+│   ├── utils.rs             # Utility functions
+│   ├── global_state.rs      # Global state management
+│   ├── search_provider.rs   # D-Bus client
+│   ├── actions.rs           # Launch, power, open file
+│   ├── config.rs            # TOML loading
+│   ├── logging.rs           # Logging system
+│   ├── items/               # Item type definitions
+│   │   ├── mod.rs
+│   │   ├── app_item.rs      # App entry wrapper
+│   │   ├── cmd_item.rs      # Command output wrapper
+│   │   ├── obsidian_item.rs # Obsidian entry wrapper
+│   │   └── search_result_item.rs # Search result wrapper
+│   ├── workspace_bar.rs     # Workspace bar UI
+│   └── style.css            # Theme styles
 ├── assets/
 │   ├── grunner.desktop  # Application launcher
 │   └── grunner.png      # Application icon
