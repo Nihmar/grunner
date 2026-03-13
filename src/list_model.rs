@@ -503,7 +503,7 @@ pub struct AppListModel {
     /// Current search query text
     current_query: Rc<RefCell<String>>,
     /// Maximum number of results to show
-    max_results: usize,
+    max_results: Cell<usize>,
 
     /// Generation counter for cancelling stale async tasks
     task_gen: Rc<Cell<u64>>,
@@ -514,7 +514,7 @@ pub struct AppListModel {
     /// Debounce timer source ID for delayed command execution
     command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     /// Debounce delay in milliseconds
-    command_debounce_ms: u32,
+    command_debounce_ms: Cell<u32>,
     /// Debounce timer source ID for delayed search execution
     search_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     /// Debounce delay in milliseconds for default search mode
@@ -524,9 +524,9 @@ pub struct AppListModel {
     /// Cached GNOME Shell search providers
     search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
     /// List of search provider IDs to exclude
-    search_provider_blacklist: Vec<String>,
+    search_provider_blacklist: RefCell<Vec<String>>,
     /// List of custom script commands
-    commands: Vec<crate::config::CommandConfig>,
+    commands: RefCell<Vec<crate::config::CommandConfig>>,
 }
 
 impl AppListModel {
@@ -555,19 +555,19 @@ impl AppListModel {
             selection,
             all_apps: Rc::new(RefCell::new(Vec::new())),
             current_query: Rc::new(RefCell::new(String::new())),
-            max_results,
+            max_results: Cell::new(max_results),
 
             task_gen: Rc::new(Cell::new(0)),
             obsidian_cfg,
             active_mode: Rc::new(Cell::new(ActiveMode::None)),
             command_debounce: Rc::new(RefCell::new(None)),
-            command_debounce_ms,
+            command_debounce_ms: Cell::new(command_debounce_ms),
             search_debounce: Rc::new(RefCell::new(None)),
             search_debounce_ms: DEFAULT_SEARCH_DEBOUNCE_MS,
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
-            search_provider_blacklist,
-            commands,
+            search_provider_blacklist: RefCell::new(search_provider_blacklist),
+            commands: RefCell::new(commands),
         }
     }
 
@@ -579,6 +579,39 @@ impl AppListModel {
         *self.all_apps.borrow_mut() = apps;
         let query = self.current_query.borrow().clone();
         self.populate(&query);
+    }
+
+    /// Apply configuration changes (hot-reload after saving settings)
+    ///
+    /// This updates all configurable settings without restarting the app.
+    pub fn apply_config(&self, config: &crate::config::Config) {
+        eprintln!(
+            "DEBUG apply_config: commands count = {}",
+            config.commands.len()
+        );
+
+        // Update max_results
+        self.max_results.set(config.max_results);
+
+        // Update command debounce
+        self.command_debounce_ms.set(config.command_debounce_ms);
+
+        // Update search provider blacklist
+        *self.search_provider_blacklist.borrow_mut() = config.search_provider_blacklist.clone();
+
+        // Update commands
+        *self.commands.borrow_mut() = config.commands.clone();
+
+        eprintln!(
+            "DEBUG apply_config: commands updated to {}",
+            self.commands.borrow().len()
+        );
+
+        // Repopulate if in CustomScript mode
+        if self.active_mode.get() == ActiveMode::CustomScript {
+            let query = self.current_query.borrow().clone();
+            self.handle_sh(&query);
+        }
     }
 
     /// Cancel any pending command debounce timer
@@ -645,7 +678,7 @@ impl AppListModel {
     where
         F: FnOnce() + 'static,
     {
-        self.schedule_command_with_delay(self.command_debounce_ms, f);
+        self.schedule_command_with_delay(self.command_debounce_ms.get(), f);
     }
 
     fn schedule_search<F>(&self, f: F)
@@ -661,9 +694,9 @@ impl AppListModel {
     /// alongside application results when filtering.
     fn schedule_provider_search(&self, query: String, clear_store: bool) {
         // Discover providers (cached after first use)
-        let providers = self
-            .search_providers
-            .get_or_init(|| search_provider::discover_providers(&self.search_provider_blacklist));
+        let providers = self.search_providers.get_or_init(|| {
+            search_provider::discover_providers(&self.search_provider_blacklist.borrow())
+        });
 
         if providers.is_empty() {
             return;
@@ -672,7 +705,7 @@ impl AppListModel {
         self.active_mode.set(ActiveMode::None);
         self.bump_task_gen();
         let providers_clone: Vec<SearchProvider> = providers.to_vec();
-        let max = self.max_results;
+        let max = self.max_results.get();
         let model_clone = self.clone();
         // Use shorter debounce for search providers for more responsive feel
         self.schedule_command_with_delay(120, move || {
@@ -795,7 +828,7 @@ impl AppListModel {
                 self.store.append(&CommandItem::new(calculator_result));
             } else {
                 // Use optimized search with prefix matching for simple queries
-                let results = self.search_apps_optimized(query, &apps, self.max_results);
+                let results = self.search_apps_optimized(query, &apps, self.max_results.get());
 
                 // Add matched applications to the store
                 for app in results {
@@ -972,23 +1005,20 @@ impl AppListModel {
         self.active_mode.set(ActiveMode::CustomScript);
         self.clear_store();
 
+        eprintln!(
+            "DEBUG: handle_sh called, store items before: {}",
+            self.store.n_items()
+        );
+
         debug!(
             "handle_sh called with arg: '{}', commands count: {}",
             arg,
-            self.commands.len()
+            self.commands.borrow().len()
         );
 
-        // Debug: print all commands
-        for (i, cmd) in self.commands.iter().enumerate() {
-            debug!(
-                "Command {}: name='{}', command='{}'",
-                i, cmd.name, cmd.command
-            );
-        }
-
         // Filter saved commands based on argument
-        let filtered_commands: Vec<&CommandConfig> = self
-            .commands
+        let commands = self.commands.borrow();
+        let filtered_commands: Vec<CommandConfig> = commands
             .iter()
             .filter(|cmd| {
                 if arg.is_empty() {
@@ -999,6 +1029,7 @@ impl AppListModel {
                         || cmd.command.to_lowercase().contains(&arg.to_lowercase())
                 }
             })
+            .cloned()
             .collect();
 
         debug!("Filtered commands count: {}", filtered_commands.len());
@@ -1007,13 +1038,11 @@ impl AppListModel {
         for cmd in filtered_commands {
             // Format as "Name | Command" for display
             let item_str = format!("{} | {}", cmd.name, cmd.command);
-            debug!("Adding command item: {}", item_str);
             self.store.append(&CommandItem::new_with_options(
                 item_str,
                 cmd.working_dir.clone(),
                 cmd.keep_open,
             ));
-            debug!("Store now has {} items", self.store.n_items());
         }
 
         // If user typed a command that doesn't match saved ones, add "Run: ..." option
@@ -1025,6 +1054,10 @@ impl AppListModel {
         }
 
         debug!("Final store count: {}", self.store.n_items());
+        eprintln!(
+            "DEBUG: handle_sh done, store items after: {}",
+            self.store.n_items()
+        );
         debug!("Active mode is now: {:?}", self.active_mode.get());
     }
 
@@ -1034,7 +1067,7 @@ impl AppListModel {
     /// then processed by a `SubprocessPoller` to update the UI.
     fn run_subprocess(&self, mut cmd: std::process::Command) {
         let generation = self.task_gen.get();
-        let max_results = self.max_results;
+        let max_results = self.max_results.get();
         let model_clone = self.clone();
 
         let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();

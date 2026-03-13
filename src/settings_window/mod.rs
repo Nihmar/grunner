@@ -13,6 +13,7 @@ pub(crate) mod save;
 pub mod tabs;
 
 use crate::config;
+use crate::global_state;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use libadwaita::{PreferencesDialog, Toast, ToastOverlay};
@@ -125,6 +126,8 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
                     overlay.add_toast(toast);
                 } else {
                     info!("Configuration saved successfully");
+                    // Hot-reload all settings
+                    global_state::reload_config(&config_rc.borrow());
                     let toast = Toast::builder().title("Settings saved").timeout(2).build();
                     overlay.add_toast(toast);
                     glib::timeout_add_local_once(

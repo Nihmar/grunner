@@ -16,6 +16,7 @@
 
 use crate::app_mode::AppMode;
 use crate::config::Config;
+use crate::global_state;
 use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::list_model::AppListModel;
@@ -131,6 +132,12 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         cfg.search_provider_blacklist.clone(),
         cfg.commands.clone(),
     );
+
+    // Register config reloader for hot-reload from settings
+    let model_for_reloader = model.clone();
+    global_state::set_config_reloader(move |config| {
+        model_for_reloader.apply_config(config);
+    });
 
     // Track current application mode for UI rendering and action handling
     let current_mode: Rc<Cell<AppMode>> = Rc::new(Cell::new(AppMode::Normal));

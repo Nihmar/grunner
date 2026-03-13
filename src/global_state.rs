@@ -1,9 +1,12 @@
 //! Centralized global state management
 //!
 //! This module provides a single location for all global state variables
-//! using OnceLock to ensure thread-safe initialization.
+//! using thread-local storage to avoid Sync requirements.
 
+use std::cell::RefCell;
 use std::sync::OnceLock;
+
+use crate::config::Config;
 
 // ─── HOME Directory ──────────────────────────────────────────────────────────
 
@@ -34,4 +37,27 @@ pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
             .build()
             .expect("[global_state] failed to build tokio runtime")
     })
+}
+
+// ─── Config Hot-Reload ──────────────────────────────────────────────────────
+
+thread_local! {
+    static CONFIG_RELOADER: RefCell<Option<Box<dyn Fn(&Config)>>> = RefCell::new(None);
+}
+
+pub fn set_config_reloader<F>(reloader: F)
+where
+    F: Fn(&Config) + 'static,
+{
+    CONFIG_RELOADER.with(|r| {
+        *r.borrow_mut() = Some(Box::new(reloader));
+    });
+}
+
+pub fn reload_config(config: &Config) {
+    CONFIG_RELOADER.with(|r| {
+        if let Some(reloader) = r.borrow().as_ref() {
+            reloader(config);
+        }
+    });
 }
