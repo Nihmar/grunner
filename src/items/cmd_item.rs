@@ -10,8 +10,8 @@
 //! - File paths with line numbers
 //! - Search results that can be executed or opened
 
-use glib::subclass::prelude::*;
 use glib::Object;
+use glib::subclass::prelude::*;
 use std::cell::RefCell;
 
 /// Internal implementation module for GTK object subclassing
@@ -19,7 +19,11 @@ use std::cell::RefCell;
 /// GTK requires object implementations to be separated into an `imp` module
 /// for encapsulation and proper object lifecycle management.
 mod imp {
-    use super::*;
+    use super::RefCell;
+    #[allow(unused_imports)]
+    use glib::subclass::prelude::{
+        ObjectImpl, ObjectInterfaceType, ObjectSubclass, ObjectSubclassType,
+    };
 
     /// Main GTK object implementation struct for command items
     ///

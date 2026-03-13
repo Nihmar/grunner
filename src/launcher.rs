@@ -85,30 +85,27 @@ fn dirs_max_mtime(dirs: &[PathBuf]) -> Option<SystemTime> {
 /// `None` if cache is stale, missing, or corrupt.
 fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
     let cache = cache_path();
-    debug!("Checking application cache at {:?}", cache);
+    debug!("Checking application cache at {}", cache.display());
 
     // Get cache file modification time
     let cache_mtime = match fs::metadata(&cache) {
         Ok(metadata) => match metadata.modified() {
             Ok(mtime) => mtime,
             Err(e) => {
-                debug!("Failed to get cache file modification time: {}", e);
+                debug!("Failed to get cache file modification time: {e}");
                 return None;
             }
         },
         Err(e) => {
-            debug!("Cache file not found or inaccessible: {}", e);
+            debug!("Cache file not found or inaccessible: {e}");
             return None;
         }
     };
 
     // Get latest directory modification time
-    let dirs_mtime = match dirs_max_mtime(dirs) {
-        Some(mtime) => mtime,
-        None => {
-            debug!("Failed to get directory modification times");
-            return None;
-        }
+    let Some(dirs_mtime) = dirs_max_mtime(dirs) else {
+        debug!("Failed to get directory modification times");
+        return None;
     };
 
     // Cache is stale if directories were modified after cache was created
@@ -121,7 +118,7 @@ fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
     let bytes = match fs::read(&cache) {
         Ok(bytes) => bytes,
         Err(e) => {
-            error!("Failed to read cache file: {}", e);
+            error!("Failed to read cache file: {e}");
             return None;
         }
     };
@@ -133,7 +130,7 @@ fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
             Some(apps)
         }
         Err(e) => {
-            error!("Failed to deserialize cache: {}", e);
+            error!("Failed to deserialize cache: {e}");
             None
         }
     }
@@ -148,29 +145,35 @@ fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
 /// for fast reading/writing and compact storage.
 fn save_cache(apps: &[DesktopApp]) {
     let path = cache_path();
-    debug!("Saving {} applications to cache at {:?}", apps.len(), path);
+    debug!(
+        "Saving {} applications to cache at {}",
+        apps.len(),
+        path.display()
+    );
 
     // Ensure cache directory exists
     if let Some(dir) = path.parent() {
         if let Err(e) = fs::create_dir_all(dir) {
-            error!("Failed to create cache directory {:?}: {}", dir, e);
+            error!("Failed to create cache directory {}: {e}", dir.display());
             return;
         }
-        debug!("Created cache directory: {:?}", dir);
+        debug!("Created cache directory: {}", dir.display());
     }
 
     // Serialize and write cache
     match bincode::serialize(apps) {
         Ok(bytes) => {
-            debug!("Serialized {} bytes of cache data", bytes.len());
+            let len = bytes.len();
+            debug!("Serialized {len} bytes of cache data");
             if let Err(e) = fs::write(&path, &bytes) {
-                error!("Failed to write cache to {:?}: {}", path, e);
+                error!("Failed to write cache to {}: {e}", path.display());
             } else {
-                info!("Saved {} applications to cache", apps.len());
+                let len = apps.len();
+                info!("Saved {len} applications to cache");
             }
         }
         Err(e) => {
-            error!("Failed to serialize cache: {}", e);
+            error!("Failed to serialize cache: {e}");
         }
     }
 }
@@ -202,12 +205,12 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
             .filter(|d| {
                 let exists = d.exists();
                 if !exists {
-                    debug!("Skipping non-existent directory: {:?}", d);
+                    debug!("Skipping non-existent directory: {}", d.display());
                 }
                 exists
             })
             .flat_map(|dir| {
-                debug!("Scanning directory: {:?}", dir);
+                debug!("Scanning directory: {}", dir.display());
                 WalkDir::new(dir)
                     .into_iter()
                     .filter_map(Result::ok)
@@ -223,12 +226,12 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
             .filter(|d| {
                 let exists = d.exists();
                 if !exists {
-                    debug!("Skipping non-existent directory: {:?}", d);
+                    debug!("Skipping non-existent directory: {}", d.display());
                 }
                 exists
             })
             .flat_map(|dir| {
-                debug!("Scanning directory: {:?}", dir);
+                debug!("Scanning directory: {}", dir.display());
                 WalkDir::new(dir)
                     .into_iter()
                     .filter_map(Result::ok)
@@ -333,7 +336,7 @@ pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
 /// `None` if it's not an application or should be hidden.
 fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     // Read file content
-    trace!("Parsing desktop file: {:?}", path);
+    trace!("Parsing desktop file: {}", path.display());
     let content = fs::read_to_string(path).ok()?;
 
     // Initialize parser state
@@ -397,35 +400,33 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     // Filter out non-applications and hidden entries
     if app_type != "Application" {
         trace!(
-            "Skipping non-application entry (type: {}) in {:?}",
-            app_type,
-            path
+            "Skipping non-application entry (type: {app_type}) in {}",
+            path.display()
         );
         return None;
     }
     if no_display {
-        trace!("Skipping NoDisplay=true entry in {:?}", path);
+        trace!("Skipping NoDisplay=true entry in {}", path.display());
         return None;
     }
     if hidden {
-        trace!("Skipping Hidden=true entry in {:?}", path);
+        trace!("Skipping Hidden=true entry in {}", path.display());
         return None;
     }
 
     // Return parsed application (requires at least name and exec)
     let Some(name) = name else {
-        debug!("Missing Name field in desktop file {:?}", path);
+        debug!("Missing Name field in desktop file {}", path.display());
         return None;
     };
     let Some(exec) = exec else {
-        debug!("Missing Exec field in desktop file {:?}", path);
+        debug!("Missing Exec field in desktop file {}", path.display());
         return None;
     };
 
     trace!(
-        "Successfully parsed desktop application: {} from {:?}",
-        name,
-        path
+        "Successfully parsed desktop application: {name} from {}",
+        path.display()
     );
     Some(DesktopApp {
         name,

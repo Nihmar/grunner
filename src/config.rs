@@ -213,18 +213,21 @@ pub fn load() -> Config {
     // If config file doesn't exist, create it with defaults
     if !path.exists() {
         info!(
-            "Configuration file not found at {:?}, creating default",
-            path
+            "Configuration file not found at {}, creating default",
+            path.display()
         );
         if let Some(dir) = path.parent()
             && std::fs::create_dir_all(dir).is_ok()
         {
-            debug!("Created configuration directory: {:?}", dir);
+            debug!("Created configuration directory: {}", dir.display());
         }
         if std::fs::write(&path, default_toml()).is_ok() {
-            info!("Created default configuration file at {:?}", path);
+            info!("Created default configuration file at {}", path.display());
         } else {
-            warn!("Failed to create default configuration file at {:?}", path);
+            warn!(
+                "Failed to create default configuration file at {}",
+                path.display()
+            );
         }
         return Config::default();
     }
@@ -232,12 +235,18 @@ pub fn load() -> Config {
     // Read existing config file
     let content = match std::fs::read_to_string(&path) {
         Ok(s) => {
-            debug!("Successfully read configuration file from {:?}", path);
+            debug!(
+                "Successfully read configuration file from {}",
+                path.display()
+            );
             s
         }
         Err(e) => {
             // Failed to read config file
-            error!("Failed to read configuration file from {:?}: {}", path, e);
+            error!(
+                "Failed to read configuration file from {}: {e}",
+                path.display()
+            );
             return Config::default();
         }
     };
@@ -269,7 +278,7 @@ fn apply_toml(content: &str) -> Config {
         }
         Err(e) => {
             // Failed to parse config
-            error!("Failed to parse configuration TOML: {}", e);
+            error!("Failed to parse configuration TOML: {e}");
             return cfg;
         }
     };
@@ -277,11 +286,11 @@ fn apply_toml(content: &str) -> Config {
     // Apply window settings if present
     if let Some(window) = toml_cfg.window {
         if let Some(w) = window.width.filter(|&v| v > 0) {
-            debug!("Setting window width to {}", w);
+            debug!("Setting window width to {w}");
             cfg.window_width = w;
         }
         if let Some(h) = window.height.filter(|&v| v > 0) {
-            debug!("Setting window height to {}", h);
+            debug!("Setting window height to {h}");
             cfg.window_height = h;
         }
     }
@@ -289,23 +298,23 @@ fn apply_toml(content: &str) -> Config {
     // Apply search settings if present
     if let Some(search) = toml_cfg.search {
         if let Some(m) = search.max_results.filter(|&v| v > 0) {
-            debug!("Setting max_results to {}", m);
+            debug!("Setting max_results to {m}");
             cfg.max_results = m;
         }
         if let Some(dirs) = search.app_dirs {
-            debug!("Setting app_dirs to {:?}", dirs);
+            debug!("Setting app_dirs to {dirs:?}");
             cfg.app_dirs = dirs.into_iter().map(|s| expand_home(&s)).collect();
         }
         if let Some(debounce) = search.command_debounce_ms {
-            debug!("Setting command_debounce_ms to {}", debounce);
+            debug!("Setting command_debounce_ms to {debounce}");
             cfg.command_debounce_ms = debounce;
         }
         if let Some(blacklist) = search.provider_blacklist {
-            debug!("Setting search_provider_blacklist to {:?}", blacklist);
+            debug!("Setting search_provider_blacklist to {blacklist:?}");
             cfg.search_provider_blacklist = blacklist;
         }
         if let Some(enabled) = search.workspace_bar_enabled {
-            debug!("Setting workspace_bar_enabled to {}", enabled);
+            debug!("Setting workspace_bar_enabled to {enabled}");
             cfg.workspace_bar_enabled = enabled;
         }
     }
@@ -332,10 +341,11 @@ fn apply_toml(content: &str) -> Config {
 /// configuration file exists.
 ///
 /// Returns: String containing the default TOML configuration
+#[allow(clippy::uninlined_format_args)]
 fn default_toml() -> String {
     let dirs = default_app_dirs()
         .iter()
-        .map(|d| format!("    \"{}\",", d))
+        .map(|d| format!("    \"{d}\","))
         .collect::<Vec<_>>()
         .join("\n");
 

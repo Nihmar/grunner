@@ -96,16 +96,16 @@ pub fn evaluate(expr: &str) -> Option<String> {
         return None;
     }
 
-    debug!("Evaluating expression: {}", expr);
+    debug!("Evaluating expression: {expr}");
 
     // Parse and evaluate using shunting yard algorithm
     match evaluate_expression(expr) {
         Ok(result) => {
-            debug!("Expression evaluated to: {}", result);
+            debug!("Expression evaluated to: {result}");
             Some(format_result(result))
         }
         Err(e) => {
-            debug!("Failed to evaluate expression: {}", e);
+            debug!("Failed to evaluate expression: {e}");
             None
         }
     }
@@ -114,13 +114,14 @@ pub fn evaluate(expr: &str) -> Option<String> {
 /// Format the result for display
 ///
 /// Removes trailing zeros from floating point numbers
+#[allow(clippy::cast_possible_truncation)]
 fn format_result(result: f64) -> String {
-    if result == result.trunc() {
+    if (result - result.trunc()).abs() < 1e-10 {
         // Integer result
         format!("{}", result as i64)
     } else {
         // Floating point result - remove trailing zeros
-        let s = format!("{:.10}", result);
+        let s = format!("{result:.10}");
         s.trim_end_matches('0').trim_end_matches('.').to_string()
     }
 }
@@ -164,12 +165,12 @@ fn tokenize(expr: &str) -> Result<Vec<Token>, String> {
 
             // Validate number format
             if num_str.chars().filter(|&c| c == '.').count() > 1 {
-                return Err(format!("Invalid number format: {}", num_str));
+                return Err(format!("Invalid number format: {num_str}"));
             }
 
             let num: f64 = num_str
                 .parse()
-                .map_err(|_| format!("Invalid number: {}", num_str))?;
+                .map_err(|_| format!("Invalid number: {num_str}"))?;
             tokens.push(Token::Number(num));
             last_token_was_operator_or_open_paren = false;
         } else if c == '(' {
@@ -199,7 +200,7 @@ fn tokenize(expr: &str) -> Result<Vec<Token>, String> {
             chars.next();
             last_token_was_operator_or_open_paren = true;
         } else {
-            return Err(format!("Unknown character: {}", c));
+            return Err(format!("Unknown character: {c}"));
         }
     }
 
@@ -230,7 +231,7 @@ enum Operator {
 impl Operator {
     /// Get the precedence level of an operator
     /// Higher number means higher precedence
-    fn precedence(&self) -> u8 {
+    fn precedence(self) -> u8 {
         match self {
             Operator::Add | Operator::Subtract => 1,
             Operator::Multiply | Operator::Divide | Operator::Modulo => 2,
@@ -241,7 +242,7 @@ impl Operator {
     }
 
     /// Check if operator is left-associative
-    fn is_left_associative(&self) -> bool {
+    fn is_left_associative(self) -> bool {
         match self {
             Operator::Power | Operator::UnaryMinus => false, // Power and UnaryMinus are right-associative
             _ => true,
@@ -317,15 +318,14 @@ fn evaluate_rpn(rpn: &[Token]) -> Result<f64, String> {
     for &token in rpn {
         match token {
             Token::Number(n) => stack.push(n),
-            Token::Operator(op) => match op {
-                Operator::UnaryMinus => {
+            Token::Operator(op) => {
+                if op == Operator::UnaryMinus {
                     if stack.is_empty() {
                         return Err("Insufficient operands for unary minus".to_string());
                     }
                     let a = stack.pop().unwrap();
                     stack.push(-a);
-                }
-                _ => {
+                } else {
                     if stack.len() < 2 {
                         return Err("Insufficient operands".to_string());
                     }
@@ -347,7 +347,7 @@ fn evaluate_rpn(rpn: &[Token]) -> Result<f64, String> {
                     };
                     stack.push(result);
                 }
-            },
+            }
         }
     }
 

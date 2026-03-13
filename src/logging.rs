@@ -90,7 +90,6 @@ fn default_log_file_path() -> Option<PathBuf> {
 fn parse_log_level(level_str: &str) -> LevelFilter {
     match level_str.to_lowercase().as_str() {
         "error" => LevelFilter::Error,
-        "warn" | "warning" => LevelFilter::Warn,
         "info" => LevelFilter::Info,
         "debug" => LevelFilter::Debug,
         "trace" => LevelFilter::Trace,
@@ -113,13 +112,13 @@ fn parse_log_destination(dest_str: &str) -> LogDestination {
 
 /// Load configuration from environment variables
 fn load_config_from_env() -> LogConfig {
-    let destination = std::env::var("GRUNNER_LOG")
-        .map(|val| parse_log_destination(&val))
-        .unwrap_or_else(|_| LogDestination::default());
+    let destination = std::env::var("GRUNNER_LOG").map_or_else(
+        |_| LogDestination::default(),
+        |val| parse_log_destination(&val),
+    );
 
-    let level = std::env::var("GRUNNER_LOG_LEVEL")
-        .map(|val| parse_log_level(&val))
-        .unwrap_or(LevelFilter::Warn);
+    let level =
+        std::env::var("GRUNNER_LOG_LEVEL").map_or(LevelFilter::Warn, |val| parse_log_level(&val));
 
     let file_path = std::env::var("GRUNNER_LOG_FILE")
         .ok()
@@ -150,10 +149,7 @@ fn init_journal_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
             logger.install()
         }
         Err(e) => {
-            eprintln!(
-                "Failed to initialize journal logger: {}, falling back to stderr",
-                e
-            );
+            eprintln!("Failed to initialize journal logger: {e}, falling back to stderr");
             init_stderr_logger(level)
         }
     }
@@ -224,8 +220,8 @@ fn init_file_logger(level: LevelFilter, file_path: Option<&PathBuf>) -> Result<(
         Ok(file) => WriteLogger::init(level, SimpleLogConfig::default(), file),
         Err(e) => {
             eprintln!(
-                "Failed to open log file {:?}: {}, falling back to stderr",
-                path, e
+                "Failed to open log file {}: {e}, falling back to stderr",
+                path.display()
             );
             init_stderr_logger(level)
         }

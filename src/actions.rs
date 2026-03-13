@@ -106,15 +106,13 @@ fn find_terminal() -> Option<String> {
 /// Different terminals have different argument syntax for running commands.
 #[allow(clippy::needless_pass_by_value)]
 pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
-    debug!(
-        "Launching application: {exec} (terminal: {terminal}, working_dir: {working_dir:?})"
-    );
+    debug!("Launching application: {exec} (terminal: {terminal}, working_dir: {working_dir:?})");
     let clean = launcher::clean_exec(exec);
     debug!("Cleaned execution command: {clean}");
 
     if terminal {
         debug!("Looking for terminal emulator");
-            if let Some(term) = find_terminal() {
+        if let Some(term) = find_terminal() {
             info!("Using terminal emulator: {term}");
             let mut cmd = std::process::Command::new(&term);
             if let Some(ref dir) = working_dir {
@@ -125,10 +123,7 @@ pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
                 "gnome-terminal" | "xfce4-terminal" => {
                     cmd.arg("--").arg("sh").arg("-c").arg(&clean);
                 }
-                // KDE's Konsole and other terminals use "-e" flag
-                "konsole" | "alacritty" | "foot" | "ghostty" => {
-                    cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
-                }
+
                 // Kitty uses "--" separator and supports --hold
                 "kitty" => {
                     cmd.arg("--hold").arg("--").arg("sh").arg("-c").arg(&clean);
@@ -140,13 +135,9 @@ pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
             }
             debug!("Spawning terminal command: {cmd:?}");
             if let Err(e) = cmd.spawn() {
-                error!(
-                    "Failed to launch terminal {term} with command '{clean}': {e}"
-                );
+                error!("Failed to launch terminal {term} with command '{clean}': {e}");
             } else {
-                info!(
-                    "Successfully launched application in terminal {term}: {clean}"
-                );
+                info!("Successfully launched application in terminal {term}: {clean}");
             }
         } else {
             warn!("No terminal emulator found for command: {clean}");
@@ -230,9 +221,7 @@ fn logout_action() {
                     info!("Successfully logged out via loginctl with XDG_SESSION_ID");
                     return;
                 }
-                warn!(
-                    "loginctl terminate-session failed with status: {status}"
-                );
+                warn!("loginctl terminate-session failed with status: {status}");
             } else {
                 error!("Failed to execute loginctl terminate-session command");
             }
@@ -243,7 +232,7 @@ fn logout_action() {
 
     // Second try: Use GNOME session quit command
     if let Some(path) = which("gnome-session-quit") {
-        debug!("Using gnome-session-quit at {path:?} for logout", path);
+        debug!("Using gnome-session-quit at {} for logout", path.display());
         let status = std::process::Command::new(path).arg("--logout").status();
         if let Ok(status) = status {
             if status.success() {
@@ -379,16 +368,18 @@ pub fn open_file_or_line(line: &str) {
 ///
 /// Handles all Obsidian operations: opening vault, creating new notes,
 /// daily notes, and quick notes.
+#[allow(clippy::unnecessary_debug_formatting, clippy::too_many_lines)]
 pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: &ObsidianConfig) {
-    debug!(
-        "Performing Obsidian action: {action:?} with text: {text:?}"
-    );
+    debug!("Performing Obsidian action: {action:?} with text: {text:?}");
     let vault_path = expand_home(&cfg.vault);
-    debug!("Obsidian vault path: {vault_path:?}");
+    debug!("Obsidian vault path: {}", vault_path.display());
 
     // Validate vault path exists
     if !vault_path.exists() {
-        error!("Obsidian vault path does not exist: {vault_path:?}");
+        error!(
+            "Obsidian vault path does not exist: {}",
+            vault_path.display()
+        );
         return;
     }
 
@@ -406,9 +397,9 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Create a new note with timestamp in the configured folder
             info!("Creating new Obsidian note");
             let folder = vault_path.join(&cfg.new_notes_folder);
-            debug!("New note folder: {folder:?}");
+            debug!("New note folder: {}", folder.display());
             if let Err(e) = fs::create_dir_all(&folder) {
-                error!("Failed to create new note folder {folder:?}: {e}");
+                error!("Failed to create new note folder {}: {e}", folder.display());
                 return;
             }
 
@@ -418,11 +409,11 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             let path = folder.join(filename);
 
             // Create the note file
-            debug!("Creating note file: {path:?}");
+            debug!("Creating note file: {}", path.display());
             let mut file = match File::create(&path) {
                 Ok(f) => f,
                 Err(e) => {
-                    error!("Failed to create note file {path:?}: {e}");
+                    error!("Failed to create note file {}: {e}", path.display());
                     return;
                 }
             };
@@ -433,7 +424,7 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             {
                 debug!("Writing {} characters to note", t.len());
                 if let Err(e) = writeln!(file, "{t}") {
-                    error!("Failed to write text to note {path:?}: {e}");
+                    error!("Failed to write text to note {}: {e}", path.display());
                 }
             }
 
@@ -450,9 +441,12 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Open or create today's daily note
             info!("Opening/creating daily Obsidian note");
             let folder = vault_path.join(&cfg.daily_notes_folder);
-            debug!("Daily notes folder: {folder:?}");
+            debug!("Daily notes folder: {}", folder.display());
             if let Err(e) = fs::create_dir_all(&folder) {
-                error!("Failed to create daily notes folder {folder:?}: {e}");
+                error!(
+                    "Failed to create daily notes folder {}: {e}",
+                    folder.display()
+                );
                 return;
             }
 
@@ -461,11 +455,11 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             let path = folder.join(format!("{today}.md"));
 
             // Open in append mode to preserve existing content
-            debug!("Opening daily note file: {path:?}");
+            debug!("Opening daily note file: {}", path.display());
             let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
                 Ok(f) => f,
                 Err(e) => {
-                    error!("Failed to open daily note file {path:?}: {e}");
+                    error!("Failed to open daily note file {}: {e}", path.display());
                     return;
                 }
             };
@@ -476,7 +470,10 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             {
                 debug!("Appending {} characters to daily note", t.len());
                 if let Err(e) = writeln!(file, "{t}") {
-                    error!("Failed to append text to daily note {path:?}: {e}");
+                    error!(
+                        "Failed to append text to daily note {}: {e}",
+                        path.display()
+                    );
                 }
             }
 
@@ -493,14 +490,15 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
             // Append text to the configured quick note file
             info!("Updating quick Obsidian note");
             let path = vault_path.join(&cfg.quick_note);
-            debug!("Quick note path: {path:?}");
+            debug!("Quick note path: {}", path.display());
 
             // Ensure parent directory exists
             if let Some(parent) = path.parent()
                 && let Err(e) = fs::create_dir_all(parent)
             {
                 error!(
-                    "Failed to create quick note parent directory {parent:?}: {e}"
+                    "Failed to create quick note parent directory {}: {e}",
+                    parent.display()
                 );
                 return;
             }
@@ -513,12 +511,12 @@ pub fn perform_obsidian_action(action: ObsidianAction, text: Option<&str>, cfg: 
                 let mut file = match fs::OpenOptions::new().create(true).append(true).open(&path) {
                     Ok(f) => f,
                     Err(e) => {
-                        error!("Failed to open quick note file {path:?}: {e}");
+                        error!("Failed to open quick note file {}: {e}", path.display());
                         return;
                     }
                 };
                 if let Err(e) = writeln!(file, "{t}") {
-                    error!("Failed to write to quick note {path:?}: {e}");
+                    error!("Failed to write to quick note {}: {e}", path.display());
                 }
             }
 
@@ -547,7 +545,10 @@ pub fn open_obsidian_file_path(file_path: &str, cfg: &ObsidianConfig) {
 
     // Validate vault exists
     if !vault_path.exists() {
-        error!("Obsidian vault path does not exist: {vault_path:?}");
+        error!(
+            "Obsidian vault path does not exist: {}",
+            vault_path.display()
+        );
         return;
     }
 
@@ -572,7 +573,10 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
 
     // Validate vault exists
     if !vault_path.exists() {
-        error!("Obsidian vault path does not exist: {vault_path:?}");
+        error!(
+            "Obsidian vault path does not exist: {}",
+            vault_path.display()
+        );
         return;
     }
 
@@ -582,7 +586,7 @@ pub fn open_obsidian_file_line(file_path: &str, line: &str, cfg: &ObsidianConfig
     } else {
         vault_path.join(file_path)
     };
-    debug!("Resolved path: {path:?}");
+    debug!("Resolved path: {}", path.display());
 
     // Construct Obsidian URI with line parameter
     let uri = format!(

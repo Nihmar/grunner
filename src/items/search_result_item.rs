@@ -16,7 +16,10 @@ use glib::subclass::prelude::*;
 /// GTK requires object implementations to be separated into an `imp` module
 /// for encapsulation and proper object lifecycle management.
 mod imp {
-    use super::*;
+    #[allow(unused_imports)]
+    use glib::subclass::prelude::{
+        ObjectImpl, ObjectInterfaceType, ObjectSubclass, ObjectSubclassType,
+    };
     use std::cell::RefCell;
 
     /// Internal data structure holding search result metadata

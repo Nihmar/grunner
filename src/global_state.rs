@@ -28,6 +28,9 @@ pub fn get_home_dir() -> &'static str {
 static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 /// Get or initialize the shared Tokio runtime
+///
+/// # Panics
+/// Panics if the Tokio runtime fails to build (e.g., due to resource exhaustion).
 #[must_use]
 pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
     TOKIO_RT.get_or_init(|| {

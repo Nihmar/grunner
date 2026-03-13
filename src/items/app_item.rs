@@ -5,8 +5,8 @@
 //! GTK object subclassing to make application data accessible to GTK's property
 //! system and list views.
 
-use glib::subclass::prelude::*;
 use glib::Object;
+use glib::subclass::prelude::*;
 use std::cell::RefCell;
 
 use crate::launcher::DesktopApp;
@@ -16,7 +16,11 @@ use crate::launcher::DesktopApp;
 /// GTK requires object implementations to be separated into an `imp` module
 /// for encapsulation and proper object lifecycle management.
 mod imp {
-    use super::*;
+    use super::RefCell;
+    #[allow(unused_imports)]
+    use glib::subclass::prelude::{
+        ObjectImpl, ObjectInterfaceType, ObjectSubclass, ObjectSubclassType,
+    };
 
     /// Internal data structure holding application metadata
     ///

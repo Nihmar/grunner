@@ -57,7 +57,7 @@ pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) 
 pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, timestamp: u32) {
     debug!("Activating item in mode {mode:?}");
     // Handle desktop application items
-    if let Ok(app_item) = obj.downcast_ref::<AppItem>() {
+    if let Some(app_item) = obj.downcast_ref::<AppItem>() {
         info!(
             "Launching application: {} (terminal: {})",
             app_item.exec(),
@@ -66,7 +66,7 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
         launch_app(&app_item.exec(), app_item.terminal(), None);
     }
     // Handle command line items (file paths, grep results, calculator results, etc.)
-    else if let Ok(cmd_item) = obj.downcast_ref::<CommandItem>() {
+    else if let Some(cmd_item) = obj.downcast_ref::<CommandItem>() {
         let line = cmd_item.line();
         debug!("Activating command line item: {line} in mode {mode:?}");
 
