@@ -132,6 +132,12 @@ scrollbar slider:hover {
     transition: background-color 80ms ease;
 }
 
+/* Settings window Save/Cancel buttons - match power button height */
+.settings-action-button {
+    min-height: 24px;
+    padding: 8px 16px;
+}
+
 .power-button:hover {
     background-color: color-mix(
         in srgb,
@@ -152,14 +158,14 @@ scrollbar slider:hover {
 notebook.pill-tabs > header {
     background: transparent;
     border: none;
-    padding: 10px 10px 0px 10px;
+    /*padding: 10px 10px 0px 10px;*/
 }
 
 notebook.pill-tabs > header tabs {
     background: transparent;
     /* color-mix(in srgb, var(--window-fg-color) 6%, transparent); */
     border-radius: 14px;
-    padding: 3px;
+    padding: 12px 12px 12px 12px;
     border: none;
 }
 
@@ -212,12 +218,13 @@ notebook.pill-tabs > stack {
 
 /* Inner padding for each tab's scrollable content box */
 .settings-tab-inner {
-    margin: 16px;
+    margin: 0px;
     border: none;
 }
 
 /* Action bar row at the bottom of the settings dialog */
 .settings-action-bar {
+    min-height: 40px;
     margin: 12px;
 }
 

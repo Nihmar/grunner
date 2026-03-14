@@ -89,14 +89,12 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
 
     // --- Save and Cancel Buttons ---
     let action_bar = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    action_bar.set_margin_top(12);
-    action_bar.set_margin_bottom(12);
-    action_bar.set_margin_start(12);
-    action_bar.set_margin_end(12);
+    action_bar.add_css_class("settings-action-bar");
     action_bar.set_halign(gtk4::Align::End);
 
     let cancel_button = gtk4::Button::builder().label("Cancel").build();
     cancel_button.add_css_class("destructive-action");
+    cancel_button.add_css_class("settings-action-button");
     cancel_button.connect_clicked({
         let window = window.downgrade();
         move |_| {
@@ -109,6 +107,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
 
     let save_button = gtk4::Button::builder().label("Save").build();
     save_button.add_css_class("suggested-action");
+    save_button.add_css_class("settings-action-button");
     save_button.connect_clicked({
         let window = window.downgrade();
         let overlay = overlay.downgrade();
