@@ -11,7 +11,8 @@
 use crate::global_state::get_home_dir;
 use glib::clone;
 use gtk4::{
-    Box as GtkBox, Button, Image, Label, Orientation, PolicyType, ScrolledWindow, gdk, prelude::*,
+    Box as GtkBox, Button, EventControllerScroll, EventControllerScrollFlags, Image, Label,
+    Orientation, PolicyType, PropagationPhase, ScrolledWindow, gdk, prelude::*,
 };
 use libadwaita::ApplicationWindow;
 use serde::Deserialize;
@@ -420,6 +421,27 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     buttons_box.add_css_class("workspace-bar-buttons");
     scroll.set_child(Some(&buttons_box));
 
+    // Add event controller scroll to ensure scroll wheel events are handled
+    // Use BOTH_AXES to handle both horizontal and vertical scroll events
+    let scroll_controller = EventControllerScroll::new(EventControllerScrollFlags::BOTH_AXES);
+    scroll_controller.set_propagation_phase(PropagationPhase::Capture);
+
+    // Connect to the scroll signal to handle scroll events
+    let scroll_clone = scroll.clone();
+    scroll_controller.connect_scroll(move |_, dx, dy| {
+        log::debug!("[workspace_bar] scroll event: dx={dx}, dy={dy}");
+        // Get the current adjustment for horizontal scrolling
+        // For horizontal scrolling, we use dx (horizontal delta)
+        // For vertical scroll wheel, we translate dy to horizontal scrolling
+        let adjustment = scroll_clone.hadjustment();
+        let delta = if dx == 0.0 { dy } else { dx };
+        let new_value = adjustment.value() + delta * adjustment.step_increment();
+        adjustment.set_value(new_value.clamp(0.0, adjustment.upper() - adjustment.page_size()));
+        glib::Propagation::Stop
+    });
+
+    scroll.add_controller(scroll_controller);
+
     window.connect_map(clone!(
         #[weak]
         scroll,
@@ -437,7 +459,7 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
                 let windows = rt.block_on(fetch_workspace_windows());
                 log::debug!(
                     "[workspace_bar] background thread result: {:?}",
-                    windows.as_ref().map(|w| w.len())
+                    windows.as_ref().map(std::vec::Vec::len)
                 );
                 let _ = tx.send(windows);
             });
