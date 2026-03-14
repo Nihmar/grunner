@@ -2,7 +2,7 @@
 //!
 //! This module provides general-purpose helper functions used throughout
 //! the application. Currently, it contains path manipulation utilities
-//! for handling user home directory expansion.
+//! for handling user home directory expansion and calculator result parsing.
 
 use crate::global_state::get_home_dir;
 use std::path::PathBuf;
@@ -86,4 +86,51 @@ pub fn contract_home(path: &std::path::Path) -> String {
     } else {
         path.display().to_string()
     }
+}
+
+/// Check if a line is a calculator result
+///
+/// A calculator result has the format "expression = result" where:
+/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses, letters)
+/// - there's an equals sign in the middle
+#[must_use]
+pub fn is_calculator_result(line: &str) -> bool {
+    if !line.contains('=') {
+        return false;
+    }
+
+    let parts: Vec<&str> = line.split('=').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+
+    let expr = parts[0].trim();
+    let result = parts[1].trim();
+
+    if expr.is_empty() {
+        return false;
+    }
+
+    if !expr.chars().all(|c| {
+        c.is_ascii_digit()
+            || c == '.'
+            || c == '+'
+            || c == '-'
+            || c == '*'
+            || c == '/'
+            || c == '%'
+            || c == '^'
+            || c == '('
+            || c == ')'
+            || c.is_whitespace()
+            || c.is_ascii_alphabetic()
+    }) {
+        return false;
+    }
+
+    if !result.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    true
 }

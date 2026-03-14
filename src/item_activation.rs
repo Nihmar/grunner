@@ -14,6 +14,7 @@ use crate::items::CommandItem;
 use crate::items::ObsidianActionItem;
 use crate::items::SearchResultItem;
 use crate::list_model::AppListModel;
+use crate::utils::is_calculator_result;
 use gtk4::prelude::{Cast, DisplayExt};
 use log::{debug, info, warn};
 
@@ -164,55 +165,4 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
             crate::search_provider::activate_result(&bus, &path, &id, &terms, timestamp);
         });
     }
-}
-
-/// Check if a line is a calculator result
-///
-/// A calculator result has the format "expression = result" where:
-/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses, letters)
-/// - there's an equals sign in the middle
-fn is_calculator_result(line: &str) -> bool {
-    // Check if line contains '='
-    if !line.contains('=') {
-        return false;
-    }
-
-    // Split at the equals sign
-    let parts: Vec<&str> = line.split('=').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-
-    let expr = parts[0].trim();
-    let result = parts[1].trim();
-
-    // Expression should not be empty
-    if expr.is_empty() {
-        return false;
-    }
-
-    // Check if expression contains only valid calculator characters (including ASCII letters for functions/constants)
-    if !expr.chars().all(|c| {
-        c.is_ascii_digit()
-            || c == '.'
-            || c == '+'
-            || c == '-'
-            || c == '*'
-            || c == '/'
-            || c == '%'
-            || c == '^'
-            || c == '('
-            || c == ')'
-            || c.is_whitespace()
-            || c.is_ascii_alphabetic()
-    }) {
-        return false;
-    }
-
-    // Check if result looks like a number (starts with digit or minus for negative numbers)
-    if !result.chars().any(|c| c.is_ascii_digit()) {
-        return false;
-    }
-
-    true
 }

@@ -19,9 +19,9 @@ use crate::items::CommandItem;
 use crate::items::SearchResultItem;
 use crate::launcher::DesktopApp;
 use crate::search_provider::{self, SearchProvider};
-use crate::utils::expand_home;
-use fuzzy_matcher::FuzzyMatcher;
+use crate::utils::{expand_home, is_calculator_result};
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
@@ -138,164 +138,183 @@ fn bind_command_item(
 ) {
     let line = item.line();
 
-    // Check if this is a calculator result (format: "expression = result")
-    // Calculator results contain only valid calculator characters
     if is_calculator_result(&line) {
-        image.set_icon_name(Some("accessories-calculator"));
-        // Extract just the result part for display
-        if let Some((_expr, result)) = line.split_once('=') {
-            name_label.set_text(result.trim());
-            set_desc(desc_label, &format!("Calc: {}", line));
-        } else {
-            name_label.set_text(&line);
-            set_desc(desc_label, "Calculator result");
-        }
+        bind_calculator_result(&line, image, name_label, desc_label);
         return;
     }
 
-    // Handle custom script commands (format: "Name | Command" or "Run: Command")
     if mode == ActiveMode::CustomScript {
-        image.set_icon_name(Some("utilities-terminal"));
-        if let Some((name, command)) = line.split_once(" | ") {
-            // Saved command format: "Name | Command"
-            name_label.set_text(name.trim());
-            set_desc(desc_label, command.trim());
-        } else if let Some(stripped) = line.strip_prefix("Run: ") {
-            // Custom command format: "Run: <command>"
-            name_label.set_text("Run command");
-            set_desc(desc_label, stripped); // Skip "Run: "
-        } else {
-            // Fallback for unknown format
-            name_label.set_text(&line);
-            set_desc(desc_label, "");
-        }
+        bind_custom_script(&line, image, name_label, desc_label);
         return;
     }
 
-    // Handle Obsidian grep results (file:line:content format)
     if mode == ActiveMode::ObsidianGrep {
-        image.set_icon_name(Some(obsidian_icon));
-        if let Some((file_path, rest)) = line.split_once(':') {
-            // Show vault-relative path and grep match content
-            name_label.set_text(relative_to_vault(file_path, vault_path));
-            set_desc(desc_label, rest);
-        } else {
-            name_label.set_text(&line);
-            set_desc(desc_label, "");
-        }
+        bind_obsidian_grep(
+            &line,
+            image,
+            name_label,
+            desc_label,
+            vault_path,
+            obsidian_icon,
+        );
         return;
     }
 
-    // Handle absolute file paths
     if line.starts_with('/') {
-        if !line.contains(':') {
-            // Plain file path (no line number)
-            if mode == ActiveMode::ObsidianFile {
-                // Obsidian file search - use Obsidian icon
-                image.set_icon_name(Some(obsidian_icon));
-                let filename = std::path::Path::new(&line)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(&line);
-                name_label.set_text(filename);
-                let relative = relative_to_vault(&line, vault_path);
-                let parent = std::path::Path::new(relative)
-                    .parent()
-                    .and_then(|p| p.to_str())
-                    .filter(|s| !s.is_empty())
-                    .or_else(|| {
-                        std::path::Path::new(&line)
-                            .parent()
-                            .and_then(|p| p.to_str())
-                    });
-                set_desc(desc_label, parent.unwrap_or(""));
-            } else {
-                // Regular file search - use file type icon
-                let (ctype, _) = gio::content_type_guess(Some(line.as_str()), None::<&[u8]>);
-                image.set_from_gicon(&gio::content_type_get_icon(&ctype));
-                let filename = std::path::Path::new(&line)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(&line);
-                name_label.set_text(filename);
-                let parent = std::path::Path::new(&line)
-                    .parent()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or("");
-                set_desc(desc_label, parent);
-            }
-            return;
-        }
-
-        // Absolute path with colon – grep output from :fg command
-        if let Some((file_path, rest)) = line.split_once(':') {
-            let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
-            image.set_from_gicon(&gio::content_type_get_icon(&ctype));
-            let filename = std::path::Path::new(file_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(file_path);
-            name_label.set_text(filename);
-            set_desc(desc_label, rest);
-            return;
-        }
+        bind_file_path(
+            &line,
+            image,
+            name_label,
+            desc_label,
+            mode,
+            vault_path,
+            obsidian_icon,
+        );
+        return;
     }
 
-    // Fallback for any other lines (generic command output)
+    bind_generic_output(&line, image, name_label, desc_label);
+}
+
+fn bind_calculator_result(
+    line: &str,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+) {
+    image.set_icon_name(Some("accessories-calculator"));
+    if let Some((_expr, result)) = line.split_once('=') {
+        name_label.set_text(result.trim());
+        set_desc(desc_label, &format!("Calc: {}", line));
+    } else {
+        name_label.set_text(&line);
+        set_desc(desc_label, "Calculator result");
+    }
+}
+
+fn bind_custom_script(
+    line: &str,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+) {
+    image.set_icon_name(Some("utilities-terminal"));
+    if let Some((name, command)) = line.split_once(" | ") {
+        name_label.set_text(name.trim());
+        set_desc(desc_label, command.trim());
+    } else if let Some(stripped) = line.strip_prefix("Run: ") {
+        name_label.set_text("Run command");
+        set_desc(desc_label, stripped);
+    } else {
+        name_label.set_text(&line);
+        set_desc(desc_label, "");
+    }
+}
+
+fn bind_obsidian_grep(
+    line: &str,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+    vault_path: &Option<String>,
+    obsidian_icon: &str,
+) {
+    image.set_icon_name(Some(obsidian_icon));
+    if let Some((file_path, rest)) = line.split_once(':') {
+        name_label.set_text(relative_to_vault(file_path, vault_path));
+        set_desc(desc_label, rest);
+    } else {
+        name_label.set_text(&line);
+        set_desc(desc_label, "");
+    }
+}
+
+fn bind_file_path(
+    line: &str,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+    mode: ActiveMode,
+    vault_path: &Option<String>,
+    obsidian_icon: &str,
+) {
+    if !line.contains(':') {
+        bind_plain_file_path(
+            line,
+            image,
+            name_label,
+            desc_label,
+            mode,
+            vault_path,
+            obsidian_icon,
+        );
+        return;
+    }
+
+    if let Some((file_path, rest)) = line.split_once(':') {
+        let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
+        image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+        let filename = std::path::Path::new(file_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(file_path);
+        name_label.set_text(filename);
+        set_desc(desc_label, rest);
+    }
+}
+
+fn bind_plain_file_path(
+    line: &str,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+    mode: ActiveMode,
+    vault_path: &Option<String>,
+    obsidian_icon: &str,
+) {
+    if mode == ActiveMode::ObsidianFile {
+        image.set_icon_name(Some(obsidian_icon));
+        let filename = std::path::Path::new(&line)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&line);
+        name_label.set_text(filename);
+        let relative = relative_to_vault(&line, vault_path);
+        let parent = std::path::Path::new(relative)
+            .parent()
+            .and_then(|p| p.to_str())
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                std::path::Path::new(&line)
+                    .parent()
+                    .and_then(|p| p.to_str())
+            });
+        set_desc(desc_label, parent.unwrap_or(""));
+    } else {
+        let (ctype, _) = gio::content_type_guess(Some(line), None::<&[u8]>);
+        image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+        let filename = std::path::Path::new(&line)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&line);
+        name_label.set_text(filename);
+        let parent = std::path::Path::new(&line)
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or("");
+        set_desc(desc_label, parent);
+    }
+}
+
+fn bind_generic_output(
+    line: &str,
+    image: &gtk4::Image,
+    name_label: &gtk4::Label,
+    desc_label: &gtk4::Label,
+) {
     image.set_icon_name(Some("system-search"));
     name_label.set_text(&line);
     set_desc(desc_label, "");
-}
-
-/// Check if a line is a calculator result
-///
-/// A calculator result has the format "expression = result" where:
-/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses, letters)
-/// - there's an equals sign in the middle
-fn is_calculator_result(line: &str) -> bool {
-    // Check if line contains '='
-    if !line.contains('=') {
-        return false;
-    }
-
-    // Split at the equals sign
-    let parts: Vec<&str> = line.split('=').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-
-    let expr = parts[0].trim();
-    let result = parts[1].trim();
-
-    // Expression should not be empty
-    if expr.is_empty() {
-        return false;
-    }
-
-    // Check if expression contains only valid calculator characters (including ASCII letters for functions/constants)
-    if !expr.chars().all(|c| {
-        c.is_ascii_digit()
-            || c == '.'
-            || c == '+'
-            || c == '-'
-            || c == '*'
-            || c == '/'
-            || c == '%'
-            || c == '^'
-            || c == '('
-            || c == ')'
-            || c.is_whitespace()
-            || c.is_ascii_alphabetic()
-    }) {
-        return false;
-    }
-
-    // Check if result looks like a number (starts with digit or minus for negative numbers)
-    if !result.chars().any(|c| c.is_ascii_digit()) {
-        return false;
-    }
-
-    true
 }
 
 /// Bind search provider result item data to UI widgets
@@ -1001,11 +1020,6 @@ impl AppListModel {
         self.active_mode.set(ActiveMode::CustomScript);
         self.clear_store();
 
-        eprintln!(
-            "DEBUG: handle_sh called, store items before: {}",
-            self.store.n_items()
-        );
-
         debug!(
             "handle_sh called with arg: '{}', commands count: {}",
             arg,
@@ -1050,10 +1064,6 @@ impl AppListModel {
         }
 
         debug!("Final store count: {}", self.store.n_items());
-        eprintln!(
-            "DEBUG: handle_sh done, store items after: {}",
-            self.store.n_items()
-        );
         debug!("Active mode is now: {:?}", self.active_mode.get());
     }
 
