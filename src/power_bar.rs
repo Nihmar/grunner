@@ -78,10 +78,6 @@ pub fn build_power_bar(
     let power_bar = GtkBox::new(Orientation::Horizontal, 8);
     power_bar.add_css_class("power-bar");
     power_bar.set_hexpand(true);
-    power_bar.set_margin_top(4);
-    power_bar.set_margin_bottom(8);
-    power_bar.set_margin_start(12);
-    power_bar.set_margin_end(12);
 
     // --- Settings Button (left side) ---
     // Settings button provides immediate access to configuration without confirmation
