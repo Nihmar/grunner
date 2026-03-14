@@ -1,0 +1,25 @@
+/* Theme variables - override libadwaita defaults */
+
+/* Nord */
+:root {
+    --window-bg-color: #2e3440;
+    --window-fg-color: #eceff4;
+    --accent-color: #88c0d0;
+    --accent-bg-color: #88c0d0;
+    
+    --bg-primary: #2e3440;
+    --bg-secondary: #3b4252;
+    --bg-tertiary: #434c5e;
+    --text-primary: #eceff4;
+    --text-secondary: #d8dee9;
+    --text-muted: #4c566a;
+    --accent: #88c0d0;
+    --accent-hover: #81a1c1;
+    --border: #4c566a;
+    --selection-bg: #434c5e;
+    --selection-text: #eceff4;
+    --icon-default: #4c566a;
+    --icon-active: #88c0d0;
+    --scrollbar-bg: #2e3440;
+    --scrollbar-thumb: #4c566a;
+}

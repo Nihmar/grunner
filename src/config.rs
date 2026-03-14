@@ -78,6 +78,38 @@ pub struct CommandConfig {
     pub keep_open: bool,
 }
 
+/// Theme mode selection
+///
+/// Controls the application's color theme. Can follow system preferences
+/// or use a specific built-in or custom theme.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThemeMode {
+    /// Follow system light/dark preference
+    #[default]
+    System,
+    /// Force light theme regardless of system
+    SystemLight,
+    /// Force dark theme regardless of system
+    SystemDark,
+    /// Tokyo Night theme
+    TokioNight,
+    /// Catppuccin Mocha (dark)
+    CatppuccinMocha,
+    /// Catppuccin Latte (light)
+    CatppuccinLatte,
+    /// Nord theme
+    Nord,
+    /// Gruvbox Dark
+    GruvboxDark,
+    /// Gruvbox Light
+    GruvboxLight,
+    /// Dracula theme
+    Dracula,
+    /// Custom theme from file
+    Custom,
+}
+
 fn default_keep_open() -> bool {
     true
 }
@@ -110,6 +142,10 @@ pub struct Config {
     /// Disable all special modes (colon commands) and hide power bar
     /// Activated via --d / -D command-line flag
     pub disable_modes: bool,
+    /// Theme mode selection
+    pub theme: ThemeMode,
+    /// Path to custom theme file (used when theme = Custom)
+    pub custom_theme_path: Option<String>,
 }
 
 impl Default for Config {
@@ -137,6 +173,8 @@ impl Default for Config {
             workspace_bar_enabled: true,
             commands: Vec::new(),
             disable_modes: false,
+            theme: ThemeMode::default(),
+            custom_theme_path: None,
         }
     }
 }
@@ -155,6 +193,17 @@ struct TomlConfig {
     obsidian: Option<ObsidianConfig>,
     /// Custom script commands
     commands: Option<Vec<CommandConfig>>,
+    /// Theme settings
+    theme: Option<ThemeConfig>,
+}
+
+/// Theme configuration section in TOML
+#[derive(Deserialize, Serialize)]
+struct ThemeConfig {
+    /// Theme mode selection
+    mode: Option<ThemeMode>,
+    /// Path to custom theme file
+    custom_theme_path: Option<String>,
 }
 
 /// Window configuration section in TOML
@@ -331,6 +380,18 @@ fn apply_toml(content: &str) -> Config {
         cfg.commands = cmds;
     }
 
+    // Apply theme settings if present
+    if let Some(theme) = toml_cfg.theme {
+        if let Some(mode) = theme.mode {
+            debug!("Setting theme mode to {:?}", mode);
+            cfg.theme = mode;
+        }
+        if let Some(path) = theme.custom_theme_path {
+            debug!("Setting custom theme path to {}", path);
+            cfg.custom_theme_path = Some(path);
+        }
+    }
+
     cfg
 }
 
@@ -396,6 +457,15 @@ quick_note = ""
 # [[commands]]
 # name = "Update Flatpaks"
 # command = "flatpak update"
+
+[theme]
+# Theme mode selection
+# Options: system, system-light, system-dark, tokio-night, catppuccin-mocha, 
+#          catppuccin-latte, nord, gruvbox-dark, gruvbox-light, dracula, custom
+mode = "system"
+
+# Path to custom theme CSS file (only used when mode = "custom")
+# Example: custom_theme_path = "~/.config/grunner/themes/my_theme.css"
 "#,
         width = DEFAULT_WINDOW_WIDTH,
         height = DEFAULT_WINDOW_HEIGHT,

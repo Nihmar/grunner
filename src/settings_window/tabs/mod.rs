@@ -8,6 +8,7 @@ pub mod general;
 pub mod info;
 pub mod obsidian;
 pub mod search;
+pub mod theme;
 
 use gtk4::prelude::*;
 

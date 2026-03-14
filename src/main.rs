@@ -12,6 +12,7 @@ mod obsidian_bar;
 mod power_bar;
 mod search_provider;
 mod settings_window;
+mod theme;
 mod ui;
 mod utils;
 use glib::ExitCode;

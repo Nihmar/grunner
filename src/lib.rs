@@ -12,5 +12,6 @@ pub mod launcher;
 pub mod logging;
 pub mod search_provider;
 pub mod settings_window;
+pub mod theme;
 pub mod utils;
 pub mod workspace_bar;

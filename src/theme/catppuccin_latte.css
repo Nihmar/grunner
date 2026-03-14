@@ -1,0 +1,25 @@
+/* Theme variables - override libadwaita defaults */
+
+/* Catppuccin Latte */
+:root {
+    --window-bg-color: #eff1f5;
+    --window-fg-color: #4c4f69;
+    --accent-color: #1e66f5;
+    --accent-bg-color: #1e66f5;
+    
+    --bg-primary: #eff1f5;
+    --bg-secondary: #e6e9ef;
+    --bg-tertiary: #ccd0da;
+    --text-primary: #4c4f69;
+    --text-secondary: #6c6f85;
+    --text-muted: #9ca0b0;
+    --accent: #1e66f5;
+    --accent-hover: #7287fd;
+    --border: #ccd0da;
+    --selection-bg: #bcc0cc;
+    --selection-text: #4c4f69;
+    --icon-default: #6c6f85;
+    --icon-active: #1e66f5;
+    --scrollbar-bg: #eff1f5;
+    --scrollbar-thumb: #ccd0da;
+}

@@ -1,0 +1,25 @@
+/* Theme variables - override libadwaita defaults */
+
+/* Catppuccin Mocha */
+:root {
+    --window-bg-color: #1e1e2e;
+    --window-fg-color: #cdd6f4;
+    --accent-color: #89b4fa;
+    --accent-bg-color: #89b4fa;
+    
+    --bg-primary: #1e1e2e;
+    --bg-secondary: #313244;
+    --bg-tertiary: #45475a;
+    --text-primary: #cdd6f4;
+    --text-secondary: #a6adc8;
+    --text-muted: #6c7086;
+    --accent: #89b4fa;
+    --accent-hover: #b4befe;
+    --border: #45475a;
+    --selection-bg: #45475a;
+    --selection-text: #cdd6f4;
+    --icon-default: #6c7086;
+    --icon-active: #89b4fa;
+    --scrollbar-bg: #1e1e2e;
+    --scrollbar-thumb: #45475a;
+}

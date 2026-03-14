@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "grunner"
-version = "1.4.2"
+version = "1.9.9"
 dependencies = [
  "bincode",
  "chrono",

@@ -1,0 +1,25 @@
+/* Theme variables - override libadwaita defaults */
+
+/* Dracula */
+:root {
+    --window-bg-color: #282a36;
+    --window-fg-color: #f8f8f2;
+    --accent-color: #bd93f9;
+    --accent-bg-color: #bd93f9;
+    
+    --bg-primary: #282a36;
+    --bg-secondary: #343746;
+    --bg-tertiary: #44475a;
+    --text-primary: #f8f8f2;
+    --text-secondary: #bfc7d5;
+    --text-muted: #6272a4;
+    --accent: #bd93f9;
+    --accent-hover: #ff79c6;
+    --border: #44475a;
+    --selection-bg: #44475a;
+    --selection-text: #f8f8f2;
+    --icon-default: #6272a4;
+    --icon-active: #bd93f9;
+    --scrollbar-bg: #282a36;
+    --scrollbar-thumb: #44475a;
+}

@@ -197,6 +197,20 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
+    // Apply theme based on configuration
+    let theme_manager = crate::theme::ThemeManager::new();
+    theme_manager.apply(cfg.theme, cfg.custom_theme_path.as_deref(), &display);
+
+    // Register theme reloader for hot-reload from settings
+    let display_for_theme = display.clone();
+    global_state::set_theme_reloader(move |config| {
+        theme_manager.apply(
+            config.theme,
+            config.custom_theme_path.as_deref(),
+            &display_for_theme,
+        );
+    });
+
     // -----------------------------------------------------------------------
     // 2. Data Model Initialization
     // -----------------------------------------------------------------------

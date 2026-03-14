@@ -27,6 +27,7 @@ Take a quick look at grunner in action:
 | **Settings window** – Search tab                                                                   | ![Search tab](screenshots/settings_3.png)                                                                   |
 | **Settings window** – Obsidian tab                                                                 | ![Obsidian tab](screenshots/settings_4.png)                                                                 |
 | **Settings window** – Commands tab (custom terminal commands for `:sh`)                            | ![Commands tab](screenshots/settings_5.png)                                                                |
+| **Settings window** – Theme tab (built-in and custom themes)                                        | ![Theme tab](screenshots/settings_6.png)                                                                  |
 
 ---
 
@@ -42,7 +43,7 @@ Take a quick look at grunner in action:
 - **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
 - **Settings window** — graphical dialog with tabs for editing configuration, accessible from the power bar
 - **Hot reload** — changes to settings (including terminal commands) take effect immediately after saving, without needing to restart the app
-- **Themeable** — uses libadwaita CSS custom properties; automatically adapts to light/dark mode and the user's accent color
+- **Themeable** — choose from 10 built-in themes (System, Light, Dark, Tokyo Night, Catppuccin, Nord, Gruvbox, Dracula) or create your own custom theme with CSS variables
 - **Configurable** — a single TOML file controls window size, search directories, result limits, debounce timing, custom commands, and Obsidian paths
 - **Comprehensive logging** — integrated logging system with journald, syslog, file, and stderr backends, configurable via environment variables with panic capture for debugging
 
@@ -332,6 +333,13 @@ keep_open = true
 name = "Git Status"
 command = "git status"
 keep_open = true
+
+[theme]
+# Theme mode: system, system-light, system-dark, tokio-night, catppuccin-mocha,
+# catppuccin-latte, nord, gruvbox-dark, gruvbox-light, dracula, custom
+mode = "system"
+# Path to custom theme CSS file (only used when mode = "custom")
+# custom_theme_path = "~/.config/grunner/themes/my_theme.css"
 ```
 
 ### Configuration reference
@@ -352,7 +360,9 @@ keep_open = true
 | `commands[].name`             | string           | —           | Display name for terminal command               |
 | `commands[].command`          | string           | —           | Shell command to execute                        |
 | `commands[].working_dir`      | string (optional)| —           | Working directory for the command                |
-| `commands[].keep_open`        | boolean          | `true`      | Keep terminal open after command finishes       |
+| `commands[].keep_open`       | boolean          | `true`      | Keep terminal open after command finishes       |
+| `theme.mode`                  | string           | `system`    | Theme mode (see Theming section)                |
+| `theme.custom_theme_path`     | string (optional)| —           | Path to custom theme CSS file                    |
 
 ### Logging Configuration
 
@@ -395,17 +405,18 @@ For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md
 | `app_mode.rs`                | Application mode detection and management (Normal, FileSearch, Obsidian)                    |
 | `item_activation.rs`         | Item activation logic based on item type and application mode                               |
 | `calculator.rs`              | Mathematical expression evaluator using shunting yard algorithm (used in default search)    |
-| `obsidian_bar.rs`            | Obsidian action bar UI component with buttons for vault operations                          |
+| `obsidian_bar.rs`           | Obsidian action bar UI component with buttons for vault operations                          |
 | `power_bar.rs`               | Power action bar UI component with system management buttons                                |
 | `settings_window/`           | Settings dialog UI with configuration editing and validation                                |
 | `utils.rs`                   | Utility functions for path expansion, shell escaping, and home directory resolution         |
-| `global_state.rs`            | Global state management (Tokio runtime, home directory, etc.)                               |
+| `global_state.rs`            | Global state management (Tokio runtime, home directory, etc.)                              |
 | `search_provider.rs`         | D-Bus client for GNOME Shell search providers (discovery + query + activation)              |
-| `actions.rs`                 | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs        |
+| `actions.rs`                | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs        |
 | `config.rs`                  | TOML config loading with defaults and `~` expansion                                         |
 | `logging.rs`                 | Logging configuration and initialization with journald, syslog, file, and stderr backends   |
+| `theme.rs` / `theme/`        | Theme manager and built-in theme definitions (10 themes included)                          |
 | `items/`                     | GObject wrappers for different item types                                                   |
-| `workspace_bar.rs`           | Workspace bar UI component showing open windows                                             |
+| `workspace_bar.rs`          | Workspace bar UI component showing open windows                                             |
 | `style.css`                  | libadwaita CSS using `var(--accent-color)` and `var(--window-bg-color)`                     |
 
 ---
@@ -470,7 +481,69 @@ cargo build --release
 
 ## Theming
 
-Styles are defined in `style.css` and embedded in the binary at compile time. grunner uses libadwaita 1.6+ CSS custom properties, so it automatically inherits the system light/dark preference and accent color without any extra configuration. To apply custom styles, modify `src/style.css` and recompile.
+grunner includes 10 built-in themes that you can choose from in the Settings window (Theme tab) or via configuration:
+
+### Available Themes
+
+| Theme               | Description                              |
+| ------------------ | ---------------------------------------- |
+| `system`           | Follow system light/dark preference       |
+| `system-light`     | Force light theme                        |
+| `system-dark`      | Force dark theme                         |
+| `tokio-night`     | Tokyo Night (dark)                       |
+| `catppuccin-mocha` | Catppuccin Mocha (dark)                  |
+| `catppuccin-latte` | Catppuccin Latte (light)                 |
+| `nord`            | Nord (dark)                              |
+| `gruvbox-dark`    | Gruvbox Dark                             |
+| `gruvbox-light`   | Gruvbox Light                            |
+| `dracula`         | Dracula (dark)                           |
+| `custom`          | Load from custom CSS file                |
+
+### Configuration
+
+```toml
+[theme]
+mode = "tokio-night"
+# For custom themes:
+# custom_theme_path = "~/.config/grunner/themes/my_theme.css"
+```
+
+### Creating Custom Themes
+
+You can create your own theme by writing a CSS file. Save it anywhere (e.g., `~/.config/grunner/themes/my_theme.css`) and set `theme.custom_theme_path` in your config.
+
+The easiest way to create a custom theme is to copy one of the built-in themes as a starting point. The built-in themes are located in `src/theme/` in the source code.
+
+**Required CSS Variables:**
+
+```css
+:root {
+    /* Background colors */
+    --bg-primary: #1a1b26;      /* Main window background */
+    --bg-secondary: #24283b;     /* Search entry, cards */
+    --bg-tertiary: #414868;      /* Hover states, selections */
+
+    /* Text colors */
+    --text-primary: #c0caf5;     /* Main text */
+    --text-secondary: #7aa2f7;   /* Descriptions */
+    --text-muted: #565f89;       /* Disabled text */
+
+    /* Accent colors */
+    --accent: #7aa2f7;           /* Active items, buttons */
+    --accent-hover: #89b4fa;     /* Button hover */
+
+    /* UI elements */
+    --border: #3b4261;           /* Dividers, borders */
+    --selection-bg: #33467c;      /* Selected row background */
+    --selection-text: #c0caf5;   /* Selected row text */
+    --icon-default: #565f89;      /* Default icon color */
+    --icon-active: #7aa2f7;      /* Active icon color */
+    --scrollbar-bg: #1a1b26;    /* Scrollbar background */
+    --scrollbar-thumb: #3b4261; /* Scrollbar handle */
+}
+```
+
+**Note:** The Theme tab in Settings provides a preview and quick selection of built-in themes. For custom themes, you can also edit the configuration file directly.
 
 ---
 

@@ -1,0 +1,25 @@
+/* Theme variables - override libadwaita defaults */
+
+/* Tokyo Night */
+:root {
+    --window-bg-color: #1a1b26;
+    --window-fg-color: #c0caf5;
+    --accent-color: #7aa2f7;
+    --accent-bg-color: #7aa2f7;
+    
+    --bg-primary: #1a1b26;
+    --bg-secondary: #24283b;
+    --bg-tertiary: #414868;
+    --text-primary: #c0caf5;
+    --text-secondary: #7aa2f7;
+    --text-muted: #565f89;
+    --accent: #7aa2f7;
+    --accent-hover: #89b4fa;
+    --border: #3b4261;
+    --selection-bg: #33467c;
+    --selection-text: #c0caf5;
+    --icon-default: #565f89;
+    --icon-active: #7aa2f7;
+    --scrollbar-bg: #1a1b26;
+    --scrollbar-thumb: #3b4261;
+}

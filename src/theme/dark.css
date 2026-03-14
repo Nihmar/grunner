@@ -1,0 +1,20 @@
+/* Theme variables - override libadwaita defaults */
+/* Note: accent colors are NOT overridden to let OS accent color come through */
+
+:root {
+    --window-bg-color: #1e1e1e;
+    --window-fg-color: #eeeeee;
+    
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #2d2d2d;
+    --bg-tertiary: #3d3d3d;
+    --text-primary: #eeeeee;
+    --text-secondary: #b0b0b0;
+    --text-muted: #707070;
+    --border: #454545;
+    --selection-bg: #215d89;
+    --selection-text: #eeeeee;
+    --icon-default: #b0b0b0;
+    --scrollbar-bg: #2d2d2d;
+    --scrollbar-thumb: #505050;
+}

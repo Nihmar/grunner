@@ -1,0 +1,25 @@
+/* Theme variables - override libadwaita defaults */
+
+/* Gruvbox Light */
+:root {
+    --window-bg-color: #fbf1c7;
+    --window-fg-color: #3c3836;
+    --accent-color: #d65d0e;
+    --accent-bg-color: #d65d0e;
+    
+    --bg-primary: #fbf1c7;
+    --bg-secondary: #ebdbb2;
+    --bg-tertiary: #d5c4a1;
+    --text-primary: #3c3836;
+    --text-secondary: #504945;
+    --text-muted: #665c54;
+    --accent: #d65d0e;
+    --accent-hover: #fe8019;
+    --border: #d5c4a1;
+    --selection-bg: #d5c4a1;
+    --selection-text: #3c3836;
+    --icon-default: #665c54;
+    --icon-active: #d65d0e;
+    --scrollbar-bg: #fbf1c7;
+    --scrollbar-thumb: #d5c4a1;
+}

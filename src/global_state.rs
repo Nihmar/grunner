@@ -67,3 +67,28 @@ pub fn reload_config(config: &Config) {
         }
     });
 }
+
+// ─── Theme Reloader ─────────────────────────────────────────────────────────
+
+type ThemeReloader = Box<dyn Fn(&Config)>;
+
+thread_local! {
+    static THEME_RELOADER: RefCell<Option<ThemeReloader>> = RefCell::new(None);
+}
+
+pub fn set_theme_reloader<F>(reloader: F)
+where
+    F: Fn(&Config) + 'static,
+{
+    THEME_RELOADER.with(|r| {
+        *r.borrow_mut() = Some(Box::new(reloader));
+    });
+}
+
+pub fn reload_theme(config: &Config) {
+    THEME_RELOADER.with(|r| {
+        if let Some(reloader) = r.borrow().as_ref() {
+            reloader(config);
+        }
+    });
+}
