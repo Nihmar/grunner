@@ -169,7 +169,7 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
 /// Check if a line is a calculator result
 ///
 /// A calculator result has the format "expression = result" where:
-/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses)
+/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses, letters)
 /// - there's an equals sign in the middle
 fn is_calculator_result(line: &str) -> bool {
     // Check if line contains '='
@@ -191,7 +191,7 @@ fn is_calculator_result(line: &str) -> bool {
         return false;
     }
 
-    // Check if expression contains only valid calculator characters
+    // Check if expression contains only valid calculator characters (including ASCII letters for functions/constants)
     if !expr.chars().all(|c| {
         c.is_ascii_digit()
             || c == '.'
@@ -204,6 +204,7 @@ fn is_calculator_result(line: &str) -> bool {
             || c == '('
             || c == ')'
             || c.is_whitespace()
+            || c.is_ascii_alphabetic()
     }) {
         return false;
     }

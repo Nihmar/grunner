@@ -187,6 +187,9 @@ When you enter a mathematical expression (like `2+2`, `10*5`, `(2+3)*4`), grunne
 - Exponentiation: `^`
 - Parentheses for grouping: `(2+3)*4`
 - Unary minus: `-5 + 3`, `5 + -3`
+- Trigonometric functions: `sin(x)`, `cos(x)`, `tan(x)` (radians)
+- Square root: `sqrt(x)`
+- Mathematical constants: `pi`, `e`
 
 **Examples:**
 ```
@@ -195,6 +198,12 @@ When you enter a mathematical expression (like `2+2`, `10*5`, `(2+3)*4`), grunne
 (2 + 3) * 4    → 20
 10 / 3         → 3.3333333333
 2 ^ 3          → 8
+sin(0)         → 0
+cos(0)         → 1
+sqrt(16)       → 4
+pi             → 3.1415926536
+e              → 2.7182818285
+sin(pi/2)      → 1
 ```
 
 ### Colon commands

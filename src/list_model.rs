@@ -250,7 +250,7 @@ fn bind_command_item(
 /// Check if a line is a calculator result
 ///
 /// A calculator result has the format "expression = result" where:
-/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses)
+/// - expression contains only valid calculator characters (digits, operators, spaces, parentheses, letters)
 /// - there's an equals sign in the middle
 fn is_calculator_result(line: &str) -> bool {
     // Check if line contains '='
@@ -272,7 +272,7 @@ fn is_calculator_result(line: &str) -> bool {
         return false;
     }
 
-    // Check if expression contains only valid calculator characters
+    // Check if expression contains only valid calculator characters (including ASCII letters for functions/constants)
     if !expr.chars().all(|c| {
         c.is_ascii_digit()
             || c == '.'
@@ -285,6 +285,7 @@ fn is_calculator_result(line: &str) -> bool {
             || c == '('
             || c == ')'
             || c.is_whitespace()
+            || c.is_ascii_alphabetic()
     }) {
         return false;
     }
@@ -1353,5 +1354,42 @@ impl AppListModel {
         });
 
         factory
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_calculator_result() {
+        // Test basic calculator results
+        assert!(is_calculator_result("2 + 2 = 4"));
+        assert!(is_calculator_result("10 / 2 = 5"));
+
+        // Test function results
+        assert!(is_calculator_result("sin(0) = 0"));
+        assert!(is_calculator_result("cos(0) = 1"));
+        assert!(is_calculator_result("sqrt(4) = 2"));
+        assert!(is_calculator_result("tan(0) = 0"));
+
+        // Test constant results
+        assert!(is_calculator_result("pi = 3.1415926536"));
+        assert!(is_calculator_result("e = 2.7182818285"));
+
+        // Test complex expressions with functions
+        assert!(is_calculator_result("sin(0 + 0) = 0"));
+        assert!(is_calculator_result("sqrt(2 + 2) = 2"));
+
+        // Test invalid results (no equals sign or wrong format)
+        assert!(!is_calculator_result("abc"));
+        assert!(!is_calculator_result("2 + 2"));
+        assert!(!is_calculator_result(""));
+
+        // Note: is_calculator_result only checks format, not validity of expression
+        // "sin(x) = 1" has valid format (letters, parentheses, equals, number)
+        // but would fail at evaluation because 'x' is not a recognized identifier
+        // This is correct behavior - the function identifies potential calculator results,
+        // not validated results
     }
 }

@@ -8,6 +8,9 @@
 //! - Basic arithmetic operations (+, -, *, /, %)
 //! - Parentheses for grouping
 //! - Exponentiation (^)
+//! - Trigonometric functions (sin, cos, tan)
+//! - Square root (sqrt)
+//! - Mathematical constants (pi, e)
 //! - Floating point numbers
 //! - Error handling for invalid expressions
 
@@ -40,7 +43,7 @@ pub fn evaluate(expr: &str) -> Option<String> {
         return None;
     }
 
-    // Check if expression contains only valid characters (numbers, operators, spaces, parentheses)
+    // Check if expression contains only valid characters (numbers, operators, spaces, parentheses, ASCII letters)
     if !expr.chars().all(|c| {
         c.is_ascii_digit()
             || c == '.'
@@ -53,26 +56,32 @@ pub fn evaluate(expr: &str) -> Option<String> {
             || c == '('
             || c == ')'
             || c.is_whitespace()
+            || c.is_ascii_alphabetic()
     }) {
         return None;
     }
 
-    // Basic validation: expression should start with a digit, parenthesis, or unary minus
+    // Basic validation: expression should start with a digit, parenthesis, unary minus, or ASCII alphabetic character (function/constant)
     let first_char = expr.chars().find(|c| !c.is_whitespace());
     if let Some(c) = first_char
         && !c.is_ascii_digit()
         && c != '('
         && c != '-'
+        && !c.is_ascii_alphabetic()
     {
         return None;
     }
 
-    // Check if expression contains at least one operator (to avoid evaluating simple numbers)
+    // Check if expression contains at least one operator or function (to avoid evaluating simple numbers)
     // We need to be careful with minus signs - a leading minus might be unary, not binary
     let trimmed = expr.trim();
     let has_binary_op = trimmed
         .chars()
         .any(|c| matches!(c, '+' | '*' | '/' | '%' | '^'));
+
+    // Check for function calls or constants
+    let has_function_or_constant = trimmed.chars().any(|c| c.is_ascii_alphabetic());
+
     let _has_minus = trimmed.contains('-');
 
     // Count how many minus signs there are and their positions
@@ -89,8 +98,9 @@ pub fn evaluate(expr: &str) -> Option<String> {
     // Allow evaluation if:
     // 1. Has any operator besides minus, OR
     // 2. Has a minus that's not just a leading unary minus, OR
-    // 3. Has multiple minuses (e.g., "5 - -3")
-    if has_binary_op || has_non_leading_minus || has_multiple_minuses {
+    // 3. Has multiple minuses (e.g., "5 - -3"), OR
+    // 4. Has a function or constant (e.g., "sin(5)", "pi")
+    if has_binary_op || has_non_leading_minus || has_multiple_minuses || has_function_or_constant {
         // Allow evaluation
     } else {
         return None;
@@ -173,6 +183,28 @@ fn tokenize(expr: &str) -> Result<Vec<Token>, String> {
                 .map_err(|_| format!("Invalid number: {num_str}"))?;
             tokens.push(Token::Number(num));
             last_token_was_operator_or_open_paren = false;
+        } else if c.is_alphabetic() {
+            // Parse identifier (function or constant)
+            let mut ident = String::new();
+            while let Some(&ch) = chars.peek() {
+                if ch.is_alphabetic() {
+                    ident.push(ch);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+
+            match ident.as_str() {
+                "sin" => tokens.push(Token::Function(FunctionType::Sin)),
+                "cos" => tokens.push(Token::Function(FunctionType::Cos)),
+                "sqrt" => tokens.push(Token::Function(FunctionType::Sqrt)),
+                "tan" => tokens.push(Token::Function(FunctionType::Tan)),
+                "pi" => tokens.push(Token::Number(std::f64::consts::PI)),
+                "e" => tokens.push(Token::Number(std::f64::consts::E)),
+                _ => return Err(format!("Unknown identifier: {ident}")),
+            }
+            last_token_was_operator_or_open_paren = false;
         } else if c == '(' {
             tokens.push(Token::Operator(Operator::LeftParen));
             chars.next();
@@ -212,6 +244,16 @@ fn tokenize(expr: &str) -> Result<Vec<Token>, String> {
 enum Token {
     Number(f64),
     Operator(Operator),
+    Function(FunctionType),
+}
+
+/// Function types for the calculator
+#[derive(Debug, Clone, Copy)]
+enum FunctionType {
+    Sin,
+    Cos,
+    Sqrt,
+    Tan,
 }
 
 /// Operator types with precedence
@@ -261,6 +303,10 @@ fn shunting_yard(tokens: &[Token]) -> Result<Vec<Token>, String> {
     for &token in tokens {
         match token {
             Token::Number(_) => output.push(token),
+            Token::Function(_) => {
+                // Functions are pushed to the stack
+                stack.push(token);
+            }
             Token::Operator(op) => {
                 if op == Operator::LeftParen {
                     stack.push(token);
@@ -271,6 +317,12 @@ fn shunting_yard(tokens: &[Token]) -> Result<Vec<Token>, String> {
                             stack.pop();
                             break;
                         }
+                        output.push(stack.pop().unwrap());
+                    }
+                    // If the top of the stack is a function, pop it to output
+                    if let Some(&t) = stack.last()
+                        && let Token::Function(_) = t
+                    {
                         output.push(stack.pop().unwrap());
                     }
                 } else {
@@ -318,6 +370,24 @@ fn evaluate_rpn(rpn: &[Token]) -> Result<f64, String> {
     for &token in rpn {
         match token {
             Token::Number(n) => stack.push(n),
+            Token::Function(func) => {
+                if stack.is_empty() {
+                    return Err("Insufficient operands for function".to_string());
+                }
+                let a = stack.pop().unwrap();
+                let result = match func {
+                    FunctionType::Sin => a.sin(),
+                    FunctionType::Cos => a.cos(),
+                    FunctionType::Sqrt => {
+                        if a < 0.0 {
+                            return Err("Square root of negative number".to_string());
+                        }
+                        a.sqrt()
+                    }
+                    FunctionType::Tan => a.tan(),
+                };
+                stack.push(result);
+            }
             Token::Operator(op) => {
                 if op == Operator::UnaryMinus {
                     if stack.is_empty() {
@@ -408,5 +478,37 @@ mod tests {
 
         // Test modulo
         assert_eq!(evaluate("10 % 3"), Some("1".to_string()));
+    }
+
+    #[test]
+    fn test_functions() {
+        // Test sin (0 radians = 0)
+        assert_eq!(evaluate("sin(0)"), Some("0".to_string()));
+
+        // Test cos (0 radians = 1)
+        assert_eq!(evaluate("cos(0)"), Some("1".to_string()));
+
+        // Test sqrt
+        assert_eq!(evaluate("sqrt(4)"), Some("2".to_string()));
+        assert_eq!(evaluate("sqrt(2)"), Some("1.4142135624".to_string()));
+
+        // Test tan (0 radians = 0)
+        assert_eq!(evaluate("tan(0)"), Some("0".to_string()));
+
+        // Test pi
+        assert_eq!(evaluate("pi"), Some("3.1415926536".to_string()));
+
+        // Test e
+        assert_eq!(evaluate("e"), Some("2.7182818285".to_string()));
+
+        // Test function with expression
+        assert_eq!(evaluate("sin(0 + 0)"), Some("0".to_string()));
+        assert_eq!(evaluate("sqrt(2 + 2)"), Some("2".to_string()));
+
+        // Test function precedence
+        assert_eq!(evaluate("sin(0) + 1"), Some("1".to_string()));
+
+        // Test sqrt of negative number (should fail)
+        assert_eq!(evaluate("sqrt(-1)"), None);
     }
 }
