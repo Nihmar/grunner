@@ -30,7 +30,7 @@ use libadwaita::ApplicationWindow;
 /// - `":ob   todo list  "` → `"todo list"`
 pub fn extract_obsidian_arg(text: &str) -> &str {
     // Strip the ":ob " prefix and trim any surrounding whitespace
-    text.strip_prefix(":ob ").map(str::trim).unwrap_or("")
+    text.strip_prefix(":ob ").map_or("", str::trim)
 }
 
 /// Build the Obsidian action bar with buttons for Obsidian operations

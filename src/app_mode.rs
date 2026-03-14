@@ -71,7 +71,7 @@ impl AppMode {
     /// - `Obsidian`/`ObsidianGrep` → Uses the provided `obsidian_icon`
     /// - `CustomScript` → "utilities-terminal" (terminal icon)
     /// - `Normal` → `None` (no special icon)
-    pub fn icon_name<'a>(&self, obsidian_icon: &'a str) -> Option<&'a str> {
+    pub fn icon_name(self, obsidian_icon: &str) -> Option<&str> {
         match self {
             Self::FileSearch => Some("text-x-generic"),
             Self::Obsidian | Self::ObsidianGrep => Some(obsidian_icon),
@@ -88,7 +88,7 @@ impl AppMode {
     ///
     /// This is used by the UI to determine whether to show the special Obsidian
     /// action bar with buttons for vault actions, new notes, etc.
-    pub fn show_obsidian_bar(&self) -> bool {
+    pub fn show_obsidian_bar(self) -> bool {
         matches!(self, Self::Obsidian | Self::ObsidianGrep)
     }
 }

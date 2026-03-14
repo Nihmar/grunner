@@ -117,7 +117,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
                 && let Some(overlay) = overlay.upgrade()
             {
                 if let Err(e) = save_config(&config_rc.borrow()) {
-                    error!("Failed to save configuration: {}", e);
+                    error!("Failed to save configuration: {e}");
                     let toast = Toast::builder()
                         .title("Failed to save settings")
                         .timeout(3)

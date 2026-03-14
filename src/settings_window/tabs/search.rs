@@ -42,7 +42,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     debounce_row.set_range(100.0, 2000.0);
     debounce_row.adjustment().set_step_increment(50.0);
     debounce_row.adjustment().set_page_increment(100.0);
-    debounce_row.set_value(config_rc.borrow().command_debounce_ms as f64);
+    debounce_row.set_value(f64::from(config_rc.borrow().command_debounce_ms));
     debounce_row.connect_notify_local(Some("value"), {
         let config_rc = Rc::clone(config_rc);
         move |row, _| {

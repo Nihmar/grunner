@@ -76,7 +76,7 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
             // Extract the result part (after the equals sign)
             if let Some((_expr, result)) = line.split_once('=') {
                 let result_text = result.trim().to_string();
-                info!("Copying calculator result to clipboard: {}", result_text);
+                info!("Copying calculator result to clipboard: {result_text}");
 
                 // Copy to clipboard
                 if let Some(display) = gtk4::gdk::Display::default() {
@@ -118,13 +118,13 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
                 };
 
                 if !command_to_run.is_empty() {
-                    info!("Executing custom script command: {}", command_to_run);
+                    info!("Executing custom script command: {command_to_run}");
                     let working_dir = cmd_item.working_dir();
                     let keep_open = cmd_item.keep_open();
 
                     // Build command: optionally keep terminal open after execution
                     let final_command = if keep_open {
-                        format!("{}; exec $SHELL", command_to_run)
+                        format!("{command_to_run}; exec $SHELL")
                     } else {
                         command_to_run.to_string()
                     };
@@ -159,7 +159,7 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
             sr_item.id(),
             sr_item.terms(),
         );
-        info!("Activating search result: {} from provider {}", id, bus);
+        info!("Activating search result: {id} from provider {bus}");
         std::thread::spawn(move || {
             // Pass the timestamp
             crate::search_provider::activate_result(&bus, &path, &id, &terms, timestamp);

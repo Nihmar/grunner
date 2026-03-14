@@ -149,18 +149,17 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
         // Try to get app name and icon from desktop file
         let (title, icon_from_desktop) = resolve_from_desktop(wm_class)
             .or_else(|| resolve_from_desktop(wm_class_instance))
-            .map(|(n, i)| (n, Some(i)))
-            .unwrap_or_else(|| (String::new(), None));
+            .map_or_else(|| (String::new(), None), |(n, i)| (n, Some(i)));
 
-        let title = if !title.is_empty() {
-            title
-        } else {
+        let title = if title.is_empty() {
             raw.title
                 .clone()
                 .filter(|t| !t.is_empty())
                 .or_else(|| raw.wm_class.clone())
                 .or_else(|| raw.wm_class_instance.clone())
                 .unwrap_or_else(|| "Untitled".to_string())
+        } else {
+            title
         };
 
         let icon_name = icon_from_desktop
@@ -208,7 +207,7 @@ async fn activate_window(id: u64) {
 
     let result = windows.activate(id as u32).await;
     if let Err(e) = result {
-        log::warn!("[workspace_bar] Activate({}) failed: {}", id, e);
+        log::warn!("[workspace_bar] Activate({id}) failed: {e}");
     }
 }
 
@@ -218,16 +217,13 @@ async fn activate_window(id: u64) {
 fn resolve_from_desktop(wm_class: &str) -> Option<(String, String)> {
     let home = get_home_dir();
 
-    let filename = format!("{}.desktop", wm_class);
+    let filename = format!("{wm_class}.desktop");
     let search_dirs = [
-        format!("/usr/share/applications/{}", filename),
-        format!("{}/.local/share/applications/{}", home, filename),
-        format!("/usr/local/share/applications/{}", filename),
-        format!("/var/lib/flatpak/exports/share/applications/{}", filename),
-        format!(
-            "{}/.local/share/flatpak/exports/share/applications/{}",
-            home, filename
-        ),
+        format!("/usr/share/applications/{filename}"),
+        format!("{home}/.local/share/applications/{filename}"),
+        format!("/usr/local/share/applications/{filename}"),
+        format!("/var/lib/flatpak/exports/share/applications/{filename}"),
+        format!("{home}/.local/share/flatpak/exports/share/applications/{filename}"),
     ];
 
     for path in &search_dirs {
@@ -286,7 +282,7 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
     ];
     for (prefix, replacement) in &replacements {
         if let Some(stripped) = preferred.strip_prefix(prefix) {
-            let candidate = format!("{}{}", replacement, stripped);
+            let candidate = format!("{replacement}{stripped}");
             if theme.has_icon(&candidate) {
                 return candidate;
             }

@@ -20,7 +20,6 @@ use gtk4::gdk::Display;
 use gtk4::prelude::*;
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -145,31 +144,31 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
     // Standard directories where GNOME Shell search providers are installed
     let dirs: Vec<PathBuf> = vec![
         PathBuf::from("/usr/share/gnome-shell/search-providers"),
-        PathBuf::from(format!(
-            "{}/.local/share/gnome-shell/search-providers",
-            home
-        )),
+        PathBuf::from(format!("{home}/.local/share/gnome-shell/search-providers")),
         PathBuf::from("/var/lib/flatpak/exports/share/gnome-shell/search-providers"),
     ];
 
-    debug!("Discovering search providers, blacklist: {:?}", blacklist);
+    debug!("Discovering search providers, blacklist: {blacklist:?}");
     let mut providers = Vec::new();
     for dir in dirs {
         if !dir.is_dir() {
-            debug!("Skipping non-directory or missing directory: {:?}", dir);
+            debug!(
+                "Skipping non-directory or missing directory: {}",
+                dir.display()
+            );
             continue;
         }
         let entries = match std::fs::read_dir(&dir) {
             Ok(e) => e,
             Err(e) => {
-                warn!("Failed to read directory {:?}: {}", dir, e);
+                warn!("Failed to read directory {}: {e}", dir.display());
                 continue;
             }
         };
         for entry in entries.flatten() {
             let path = entry.path();
             // Only process .ini files (GNOME Shell search provider definitions)
-            if path.extension().map(|e| e == "ini").unwrap_or(false) {
+            if path.extension().is_some_and(|e| e == "ini") {
                 if let Some(p) = parse_ini(&path) {
                     // Skip if this provider's desktop_id is in the blacklist
                     if blacklist.iter().any(|b| b == &p.desktop_id) {
@@ -190,10 +189,14 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
                             p.desktop_id
                         );
                     }
-                    debug!("Discovered provider: {} from {:?}", p.desktop_id, path);
+                    debug!(
+                        "Discovered provider: {} from {}",
+                        p.desktop_id,
+                        path.display()
+                    );
                     providers.push(p);
                 } else {
-                    debug!("Failed to parse provider .ini file: {:?}", path);
+                    debug!("Failed to parse provider .ini file: {}", path.display());
                 }
             }
         }
@@ -217,7 +220,7 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            debug!("Failed to read .ini file {:?}: {}", path, e);
+            debug!("Failed to read .ini file {}: {e}", path.display());
             return None;
         }
     };
@@ -251,42 +254,34 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
     if version != Some(2) {
         if let Some(v) = version {
             debug!(
-                "Skipping provider {:?} with unsupported version {}",
-                path, v
+                "Skipping provider {} with unsupported version {v}",
+                path.display()
             );
         } else {
-            debug!("Skipping provider {:?} with missing version", path);
+            debug!("Skipping provider {} with missing version", path.display());
         }
         return None;
     }
 
-    let desktop_id = match desktop_id {
-        Some(id) => id,
-        None => {
-            debug!("Provider {:?} missing DesktopId field", path);
-            return None;
-        }
+    let Some(desktop_id) = desktop_id else {
+        debug!("Provider {} missing DesktopId field", path.display());
+        return None;
     };
 
-    let bus_name = match bus_name {
-        Some(name) => name,
-        None => {
-            debug!("Provider {:?} missing BusName field", path);
-            return None;
-        }
+    let Some(bus_name) = bus_name else {
+        debug!("Provider {} missing BusName field", path.display());
+        return None;
     };
 
-    let object_path = match object_path {
-        Some(path) => path,
-        None => {
-            debug!("Provider {:?} missing ObjectPath field", path);
-            return None;
-        }
+    let Some(object_path) = object_path else {
+        debug!("Provider {} missing ObjectPath field", path.display());
+        return None;
     };
 
     debug!(
-        "Successfully parsed provider: {} from {:?} (default_disabled: {})",
-        desktop_id, path, default_disabled
+        "Successfully parsed provider: {} from {} (default_disabled: {default_disabled})",
+        desktop_id,
+        path.display()
     );
     Some(SearchProvider {
         bus_name,
@@ -318,54 +313,47 @@ pub fn resolve_app_icon(desktop_id: &str) -> String {
     let filename = if desktop_id.ends_with(".desktop") {
         desktop_id.to_string()
     } else {
-        format!("{}.desktop", desktop_id)
+        format!("{desktop_id}.desktop")
     };
 
-    debug!(
-        "Resolving app icon for desktop ID: {} (filename: {})",
-        desktop_id, filename
-    );
+    debug!("Resolving app icon for desktop ID: {desktop_id} (filename: {filename})");
 
     // FIX: Include Flatpak export paths so that Flatpak-installed apps like
     // Bazaar have their icons resolved correctly. The original code only checked
     // XDG standard paths, causing Flatpak providers to always produce an empty
     // app_icon string.
     let search_dirs = [
-        format!("/usr/share/applications/{}", filename),
-        format!("{}/.local/share/applications/{}", home, filename),
-        format!("/usr/local/share/applications/{}", filename),
+        format!("/usr/share/applications/{filename}"),
+        format!("{home}/.local/share/applications/{filename}"),
+        format!("/usr/local/share/applications/{filename}"),
         // System-wide Flatpak exports
-        format!("/var/lib/flatpak/exports/share/applications/{}", filename),
+        format!("/var/lib/flatpak/exports/share/applications/{filename}"),
         // Per-user Flatpak exports
-        format!(
-            "{}/.local/share/flatpak/exports/share/applications/{}",
-            home, filename
-        ),
+        format!("{home}/.local/share/flatpak/exports/share/applications/{filename}"),
     ];
 
     for path in &search_dirs {
-        debug!("Checking for desktop file at: {}", path);
+        debug!("Checking for desktop file at: {path}");
         match std::fs::read_to_string(path) {
             Ok(content) => {
                 for line in content.lines() {
                     if let Some(icon) = line.trim().strip_prefix("Icon=") {
                         let icon_name = icon.trim().to_string();
                         debug!(
-                            "Found icon '{}' for desktop ID '{}' at path: {}",
-                            icon_name, desktop_id, path
+                            "Found icon '{icon_name}' for desktop ID '{desktop_id}' at path: {path}"
                         );
                         return icon_name;
                     }
                 }
-                debug!("Desktop file found at {} but no Icon= line", path);
+                debug!("Desktop file found at {path} but no Icon= line");
             }
             Err(e) => {
-                debug!("Could not read desktop file {}: {}", path, e);
+                debug!("Could not read desktop file {path}: {e}");
             }
         }
     }
 
-    warn!("No icon found for desktop ID: {}", desktop_id);
+    warn!("No icon found for desktop ID: {desktop_id}");
     String::new()
 }
 
@@ -432,7 +420,7 @@ fn parse_icon_variant(val: &OwnedValue) -> Option<IconData> {
         }
     }
 
-    inner(val.deref())
+    inner(val)
 }
 
 /// Extract themed icon name from a `GThemedIcon` payload
@@ -513,12 +501,12 @@ fn extract_file(val: &zbus::zvariant::Value<'_>) -> Option<IconData> {
             Value::Value(inner) => walk(inner),
             Value::Str(s) => {
                 let s = s.as_str();
-                if !s.is_empty() {
+                if s.is_empty() {
+                    None
+                } else {
                     // Strip file:// URI prefix if present
                     let path = s.strip_prefix("file://").unwrap_or(s);
                     Some(path.to_string())
-                } else {
-                    None
                 }
             }
             Value::Dict(d) => {
@@ -599,7 +587,7 @@ async fn query_all_streaming(
     let conn = match get_or_init_conn().await {
         Ok(c) => c,
         Err(e) => {
-            error!("Cannot connect to D-Bus session bus: {}", e);
+            error!("Cannot connect to D-Bus session bus: {e}");
             return;
         }
     };
@@ -633,10 +621,10 @@ async fn query_all_streaming(
                 }
             }
             Err(e) => {
-                error!("Search provider {} error: {}", bus_name, e);
+                error!("Search provider {bus_name} error: {e}");
             }
             _ => {
-                debug!("Provider {} returned empty result set", bus_name);
+                debug!("Provider {bus_name} returned empty result set");
             } // Empty results or other non-error cases
         }
     }
@@ -742,10 +730,7 @@ fn build_result(
         if let Some(display) = Display::default() {
             let clipboard = display.clipboard(); // ← no Option here!
             clipboard.set_text(&text);
-            info!(
-                "Copied '{}' to clipboard from search provider metadata",
-                text
-            );
+            info!("Copied '{text}' to clipboard from search provider metadata");
         } else {
             warn!("No default GDK Display available — cannot copy to clipboard");
         }
@@ -783,10 +768,10 @@ fn take_str(meta: &mut HashMap<String, OwnedValue>, key: &str) -> Option<String>
     // try_from to fail and return None. Since `id` is required in build_result,
     // a variant-wrapped id silently drops the entire result. We now unwrap one
     // level of variant before attempting conversion.
-    match val.deref() {
+    match &*val {
         Value::Str(s) => Some(s.as_str().to_string()),
         Value::Value(inner) => {
-            if let Value::Str(s) = inner.deref() {
+            if let Value::Str(s) = &**inner {
                 Some(s.as_str().to_string())
             } else {
                 // Still try the generic path for other wrapped types
@@ -823,10 +808,7 @@ pub fn activate_result(
     let object_path = object_path.to_string();
     let result_id = result_id.to_string();
     let terms = terms.to_vec();
-    debug!(
-        "Activating search result: {} from provider {}",
-        result_id, bus_name
-    );
+    debug!("Activating search result: {result_id} from provider {bus_name}");
 
     get_runtime().block_on(async move {
         let Ok(conn) = get_or_init_conn().await else {
@@ -841,7 +823,7 @@ pub fn activate_result(
         )
         .await
         else {
-            error!("Failed to create D-Bus proxy for provider {}", bus_name);
+            error!("Failed to create D-Bus proxy for provider {bus_name}");
             return;
         };
 
@@ -858,9 +840,9 @@ pub fn activate_result(
             )
             .await
         {
-            error!("Failed to activate result {}: {}", result_id, e);
+            error!("Failed to activate result {result_id}: {e}");
         } else {
-            info!("Successfully activated search result: {}", result_id);
+            info!("Successfully activated search result: {result_id}");
         }
     });
 }

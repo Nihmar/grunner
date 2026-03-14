@@ -130,7 +130,7 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
             let config_path = config::config_path();
             let uri = format!("file://{}", config_path.to_string_lossy());
             if let Err(e) = open_uri(&uri) {
-                error!("Failed to open config file: {}", e);
+                error!("Failed to open config file: {e}");
                 if let Some(overlay) = overlay.upgrade() {
                     let toast = Toast::builder()
                         .title("Failed to open config file")
@@ -139,7 +139,7 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
                     overlay.add_toast(toast);
                 }
             } else {
-                info!("Opened config file: {}", uri);
+                info!("Opened config file: {uri}");
                 // Close the settings window after opening config
                 if let Some(window) = window.upgrade() {
                     glib::timeout_add_local_once(
@@ -185,7 +185,7 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
                 && let Some(overlay) = overlay.upgrade()
             {
                 if let Err(e) = save_config(&config_rc.borrow()) {
-                    error!("Failed to save reset configuration: {}", e);
+                    error!("Failed to save reset configuration: {e}");
                     let toast = Toast::builder()
                         .title("Failed to save reset settings")
                         .timeout(3)

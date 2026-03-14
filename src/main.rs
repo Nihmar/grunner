@@ -88,7 +88,7 @@ fn main() -> glib::ExitCode {
         let enabled_count = providers.iter().filter(|p| !p.default_disabled).count();
         println!("Summary:");
         println!("  Total providers: {}", providers.len());
-        println!("  Enabled providers: {}", enabled_count);
+        println!("  Enabled providers: {enabled_count}");
         println!(
             "  Default-disabled providers: {}",
             providers.len() - enabled_count
@@ -99,7 +99,7 @@ fn main() -> glib::ExitCode {
 
     // Initialize logging system
     if let Err(e) = logging::init() {
-        eprintln!("Failed to initialize logging: {}", e);
+        eprintln!("Failed to initialize logging: {e}");
         // Continue without logging
     }
 

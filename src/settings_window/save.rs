@@ -69,7 +69,7 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
     let path = config::config_path();
-    debug!("Saving configuration to {:?}", path);
+    debug!("Saving configuration to {}", path.display());
 
     // Ensure directory exists
     if let Some(parent) = path.parent() {

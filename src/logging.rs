@@ -235,9 +235,8 @@ fn init_stderr_logger(level: LevelFilter) -> Result<(), SetLoggerError> {
 }
 
 /// Initialize no-op logger
-fn init_no_logger() -> Result<(), SetLoggerError> {
+fn init_no_logger() {
     log::set_max_level(LevelFilter::Off);
-    Ok(())
 }
 
 /// Initialize logging based on configuration
@@ -250,7 +249,10 @@ pub fn init_with_config(config: &LogConfig) -> Result<(), SetLoggerError> {
         LogDestination::Syslog => init_syslog_logger(config.level),
         LogDestination::File => init_file_logger(config.level, config.file_path.as_ref()),
         LogDestination::Stderr => init_stderr_logger(config.level),
-        LogDestination::None => init_no_logger(),
+        LogDestination::None => {
+            init_no_logger();
+            Ok(())
+        }
     };
 
     if let Err(e) = &result {
@@ -292,12 +294,12 @@ pub fn setup_panic_hook() {
                     message
                 );
             } else {
-                log::error!("PANIC: {}", message);
+                log::error!("PANIC: {message}");
             }
         }
 
         // Always print to stderr
-        eprintln!("PANIC: {}", panic_info);
+        eprintln!("PANIC: {panic_info}");
 
         // Call the default hook
         default_hook(panic_info);

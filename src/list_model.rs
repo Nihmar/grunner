@@ -86,12 +86,10 @@ fn set_desc(label: &gtk4::Label, text: &str) {
 ///
 /// Strips the vault path prefix from absolute paths to show cleaner
 /// relative paths in the UI when displaying Obsidian search results.
-fn relative_to_vault<'a>(path: &'a str, vault: &Option<String>) -> &'a str {
+fn relative_to_vault<'a>(path: &'a str, vault: Option<&String>) -> &'a str {
     vault
-        .as_deref()
         .and_then(|v| path.strip_prefix(v))
-        .map(|s| s.trim_start_matches('/'))
-        .unwrap_or(path)
+        .map_or(path, |s| s.trim_start_matches('/'))
 }
 
 /// Bind application item data to UI widgets
@@ -133,7 +131,7 @@ fn bind_command_item(
     name_label: &gtk4::Label,
     desc_label: &gtk4::Label,
     mode: ActiveMode,
-    vault_path: &Option<String>,
+    vault_path: Option<&String>,
     obsidian_icon: &str,
 ) {
     let line = item.line();
@@ -185,7 +183,7 @@ fn bind_calculator_result(
     image.set_icon_name(Some("accessories-calculator"));
     if let Some((_expr, result)) = line.split_once('=') {
         name_label.set_text(result.trim());
-        set_desc(desc_label, &format!("Calc: {}", line));
+        set_desc(desc_label, &format!("Calc: {line}"));
     } else {
         name_label.set_text(line);
         set_desc(desc_label, "Calculator result");
@@ -216,7 +214,7 @@ fn bind_obsidian_grep(
     image: &gtk4::Image,
     name_label: &gtk4::Label,
     desc_label: &gtk4::Label,
-    vault_path: &Option<String>,
+    vault_path: Option<&String>,
     obsidian_icon: &str,
 ) {
     image.set_icon_name(Some(obsidian_icon));
@@ -229,13 +227,25 @@ fn bind_obsidian_grep(
     }
 }
 
+fn extract_filename_and_parent(path: &str) -> (&str, &str) {
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path);
+    let parent = std::path::Path::new(path)
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("");
+    (filename, parent)
+}
+
 fn bind_file_path(
     line: &str,
     image: &gtk4::Image,
     name_label: &gtk4::Label,
     desc_label: &gtk4::Label,
     mode: ActiveMode,
-    vault_path: &Option<String>,
+    vault_path: Option<&String>,
     obsidian_icon: &str,
 ) {
     if !line.contains(':') {
@@ -254,10 +264,7 @@ fn bind_file_path(
     if let Some((file_path, rest)) = line.split_once(':') {
         let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
         image.set_from_gicon(&gio::content_type_get_icon(&ctype));
-        let filename = std::path::Path::new(file_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(file_path);
+        let (filename, _parent) = extract_filename_and_parent(file_path);
         name_label.set_text(filename);
         set_desc(desc_label, rest);
     }
@@ -269,39 +276,25 @@ fn bind_plain_file_path(
     name_label: &gtk4::Label,
     desc_label: &gtk4::Label,
     mode: ActiveMode,
-    vault_path: &Option<String>,
+    vault_path: Option<&String>,
     obsidian_icon: &str,
 ) {
     if mode == ActiveMode::ObsidianFile {
         image.set_icon_name(Some(obsidian_icon));
-        let filename = std::path::Path::new(&line)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(line);
+        let (filename, _parent) = extract_filename_and_parent(line);
         name_label.set_text(filename);
         let relative = relative_to_vault(line, vault_path);
         let parent = std::path::Path::new(relative)
             .parent()
             .and_then(|p| p.to_str())
             .filter(|s| !s.is_empty())
-            .or_else(|| {
-                std::path::Path::new(&line)
-                    .parent()
-                    .and_then(|p| p.to_str())
-            });
+            .or_else(|| std::path::Path::new(line).parent().and_then(|p| p.to_str()));
         set_desc(desc_label, parent.unwrap_or(""));
     } else {
         let (ctype, _) = gio::content_type_guess(Some(line), None::<&[u8]>);
         image.set_from_gicon(&gio::content_type_get_icon(&ctype));
-        let filename = std::path::Path::new(&line)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(line);
+        let (filename, parent) = extract_filename_and_parent(line);
         name_label.set_text(filename);
-        let parent = std::path::Path::new(&line)
-            .parent()
-            .and_then(|p| p.to_str())
-            .unwrap_or("");
         set_desc(desc_label, parent);
     }
 }
@@ -719,7 +712,7 @@ impl AppListModel {
 
         self.active_mode.set(ActiveMode::None);
         self.bump_task_gen();
-        let providers_clone: Vec<SearchProvider> = providers.to_vec();
+        let providers_clone: Vec<SearchProvider> = providers.clone();
         let max = self.max_results.get();
         let model_clone = self.clone();
         // Use shorter debounce for search providers for more responsive feel
@@ -839,7 +832,7 @@ impl AppListModel {
             // Check if query is a mathematical expression
             if let Some(result) = calculator::evaluate(query) {
                 // Add calculator result to the store
-                let calculator_result = format!("{} = {}", query, result);
+                let calculator_result = format!("{query} = {result}");
                 self.store.append(&CommandItem::new(calculator_result));
             } else {
                 // Use optimized search with prefix matching for simple queries
@@ -892,10 +885,7 @@ impl AppListModel {
     /// Handle colon-prefixed commands by routing to appropriate handlers
     fn handle_colon_command(&self, query: &str) {
         let (cmd_part, arg) = parse_colon_command(query);
-        debug!(
-            "handle_colon_command: query='{}', cmd_part='{}', arg='{}'",
-            query, cmd_part, arg
-        );
+        debug!("handle_colon_command: query='{query}', cmd_part='{cmd_part}', arg='{arg}'");
         debug!("Active mode: {:?}", self.active_mode.get());
 
         match cmd_part {
@@ -903,12 +893,12 @@ impl AppListModel {
             "f" => self.handle_file_search(arg),
             "fg" => self.handle_file_grep(arg),
             "sh" => {
-                debug!("Calling handle_sh with arg: '{}'", arg);
+                debug!("Calling handle_sh with arg: '{arg}'");
                 self.handle_sh(arg);
             }
             _ => {
                 if !cmd_part.is_empty() {
-                    self.show_error_item(format!("Unknown command: :{}", cmd_part));
+                    self.show_error_item(format!("Unknown command: :{cmd_part}"));
                 }
             }
         }
@@ -919,12 +909,11 @@ impl AppListModel {
     /// Returns `Some(PathBuf)` if vault is configured and exists,
     /// otherwise shows an error and returns `None`.
     fn validated_vault_path(&self) -> Option<PathBuf> {
-        let obs_cfg = match &self.obsidian_cfg {
-            Some(c) => c.clone(),
-            None => {
-                self.show_error_item("Obsidian not configured - edit config");
-                return None;
-            }
+        let obs_cfg = if let Some(c) = &self.obsidian_cfg {
+            c.clone()
+        } else {
+            self.show_error_item("Obsidian not configured - edit config");
+            return None;
         };
         let vault_path = expand_home(&obs_cfg.vault);
         if !vault_path.exists() {
@@ -977,7 +966,7 @@ impl AppListModel {
             }
             _ => {
                 // Should never happen as cmd_name comes from known commands
-                error!("Unexpected obsidian command: {}", cmd_name);
+                error!("Unexpected obsidian command: {cmd_name}");
                 return;
             }
         };
@@ -1057,7 +1046,7 @@ impl AppListModel {
 
         // If user typed a command that doesn't match saved ones, add "Run: ..." option
         if !arg.is_empty() {
-            let run_item_str = format!("Run: {}", arg);
+            let run_item_str = format!("Run: {arg}");
             // Custom commands default to keep_open=true
             self.store
                 .append(&CommandItem::new_with_options(run_item_str, None, true));
@@ -1174,7 +1163,7 @@ impl AppListModel {
                 .arg("-type")
                 .arg("f")
                 .arg("-iname")
-                .arg(format!("*{}*", argument))
+                .arg(format!("*{argument}*"))
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null());
             cmd
@@ -1226,7 +1215,7 @@ impl AppListModel {
             .arg("-type")
             .arg("f")
             .arg("-iname")
-            .arg(format!("*{}*", pattern));
+            .arg(format!("*{pattern}*"));
         self.run_subprocess(cmd);
     }
 
@@ -1314,10 +1303,7 @@ impl AppListModel {
         // Bind: Update widget content when item is displayed
         factory.connect_bind(move |_, list_item| {
             let list_item = list_item.downcast_ref::<ListItem>().unwrap();
-            let obj = match list_item.item() {
-                Some(o) => o,
-                None => return,
-            };
+            let Some(obj) = list_item.item() else { return };
 
             // Extract widgets from the list item
             let hbox = list_item
@@ -1351,7 +1337,7 @@ impl AppListModel {
                     &name_label,
                     &desc_label,
                     active_mode.get(),
-                    &vault_path,
+                    vault_path.as_ref(),
                     &obsidian_icon,
                 );
             } else if let Some(sr) = obj.downcast_ref::<SearchResultItem>() {

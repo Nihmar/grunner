@@ -87,6 +87,83 @@ fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
     let _ = list_view.activate_action("list.scroll-to-item", Some(&pos.to_variant()));
 }
 
+/// Set up keyboard event controller for search entry navigation
+///
+/// This creates an EventControllerKey that handles keyboard navigation:
+/// - Escape: close window
+/// - Enter: activate selected item
+/// - Arrow keys: move selection up/down
+/// - Page Up/Down: jump 10 items
+fn setup_keyboard_controller(
+    entry: &Entry,
+    list_view: &ListView,
+    window: &ApplicationWindow,
+    model: &AppListModel,
+    current_mode: &Rc<Cell<AppMode>>,
+) {
+    let key_ctrl = EventControllerKey::new();
+    key_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
+
+    key_ctrl.connect_key_pressed(clone!(
+        #[weak]
+        list_view,
+        #[weak]
+        window,
+        #[strong]
+        model,
+        #[strong]
+        current_mode,
+        #[upgrade_or]
+        glib::Propagation::Proceed,
+        move |_, key, _, _| {
+            match key {
+                Key::Escape => {
+                    window.hide();
+                    glib::Propagation::Stop
+                }
+                Key::Return | Key::KP_Enter => {
+                    let timestamp = gdk::CURRENT_TIME;
+                    let pos = model.selection.selected();
+                    if let Some(obj) = model.store.item(pos) {
+                        activate_item(&obj, &model, current_mode.get(), timestamp);
+                    }
+                    window.hide();
+                    glib::Propagation::Stop
+                }
+                Key::Down | Key::KP_Down => {
+                    let pos = model.selection.selected();
+                    let n = model.store.n_items();
+                    if pos + 1 < n {
+                        scroll_selection_to(&model, &list_view, pos + 1);
+                    }
+                    glib::Propagation::Stop
+                }
+                Key::Up | Key::KP_Up => {
+                    let pos = model.selection.selected();
+                    if pos > 0 {
+                        scroll_selection_to(&model, &list_view, pos - 1);
+                    }
+                    glib::Propagation::Stop
+                }
+                Key::Page_Down => {
+                    let pos = model.selection.selected();
+                    let n = model.store.n_items();
+                    let next = (pos + 10).min(n.saturating_sub(1));
+                    scroll_selection_to(&model, &list_view, next);
+                    glib::Propagation::Stop
+                }
+                Key::Page_Up => {
+                    let pos = model.selection.selected();
+                    scroll_selection_to(&model, &list_view, pos.saturating_sub(10));
+                    glib::Propagation::Stop
+                }
+                _ => glib::Propagation::Proceed,
+            }
+        }
+    ));
+    entry.add_controller(key_ctrl);
+}
+
 // ---------------------------------------------------------------------------
 // Main UI construction function
 // ---------------------------------------------------------------------------
@@ -351,75 +428,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // 10. Keyboard Navigation and Shortcuts
     // -----------------------------------------------------------------------
 
-    // Set up keyboard event controller for search entry
-    let key_ctrl = EventControllerKey::new();
-    key_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture); // Intercept before default handlers
-
-    key_ctrl.connect_key_pressed(clone!(
-        #[weak]
-        list_view,
-        #[weak]
-        window,
-        #[strong]
-        model,
-        #[strong]
-        current_mode,
-        #[upgrade_or]
-        glib::Propagation::Proceed,
-        move |_, key, _, _| {
-            match key {
-                // Escape: close window
-                Key::Escape => {
-                    window.hide();
-                    glib::Propagation::Stop
-                }
-                // Enter: activate selected item
-                Key::Return | Key::KP_Enter => {
-                    let timestamp = gdk::CURRENT_TIME;
-                    let pos = model.selection.selected();
-                    if let Some(obj) = model.store.item(pos) {
-                        activate_item(&obj, &model, current_mode.get(), timestamp);
-                    }
-                    window.hide();
-                    glib::Propagation::Stop
-                }
-                // Down arrow: move selection down
-                Key::Down | Key::KP_Down => {
-                    let pos = model.selection.selected();
-                    let n = model.store.n_items();
-                    if pos + 1 < n {
-                        scroll_selection_to(&model, &list_view, pos + 1);
-                    }
-                    glib::Propagation::Stop
-                }
-                // Up arrow: move selection up
-                Key::Up | Key::KP_Up => {
-                    let pos = model.selection.selected();
-                    if pos > 0 {
-                        scroll_selection_to(&model, &list_view, pos - 1);
-                    }
-                    glib::Propagation::Stop
-                }
-                // Page down: jump 10 items down
-                Key::Page_Down => {
-                    let pos = model.selection.selected();
-                    let n = model.store.n_items();
-                    let next = (pos + 10).min(n.saturating_sub(1));
-                    scroll_selection_to(&model, &list_view, next);
-                    glib::Propagation::Stop
-                }
-                // Page up: jump 10 items up
-                Key::Page_Up => {
-                    let pos = model.selection.selected();
-                    scroll_selection_to(&model, &list_view, pos.saturating_sub(10));
-                    glib::Propagation::Stop
-                }
-                // Other keys: allow default processing
-                _ => glib::Propagation::Proceed,
-            }
-        }
-    ));
-    entry.add_controller(key_ctrl);
+    setup_keyboard_controller(&entry, &list_view, &window, &model, &current_mode);
 
     // -----------------------------------------------------------------------
     // 11. List View Activation (Mouse Double-Click)

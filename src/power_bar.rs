@@ -160,7 +160,7 @@ pub fn build_power_bar(
                 } else {
                     // Create confirmation dialog for destructive power operation
                     let dialog = AlertDialog::builder()
-                        .heading(format!("{}?", label_str))
+                        .heading(format!("{label_str}?"))
                         .body(format!(
                             "Are you sure you want to {}?",
                             label_str.to_lowercase()

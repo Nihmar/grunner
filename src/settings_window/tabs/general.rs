@@ -25,7 +25,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     width_row.set_range(400.0, 1920.0);
     width_row.adjustment().set_step_increment(10.0);
     width_row.adjustment().set_page_increment(50.0);
-    width_row.set_value(config_rc.borrow().window_width as f64);
+    width_row.set_value(f64::from(config_rc.borrow().window_width));
     width_row.connect_notify_local(Some("value"), {
         let config_rc = Rc::clone(config_rc);
         move |row, _| {
@@ -41,7 +41,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     height_row.set_range(300.0, 1080.0);
     height_row.adjustment().set_step_increment(10.0);
     height_row.adjustment().set_page_increment(50.0);
-    height_row.set_value(config_rc.borrow().window_height as f64);
+    height_row.set_value(f64::from(config_rc.borrow().window_height));
     height_row.connect_notify_local(Some("value"), {
         let config_rc = Rc::clone(config_rc);
         move |row, _| {
