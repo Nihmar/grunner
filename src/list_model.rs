@@ -187,7 +187,7 @@ fn bind_calculator_result(
         name_label.set_text(result.trim());
         set_desc(desc_label, &format!("Calc: {}", line));
     } else {
-        name_label.set_text(&line);
+        name_label.set_text(line);
         set_desc(desc_label, "Calculator result");
     }
 }
@@ -206,7 +206,7 @@ fn bind_custom_script(
         name_label.set_text("Run command");
         set_desc(desc_label, stripped);
     } else {
-        name_label.set_text(&line);
+        name_label.set_text(line);
         set_desc(desc_label, "");
     }
 }
@@ -224,7 +224,7 @@ fn bind_obsidian_grep(
         name_label.set_text(relative_to_vault(file_path, vault_path));
         set_desc(desc_label, rest);
     } else {
-        name_label.set_text(&line);
+        name_label.set_text(line);
         set_desc(desc_label, "");
     }
 }
@@ -277,9 +277,9 @@ fn bind_plain_file_path(
         let filename = std::path::Path::new(&line)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or(&line);
+            .unwrap_or(line);
         name_label.set_text(filename);
-        let relative = relative_to_vault(&line, vault_path);
+        let relative = relative_to_vault(line, vault_path);
         let parent = std::path::Path::new(relative)
             .parent()
             .and_then(|p| p.to_str())
@@ -296,7 +296,7 @@ fn bind_plain_file_path(
         let filename = std::path::Path::new(&line)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or(&line);
+            .unwrap_or(line);
         name_label.set_text(filename);
         let parent = std::path::Path::new(&line)
             .parent()
@@ -313,7 +313,7 @@ fn bind_generic_output(
     desc_label: &gtk4::Label,
 ) {
     image.set_icon_name(Some("system-search"));
-    name_label.set_text(&line);
+    name_label.set_text(line);
     set_desc(desc_label, "");
 }
 
