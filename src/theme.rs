@@ -20,15 +20,8 @@ impl ThemeManager {
     }
 
     pub fn apply(&self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
-        // System mode doesn't load any custom CSS - lets libadwaita handle everything
-        // including accent color from the OS theme. Remove any previously applied provider.
-        if mode == ThemeMode::System {
-            gtk4::style_context_remove_provider_for_display(display, &self.provider);
-            log::info!("Using system theme (libadwaita defaults)");
-            return;
-        }
-
         let css = match mode {
+            ThemeMode::System => themes::DARK,
             ThemeMode::SystemLight => themes::LIGHT,
             ThemeMode::SystemDark => themes::DARK,
             ThemeMode::TokioNight => themes::TOKIO_NIGHT,
@@ -39,10 +32,10 @@ impl ThemeManager {
             ThemeMode::GruvboxLight => themes::GRUVBOX_LIGHT,
             ThemeMode::Dracula => themes::DRACULA,
             ThemeMode::Custom => self.load_custom_theme(custom_path),
-            ThemeMode::System => unreachable!(),
         };
 
         self.provider.load_from_data(css);
+        log::info!("Loaded CSS provider with {} bytes", css.len());
         gtk4::style_context_add_provider_for_display(
             display,
             &self.provider,

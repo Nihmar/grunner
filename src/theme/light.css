@@ -18,3 +18,88 @@
     --scrollbar-bg: #f6f5f4;
     --scrollbar-thumb: #c0bebc;
 }
+
+/* Style entry widgets (but not .search-entry which has its own styling) */
+entry {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border);
+}
+
+/* Ensure search entry maintains its specific styling */
+entry.search-entry {
+    background-color: var(--window-bg-color);
+    color: var(--window-fg-color);
+}
+
+/* Style buttons - system themes let GTK/libadwaita handle button styling */
+/* Button styling is commented out to allow OS accent colors to show through */
+
+/* Style all popovers (used by dropdowns) */
+popover,
+dropdown,
+dropdown popover {
+    background-color: transparent;
+}
+
+popover > contents,
+dropdown popover > contents {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+popover list,
+dropdown list,
+combobox list {
+    background-color: var(--bg-secondary);
+}
+
+popover list > row,
+dropdown list > row,
+combobox list > row {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+popover list > row:hover,
+dropdown list > row:hover,
+combobox list > row:hover {
+    background-color: var(--bg-tertiary);
+}
+
+/* ComboBoxText specific styling (deprecated but still used in settings) */
+/* The combobox itself should match the window background */
+combobox {
+    background-color: var(--window-bg-color);
+}
+
+/* Ensure the linked box container is also transparent */
+box.linked {
+    background-color: transparent;
+}
+
+/* Ensure the box inside button.combo is transparent */
+combobox button.combo > box {
+    background-color: transparent;
+}
+
+/* Ensure cellview inside combobox is transparent */
+combobox button.combo > box > cellview {
+    background-color: transparent;
+}
+
+combobox button.combo {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border);
+}
+
+combobox button.combo:hover {
+    background-color: var(--bg-tertiary);
+}
+
+combobox button.combo:active {
+    background-color: var(--bg-tertiary);
+}

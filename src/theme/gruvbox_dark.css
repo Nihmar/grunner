@@ -1,25 +1,132 @@
 /* Theme variables - override libadwaita defaults */
 
-/* Gruvbox Dark */
 :root {
     --window-bg-color: #282828;
     --window-fg-color: #ebdbb2;
-    --accent-color: #fe8019;
-    --accent-bg-color: #fe8019;
-    
+
     --bg-primary: #282828;
     --bg-secondary: #3c3836;
     --bg-tertiary: #504945;
     --text-primary: #ebdbb2;
     --text-secondary: #d5c4a1;
-    --text-muted: #665c54;
-    --accent: #fe8019;
-    --accent-hover: #fb4934;
+    --text-muted: #928374;
     --border: #504945;
     --selection-bg: #504945;
     --selection-text: #ebdbb2;
-    --icon-default: #665c54;
-    --icon-active: #fe8019;
-    --scrollbar-bg: #282828;
+    --icon-default: #928374;
+    --scrollbar-bg: #3c3836;
     --scrollbar-thumb: #504945;
+    /* Action colors */
+    --destructive-bg: #cc241d;
+    --destructive-fg: #ebdbb2;
+    --suggested-bg: #98971a;
+    --suggested-fg: #ebdbb2;
+}
+
+entry {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border);
+}
+
+/* Ensure search entry maintains its specific styling */
+entry.search-entry {
+    background-color: var(--window-bg-color);
+    color: var(--window-fg-color);
+}
+
+button {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border);
+}
+
+/* Destructive action button (Cancel) */
+button.destructive-action {
+    background-color: var(--destructive-bg);
+    color: var(--destructive-fg);
+    border-color: var(--destructive-bg);
+}
+
+button.destructive-action:hover {
+    background-color: color-mix(in srgb, var(--destructive-bg) 85%, white);
+}
+
+/* Suggested action button (Save) */
+button.suggested-action {
+    background-color: var(--suggested-bg);
+    color: var(--suggested-fg);
+    border-color: var(--suggested-bg);
+}
+
+button.suggested-action:hover {
+    background-color: color-mix(in srgb, var(--suggested-bg) 85%, white);
+}
+
+popover,
+dropdown,
+dropdown popover {
+    background-color: transparent;
+}
+
+popover > contents,
+dropdown popover > contents {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+popover list,
+dropdown list,
+combobox list {
+    background-color: var(--bg-secondary);
+}
+
+popover list > row,
+dropdown list > row,
+combobox list > row {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+popover list > row:hover,
+dropdown list > row:hover,
+combobox list > row:hover {
+    background-color: var(--bg-tertiary);
+}
+
+/* ComboBoxText specific styling (deprecated but still used in settings) */
+/* The combobox itself should match the window background */
+combobox {
+    background-color: var(--window-bg-color);
+}
+
+/* Ensure the linked box container is also transparent */
+box.linked {
+    background-color: transparent;
+}
+
+/* Ensure the box inside button.combo is transparent */
+combobox button.combo > box {
+    background-color: transparent;
+}
+
+/* Ensure cellview inside combobox is transparent */
+combobox button.combo > box > cellview {
+    background-color: transparent;
+}
+
+combobox button.combo {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border);
+}
+
+combobox button.combo:hover {
+    background-color: var(--bg-tertiary);
+}
+
+combobox button.combo:active {
+    background-color: var(--bg-tertiary);
 }

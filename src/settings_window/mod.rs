@@ -35,6 +35,13 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
     // Load current configuration
     let config = config::load();
 
+    // Apply theme to settings window display
+    if let Some(display) = gtk4::gdk::Display::default() {
+        log::info!("Applying theme to settings window");
+        let theme_manager = crate::theme::ThemeManager::new();
+        theme_manager.apply(config.theme, config.custom_theme_path.as_deref(), &display);
+    }
+
     // Create the preferences dialog (replaces deprecated PreferencesWindow since adw 1.6)
     // Note: PreferencesDialog is an AdwDialog, not a GtkWindow — no default_width/height
     let window = PreferencesDialog::builder()

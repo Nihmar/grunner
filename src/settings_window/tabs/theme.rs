@@ -49,10 +49,10 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
 
     let config_rc_clone = Rc::clone(config_rc);
     theme_combo.connect_changed(move |combo| {
-        if let Some(index) = combo.active() {
-            if let Some((mode, _)) = THEMES.get(index as usize) {
-                config_rc_clone.borrow_mut().theme = *mode;
-            }
+        if let Some(index) = combo.active()
+            && let Some((mode, _)) = THEMES.get(index as usize)
+        {
+            config_rc_clone.borrow_mut().theme = *mode;
         }
     });
 
