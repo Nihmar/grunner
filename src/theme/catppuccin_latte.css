@@ -3,7 +3,7 @@
 :root {
     --window-bg-color: #eff1f5;
     --window-fg-color: #4c4f69;
-    
+
     --bg-primary: #eff1f5;
     --bg-secondary: #e6e9ef;
     --bg-tertiary: #ccd0da;
@@ -20,7 +20,7 @@
     --destructive-bg: #d20f39;
     --destructive-fg: #eff1f5;
     --suggested-bg: #40a02b;
-    --suggested-fg: #eff1f5;
+    --suggested-fg: #1e1e2e;
 }
 
 entry {
@@ -44,7 +44,7 @@ button {
 /* Destructive action button (Cancel) */
 button.destructive-action {
     background-color: var(--destructive-bg);
-    color: var(--destructive-fg);
+    color: var(--destructive-fg) !important;
     border-color: var(--destructive-bg);
 }
 
@@ -55,7 +55,7 @@ button.destructive-action:hover {
 /* Suggested action button (Save) */
 button.suggested-action {
     background-color: var(--suggested-bg);
-    color: var(--suggested-fg);
+    color: var(--suggested-fg) !important;
     border-color: var(--suggested-bg);
 }
 

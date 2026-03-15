@@ -3,7 +3,7 @@
 :root {
     --window-bg-color: #2e3440;
     --window-fg-color: #eceff4;
-    
+
     --bg-primary: #2e3440;
     --bg-secondary: #3b4252;
     --bg-tertiary: #434c5e;
@@ -44,7 +44,7 @@ button {
 /* Destructive action button (Cancel) */
 button.destructive-action {
     background-color: var(--destructive-bg);
-    color: var(--destructive-fg);
+    color: var(--destructive-fg) !important;
     border-color: var(--destructive-bg);
 }
 
@@ -55,7 +55,7 @@ button.destructive-action:hover {
 /* Suggested action button (Save) */
 button.suggested-action {
     background-color: var(--suggested-bg);
-    color: var(--suggested-fg);
+    color: var(--suggested-fg) !important;
     border-color: var(--suggested-bg);
 }
 
