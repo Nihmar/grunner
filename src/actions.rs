@@ -169,7 +169,10 @@ pub fn power_action(action: &str) {
     debug!("Performing power action: {action}");
     let run_systemctl = |subcmd: &str| {
         debug!("Running systemctl {subcmd}");
-        if let Err(e) = std::process::Command::new("systemctl").arg(subcmd).spawn() {
+        let mut cmd = std::process::Command::new("systemctl");
+        // Use -i to ignore inhibitors and force the operation
+        cmd.arg("-i").arg(subcmd);
+        if let Err(e) = cmd.spawn() {
             error!("Failed to run systemctl {subcmd}: {e}");
         } else {
             info!("Successfully initiated systemctl {subcmd}");
