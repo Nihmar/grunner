@@ -1181,7 +1181,7 @@ impl AppListModel {
             cmd.arg("--with-filename")
                 .arg("--line-number")
                 .arg("--no-heading")
-                .arg("-S")
+                .arg("-i")
                 .arg(argument)
                 .arg(home)
                 .stdout(std::process::Stdio::piped())
@@ -1223,7 +1223,7 @@ impl AppListModel {
     fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
         if which("rg").is_some() {
             let mut cmd = std::process::Command::new("rg");
-            cmd.arg("--smart-case")
+            cmd.arg("-i")
                 .arg("--with-filename")
                 .arg("--line-number")
                 .arg("--no-heading")
