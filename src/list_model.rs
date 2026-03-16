@@ -1223,7 +1223,8 @@ impl AppListModel {
     fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
         if which("rg").is_some() {
             let mut cmd = std::process::Command::new("rg");
-            cmd.arg("--with-filename")
+            cmd.arg("--smart-case")
+                .arg("--with-filename")
                 .arg("--line-number")
                 .arg("--no-heading")
                 .arg("--color=never")
@@ -1234,6 +1235,7 @@ impl AppListModel {
             let mut cmd = std::process::Command::new("grep");
             cmd.arg("-r")
                 .arg("-n")
+                .arg("-i")
                 .arg("-I")
                 .arg("-H")
                 .arg("--color=never")
