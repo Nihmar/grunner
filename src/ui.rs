@@ -29,8 +29,9 @@ use gtk4::gdk;
 use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, Image, ListView,
-    Orientation, Revealer, RevealerTransitionType, ScrolledWindow, Separator,
+    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, EventControllerMotion,
+    Image, ListView, Orientation, Overlay, Revealer, RevealerTransitionType, ScrolledWindow,
+    Separator,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow};
@@ -284,41 +285,61 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         None
     };
     if let Some(ref workspace_bar) = workspace_bar {
-        // ── Edge trigger ────────────────────────────────────────────
-        // Thin vertical strip on the left edge: illuminates on hover,
-        // click toggles the workspace sidebar visibility.
-        let edge_trigger = Button::new();
-        edge_trigger.add_css_class("edge-trigger");
-        edge_trigger.set_tooltip_text(Some("Mostra finestre workspace"));
-        // Non deve mai rubare il focus dall'entry
-        edge_trigger.set_can_focus(false);
-        edge_trigger.set_focus_on_click(false);
-        root.append(&edge_trigger);
+        // ── Sidebar hover wrapper ────────────────────────────────────
+        // Un HBox che contiene edge trigger + revealer. L'EventControllerMotion
+        // è attaccato a questo wrapper: enter → apre, leave → chiude.
+        // In questo modo la sidebar resta aperta mentre il mouse è dentro.
+        let sidebar_wrapper = GtkBox::new(Orientation::Horizontal, 0);
+        root.append(&sidebar_wrapper);
 
-        // ── Revealer wrapping the workspace bar ──────────────────────
-        // Hidden by default; slides in from the left on demand.
+        // ── Edge trigger ────────────────────────────────────────────
+        let edge_trigger = GtkBox::new(Orientation::Vertical, 0);
+        edge_trigger.add_css_class("edge-trigger");
+        edge_trigger.set_can_focus(false);
+        sidebar_wrapper.append(&edge_trigger);
+
+        // ── Revealer con Overlay per il fade del bordo destro ────────
+        // L'Overlay sovrappone un Box con gradiente CSS sopra la sidebar,
+        // simulando la dissolvenza che mask-image multipla non può fare.
         let sidebar_revealer = Revealer::builder()
             .transition_type(RevealerTransitionType::SlideRight)
-            .transition_duration(200)
+            .transition_duration(180)
             .reveal_child(false)
             .build();
-        sidebar_revealer.set_child(Some(workspace_bar));
-        root.append(&sidebar_revealer);
 
-        // ── Toggle logic ─────────────────────────────────────────────
-        edge_trigger.connect_clicked(clone!(
+        let sidebar_overlay = Overlay::new();
+        sidebar_overlay.set_child(Some(workspace_bar));
+
+        // Gradiente sovrapposto: trasparente a sinistra, window-bg a destra
+        let fade_overlay = GtkBox::new(Orientation::Horizontal, 0);
+        fade_overlay.add_css_class("sidebar-fade-overlay");
+        fade_overlay.set_halign(Align::End);
+        fade_overlay.set_valign(Align::Fill);
+        fade_overlay.set_hexpand(false);
+        fade_overlay.set_vexpand(true);
+        fade_overlay.set_can_target(false); // non intercetta eventi mouse
+        sidebar_overlay.add_overlay(&fade_overlay);
+
+        sidebar_revealer.set_child(Some(&sidebar_overlay));
+        sidebar_wrapper.append(&sidebar_revealer);
+
+        // ── Hover: apre/chiude al passaggio del mouse ────────────────
+        let motion = EventControllerMotion::new();
+        motion.connect_enter(clone!(
             #[weak]
             sidebar_revealer,
-            move |btn| {
-                let now_visible = sidebar_revealer.reveals_child();
-                sidebar_revealer.set_reveal_child(!now_visible);
-                btn.set_tooltip_text(Some(if now_visible {
-                    "Mostra finestre workspace"
-                } else {
-                    "Nascondi finestre workspace"
-                }));
+            move |_, _, _| {
+                sidebar_revealer.set_reveal_child(true);
             }
         ));
+        motion.connect_leave(clone!(
+            #[weak]
+            sidebar_revealer,
+            move |_| {
+                sidebar_revealer.set_reveal_child(false);
+            }
+        ));
+        sidebar_wrapper.add_controller(motion);
     }
 
     let content = GtkBox::new(Orientation::Vertical, 0);
