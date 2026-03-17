@@ -29,8 +29,8 @@ use gtk4::gdk;
 use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, EventControllerMotion,
-    Image, ListView, Orientation, Revealer, RevealerTransitionType, ScrolledWindow, Separator,
+    Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, EventControllerMotion,
+    Image, ListView, Orientation, Revealer, RevealerTransitionType, ScrolledWindow,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow};

@@ -163,6 +163,14 @@ scrollbar slider:hover {
     background: none;
 }
 
+.power-bar .power-button:hover {
+    background: alpha(currentColor, 0.1);
+}
+
+.power-bar .power-button:active {
+    background: alpha(currentColor, 0.2);
+}
+
 /* Settings dialog — pill-style tab strip */
 notebook.pill-tabs > header {
     background: transparent;
@@ -306,7 +314,7 @@ notebook.pill-tabs > stack {
 .edge-trigger {
     min-width: 5px;
     min-height: 0;
-    margin: 6px 6px;
+    /*margin: 10px 4px;*/
     border-radius: 3px;
     background: color-mix(in srgb, var(--window-fg-color) 8%, transparent);
     transition:
@@ -316,9 +324,13 @@ notebook.pill-tabs > stack {
 
 /* Il wrapper :hover illumina il trigger quando il mouse entra nell'area */
 *:hover > .edge-trigger {
-    background-color: var(--accent-bg-color);
+    background-color: color-mix(
+        in srgb,
+        var(--accent-bg-color) 50%,
+        transparent
+    );
     box-shadow: 0 0 8px 1px
-        color-mix(in srgb, var(--accent-bg-color) 50%, transparent);
+        color-mix(in srgb, var(--accent-bg-color) 25%, transparent);
 }
 
 /* ── Workspace sidebar fade ───────────────────────────────────── */
@@ -326,6 +338,7 @@ notebook.pill-tabs > stack {
 /* GTK4 supporta -gtk-mask-image con un singolo layer senza problemi. */
 .workspace-bar {
     -gtk-mask-image: linear-gradient(to right, black 55%, transparent 100%);
+    mask-image: linear-gradient(to right, black 55%, transparent 100%);
 }
 
 /* ── Workspace window bar ─────────────────────────────────────── */
