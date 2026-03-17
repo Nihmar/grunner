@@ -306,7 +306,7 @@ notebook.pill-tabs > stack {
 .edge-trigger {
     min-width: 5px;
     min-height: 0;
-    margin: 10px 4px;
+    margin: 6px 6px;
     border-radius: 3px;
     background: color-mix(in srgb, var(--window-fg-color) 8%, transparent);
     transition:
@@ -321,17 +321,11 @@ notebook.pill-tabs > stack {
         color-mix(in srgb, var(--accent-bg-color) 50%, transparent);
 }
 
-/* ── Sidebar fade overlay ─────────────────────────────────────── */
-/* Box trasparente sovrapposto sul lato destro della sidebar:     */
-/* simula la dissolvenza che GTK non può fare con mask multipla.  */
-.sidebar-fade-overlay {
-    min-width: 48px;
-    halign: end;
-    background: linear-gradient(
-        to right,
-        transparent 0%,
-        var(--window-bg-color) 100%
-    );
+/* ── Workspace sidebar fade ───────────────────────────────────── */
+/* Singolo gradiente orizzontale: la barra sfuma sul bordo destro. */
+/* GTK4 supporta -gtk-mask-image con un singolo layer senza problemi. */
+.workspace-bar {
+    -gtk-mask-image: linear-gradient(to right, black 55%, transparent 100%);
 }
 
 /* ── Workspace window bar ─────────────────────────────────────── */

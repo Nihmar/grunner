@@ -30,8 +30,7 @@ use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, EventControllerMotion,
-    Image, ListView, Orientation, Overlay, Revealer, RevealerTransitionType, ScrolledWindow,
-    Separator,
+    Image, ListView, Orientation, Revealer, RevealerTransitionType, ScrolledWindow, Separator,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow};
@@ -307,20 +306,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             .reveal_child(false)
             .build();
 
-        let sidebar_overlay = Overlay::new();
-        sidebar_overlay.set_child(Some(workspace_bar));
-
-        // Gradiente sovrapposto: trasparente a sinistra, window-bg a destra
-        let fade_overlay = GtkBox::new(Orientation::Horizontal, 0);
-        fade_overlay.add_css_class("sidebar-fade-overlay");
-        fade_overlay.set_halign(Align::End);
-        fade_overlay.set_valign(Align::Fill);
-        fade_overlay.set_hexpand(false);
-        fade_overlay.set_vexpand(true);
-        fade_overlay.set_can_target(false); // non intercetta eventi mouse
-        sidebar_overlay.add_overlay(&fade_overlay);
-
-        sidebar_revealer.set_child(Some(&sidebar_overlay));
+        sidebar_revealer.set_child(Some(workspace_bar));
         sidebar_wrapper.append(&sidebar_revealer);
 
         // ── Hover: apre/chiude al passaggio del mouse ────────────────
