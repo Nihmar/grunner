@@ -29,8 +29,8 @@ use gtk4::gdk;
 use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, Image, ListView, Orientation,
-    ScrolledWindow, Separator,
+    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, Image, ListView,
+    Orientation, Revealer, RevealerTransitionType, ScrolledWindow, Separator,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow};
@@ -284,22 +284,41 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         None
     };
     if let Some(ref workspace_bar) = workspace_bar {
-        root.append(workspace_bar);
-        let separator = Separator::new(Orientation::Vertical);
-        separator.add_css_class("workspace-separator");
-        root.append(&separator);
+        // ── Edge trigger ────────────────────────────────────────────
+        // Thin vertical strip on the left edge: illuminates on hover,
+        // click toggles the workspace sidebar visibility.
+        let edge_trigger = Button::new();
+        edge_trigger.add_css_class("edge-trigger");
+        edge_trigger.set_tooltip_text(Some("Mostra finestre workspace"));
+        // Non deve mai rubare il focus dall'entry
+        edge_trigger.set_can_focus(false);
+        edge_trigger.set_focus_on_click(false);
+        root.append(&edge_trigger);
 
-        // Sync separator visibility with workspace bar
-        workspace_bar.connect_notify_local(
-            Some("visible"),
-            glib::clone!(
-                #[weak]
-                separator,
-                move |bar, _| {
-                    separator.set_visible(bar.is_visible());
-                }
-            ),
-        );
+        // ── Revealer wrapping the workspace bar ──────────────────────
+        // Hidden by default; slides in from the left on demand.
+        let sidebar_revealer = Revealer::builder()
+            .transition_type(RevealerTransitionType::SlideRight)
+            .transition_duration(200)
+            .reveal_child(false)
+            .build();
+        sidebar_revealer.set_child(Some(workspace_bar));
+        root.append(&sidebar_revealer);
+
+        // ── Toggle logic ─────────────────────────────────────────────
+        edge_trigger.connect_clicked(clone!(
+            #[weak]
+            sidebar_revealer,
+            move |btn| {
+                let now_visible = sidebar_revealer.reveals_child();
+                sidebar_revealer.set_reveal_child(!now_visible);
+                btn.set_tooltip_text(Some(if now_visible {
+                    "Mostra finestre workspace"
+                } else {
+                    "Nascondi finestre workspace"
+                }));
+            }
+        ));
     }
 
     let content = GtkBox::new(Orientation::Vertical, 0);

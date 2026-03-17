@@ -302,6 +302,50 @@ notebook.pill-tabs > stack {
     outline: none;
 }
 
+/* ── Edge trigger ─────────────────────────────────────────────── */
+/* Thin vertical strip on the left edge of the launcher.          */
+/* Glows with accent color on hover; click reveals the sidebar.   */
+.edge-trigger {
+    min-width: 5px;
+    min-height: 0;
+    padding: 0;
+    /*margin: 10px 4px;*/
+    border: none;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--window-fg-color) 8%, transparent);
+    box-shadow: none;
+    transition:
+        background-color 180ms ease,
+        box-shadow 180ms ease;
+}
+
+.edge-trigger:hover {
+    background-color: var(--accent-bg-color);
+    box-shadow: 0 0 8px 1px
+        color-mix(in srgb, var(--accent-bg-color) 50%, transparent);
+}
+
+.edge-trigger:active {
+    background-color: color-mix(in srgb, var(--accent-bg-color) 75%, white);
+    box-shadow: none;
+}
+
+/* ── Workspace sidebar fade ───────────────────────────────────── */
+/* Dissolvenza su tutti e tre i bordi "liberi" della sidebar:     */
+/* top, bottom e soprattutto il bordo destro che sfuma nel nulla. */
+.workspace-bar {
+    mask-image:
+        linear-gradient(
+            to bottom,
+            transparent 0%,
+            black 15%,
+            black 85%,
+            transparent 100%
+        ),
+        linear-gradient(to right, black 45%, transparent 100%);
+    mask-composite: intersect;
+}
+
 /* ── Workspace window bar ─────────────────────────────────────── */
 .workspace-bar {
     min-height: 42px;
