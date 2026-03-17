@@ -33,9 +33,10 @@ fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::Ic
     // Create button with power button styling
     let btn = Button::new();
     btn.add_css_class("power-button");
+    btn.set_focusable(false); // Prevent buttons from stealing focus from entry
 
     // Create horizontal box to hold icon or label
-    let btn_box = GtkBox::new(Orientation::Horizontal, 6);
+    let btn_box = GtkBox::new(Orientation::Horizontal, 0);
     btn_box.set_halign(Align::Center);
 
     // Try each icon candidate in order until we find one available in the theme
@@ -50,7 +51,7 @@ fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::Ic
     }
 
     // Set tooltip with the label text
-    btn.set_tooltip_text(Some(label));
+    // btn.set_tooltip_text(Some(label));
     btn.set_child(Some(&btn_box));
     btn
 }
@@ -75,9 +76,9 @@ pub fn build_power_bar(
     icon_theme: &gtk4::IconTheme,
 ) -> GtkBox {
     // Create the main horizontal container for the power bar
-    let power_bar = GtkBox::new(Orientation::Horizontal, 8);
+    let power_bar = GtkBox::new(Orientation::Horizontal, 0);
     power_bar.add_css_class("power-bar");
-    power_bar.set_hexpand(true);
+    // power_bar.set_hexpand(true);
 
     // --- Settings Button (left side) ---
     // Settings button provides immediate access to configuration without confirmation
@@ -104,9 +105,9 @@ pub fn build_power_bar(
     }
 
     // Spacer to push power buttons to the right side of the bar
-    let spacer = GtkBox::new(Orientation::Horizontal, 0);
-    spacer.set_hexpand(true);
-    power_bar.append(&spacer);
+    // let spacer = GtkBox::new(Orientation::Horizontal, 0);
+    // spacer.set_hexpand(true);
+    // power_bar.append(&spacer);
 
     // --- Power Operation Buttons (right side) ---
     // Each power operation requires user confirmation via dialog

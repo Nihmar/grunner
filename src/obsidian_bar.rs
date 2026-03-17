@@ -69,7 +69,7 @@ pub fn build_obsidian_bar(
     // Create a button for each Obsidian action
     for (label, action) in obsidian_actions {
         let btn = Button::with_label(label);
-        btn.add_css_class("power-button"); // Use same styling as power buttons
+        btn.add_css_class("power-button"); // Styled similarly to power buttons but with background
         btn.set_tooltip_text(Some(label));
 
         // Connect button click to perform the Obsidian action

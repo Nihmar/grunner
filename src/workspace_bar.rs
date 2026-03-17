@@ -406,14 +406,14 @@ fn populate(
 #[must_use]
 pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     let scroll = ScrolledWindow::builder()
-        .hscrollbar_policy(PolicyType::Automatic)
-        .vscrollbar_policy(PolicyType::Never)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .hscrollbar_policy(PolicyType::Never)
         .min_content_height(1)
         .build();
     scroll.add_css_class("workspace-bar");
     scroll.set_visible(false);
 
-    let buttons_box = GtkBox::new(Orientation::Horizontal, 6);
+    let buttons_box = GtkBox::new(Orientation::Vertical, 6);
     buttons_box.add_css_class("workspace-bar-buttons");
     scroll.set_child(Some(&buttons_box));
 

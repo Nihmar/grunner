@@ -30,7 +30,7 @@ use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, Image, ListView, Orientation,
-    ScrolledWindow,
+    ScrolledWindow, Separator,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow};
@@ -266,9 +266,46 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // -----------------------------------------------------------------------
 
     // Create vertical box as root container for all UI elements
-    let root = GtkBox::new(Orientation::Vertical, 0);
+    let root = GtkBox::new(Orientation::Horizontal, 0);
     root.add_css_class("launcher-box");
     root.set_overflow(gtk4::Overflow::Hidden); // Prevent scrolling of entire window
+
+    // Build workspace/window bar (shown between search entry and results when
+    // there are open windows on the current workspace; hidden otherwise).
+    // Also hidden when simple mode is enabled.
+    let workspace_bar = if cfg.workspace_bar_enabled && !cfg.disable_modes {
+        Some(build_workspace_bar(&window))
+    } else {
+        if cfg.disable_modes {
+            info!("Workspace bar disabled (simple mode)");
+        } else {
+            info!("Workspace bar disabled via configuration");
+        }
+        None
+    };
+    if let Some(ref workspace_bar) = workspace_bar {
+        root.append(workspace_bar);
+        let separator = Separator::new(Orientation::Vertical);
+        separator.add_css_class("workspace-separator");
+        root.append(&separator);
+
+        // Sync separator visibility with workspace bar
+        workspace_bar.connect_notify_local(
+            Some("visible"),
+            glib::clone!(
+                #[weak]
+                separator,
+                move |bar, _| {
+                    separator.set_visible(bar.is_visible());
+                }
+            ),
+        );
+    }
+
+    let content = GtkBox::new(Orientation::Vertical, 0);
+    // content.add_css_class("launcher-box");
+    content.set_overflow(gtk4::Overflow::Hidden);
+    root.append(&content);
 
     // -----------------------------------------------------------------------
     // 5. Search Entry Area
@@ -297,7 +334,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry.add_css_class("search-entry");
     entry_box.append(&entry);
 
-    root.append(&entry_box);
+    content.append(&entry_box);
 
     // -----------------------------------------------------------------------
     // 6. Action Bars and Results List
@@ -317,20 +354,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         Some(build_power_bar(&window, &entry, &icon_theme))
     };
 
-    // Build workspace/window bar (shown between search entry and results when
-    // there are open windows on the current workspace; hidden otherwise).
-    // Also hidden when simple mode is enabled.
-    let workspace_bar = if cfg.workspace_bar_enabled && !cfg.disable_modes {
-        Some(build_workspace_bar(&window))
-    } else {
-        if cfg.disable_modes {
-            info!("Workspace bar disabled (simple mode)");
-        } else {
-            info!("Workspace bar disabled via configuration");
-        }
-        None
-    };
-
     // Create list view factory for rendering result items
     let factory = model.create_factory();
     // Create list view with selection model and custom factory
@@ -347,13 +370,10 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     // Assemble all UI components in order:
     //   search entry → workspace bar → results → obsidian bar → power bar
-    if let Some(ref workspace_bar) = workspace_bar {
-        root.append(workspace_bar);
-    }
-    root.append(&scrolled);
-    root.append(&obsidian_bar);
+    content.append(&scrolled);
+    content.append(&obsidian_bar);
     if let Some(ref pb) = power_bar {
-        root.append(pb);
+        entry_box.append(pb);
     }
 
     // Set root container as window content
@@ -389,7 +409,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             command_icon.set_visible(false);
 
             // Focus search entry for immediate typing
-            entry.grab_focus();
+            // Use idle_add to ensure focus is set after window is fully realized
+            let entry_clone = entry.clone();
+            glib::idle_add_local_once(move || {
+                entry_clone.grab_focus();
+            });
         }
     ));
 
