@@ -6,6 +6,7 @@
 pub mod actions;
 pub mod app_mode;
 pub mod calculator;
+pub mod command_handler;
 pub mod core {
     pub mod config;
     pub mod global_state;

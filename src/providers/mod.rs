@@ -7,6 +7,7 @@
 
 pub mod dbus_provider;
 
+use crate::core::config::CommandConfig;
 use crate::launcher::DesktopApp;
 use crate::model::items::{AppItem, CommandItem};
 use fuzzy_matcher::FuzzyMatcher;
@@ -29,6 +30,21 @@ pub trait SearchProvider {
     /// # Returns
     /// A vector of `glib::Object` instances (AppItem, CommandItem, or SearchResultItem)
     fn search(&self, query: &str) -> Vec<glib::Object>;
+}
+
+/// Trait representing a command provider that can return commands
+///
+/// Implementations should return `Vec<CommandConfig>` which can be used
+/// to populate the command list in the UI.
+pub trait CommandProvider {
+    /// Get commands matching the query
+    ///
+    /// # Arguments
+    /// * `query` - The search string (optional)
+    ///
+    /// # Returns
+    /// A vector of `CommandConfig` instances
+    fn get_commands(&self, query: &str) -> Vec<CommandConfig>;
 }
 
 // ---------------------------------------------------------------------------

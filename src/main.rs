@@ -1,6 +1,7 @@
 mod actions;
 mod app_mode;
 mod calculator;
+mod command_handler;
 mod core {
     pub mod config;
     pub mod global_state;

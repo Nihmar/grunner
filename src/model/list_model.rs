@@ -18,37 +18,17 @@ use crate::launcher::DesktopApp;
 use crate::model::items::CommandItem;
 use crate::model::items::SearchResultItem;
 use crate::providers::dbus_provider::{self, SearchProvider as DbusSearchProvider};
-use crate::providers::{AppProvider, CalculatorProvider, SearchProvider};
+use crate::providers::{AppProvider, CalculatorProvider, CommandProvider, SearchProvider};
 use crate::utils::expand_home;
 use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{SignalListItemFactory, SingleSelection};
-use log::{debug, error};
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
 const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 100;
-
-/// Parse a colon-prefixed command into command name and argument
-///
-/// Colon commands follow the format ":command argument" where:
-/// - `:` is the command prefix
-/// - `command` is the command name (e.g., "f", "ob", "s")
-/// - `argument` is the optional search argument (trimmed)
-///
-/// # Examples
-/// - `":f foo"` → `("f", "foo")`
-/// - `":ob"` → `("ob", "")`
-/// - `":obg pattern"` → `("obg", "pattern")`
-fn parse_colon_command(query: &str) -> (&str, &str) {
-    let rest = &query[1..];
-    match rest.split_once(' ') {
-        Some((cmd, arg)) => (cmd, arg.trim()),
-        None => (rest, ""),
-    }
-}
 
 // ── Pollers ───────────────────────────────────────────────────────────────────
 
@@ -227,18 +207,18 @@ pub struct AppListModel {
     /// Current search query text
     current_query: Rc<RefCell<String>>,
     /// Maximum number of results to show
-    max_results: Cell<usize>,
+    pub(crate) max_results: Cell<usize>,
 
     /// Generation counter for cancelling stale async tasks
-    task_gen: Rc<Cell<u64>>,
+    pub(crate) task_gen: Rc<Cell<u64>>,
     /// Obsidian configuration (if enabled)
     pub obsidian_cfg: Option<ObsidianConfig>,
     /// Current active mode for UI rendering
-    active_mode: Rc<Cell<ActiveMode>>,
+    pub(crate) active_mode: Rc<Cell<ActiveMode>>,
     /// Debounce timer source ID for delayed command execution
-    command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
+    pub(crate) command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     /// Debounce delay in milliseconds
-    command_debounce_ms: Cell<u32>,
+    pub(crate) command_debounce_ms: Cell<u32>,
     /// Debounce timer source ID for delayed search execution
     search_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     /// Debounce delay in milliseconds for default search mode
@@ -248,7 +228,7 @@ pub struct AppListModel {
     /// List of search provider IDs to exclude
     search_provider_blacklist: Rc<RefCell<Vec<String>>>,
     /// List of custom script commands
-    commands: Rc<RefCell<Vec<crate::core::config::CommandConfig>>>,
+    pub(crate) commands: Rc<RefCell<Vec<crate::core::config::CommandConfig>>>,
     /// Whether all special modes (colon commands) are disabled
     disable_modes: bool,
     /// Search providers for different search types
@@ -340,8 +320,10 @@ impl AppListModel {
 
         // Repopulate if in CustomScript mode
         if self.active_mode.get() == ActiveMode::CustomScript {
+            use crate::command_handler::CommandHandler;
             let query = self.current_query.borrow().clone();
-            self.handle_sh(&query);
+            let handler = CommandHandler::new(self);
+            handler.handle_sh(&query);
         }
     }
 
@@ -405,7 +387,7 @@ impl AppListModel {
     }
 
     /// Schedule a command to run with the configured default debounce delay
-    fn schedule_command<F>(&self, f: F)
+    pub(crate) fn schedule_command<F>(&self, f: F)
     where
         F: FnOnce() + 'static,
     {
@@ -454,20 +436,6 @@ impl AppListModel {
         next_gen
     }
 
-    /// Display an error message as the only item in the list
-    ///
-    /// Used for configuration errors, missing dependencies, etc.
-    fn show_error_item(&self, msg: impl Into<String>) {
-        self.store.remove_all();
-        self.store.append(&CommandItem::new(msg.into()));
-        self.selection.set_selected(0);
-    }
-
-    /// Clear all items from the list store and reset selection
-    fn clear_store(&self) {
-        self.store.remove_all();
-        self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
-    }
     /// Main entry point for updating search results based on query
     ///
     /// This method routes the query to the appropriate handler:
@@ -544,176 +512,9 @@ impl AppListModel {
 
     /// Handle colon-prefixed commands by routing to appropriate handlers
     fn handle_colon_command(&self, query: &str) {
-        let (cmd_part, arg) = parse_colon_command(query);
-        debug!("handle_colon_command: query='{query}', cmd_part='{cmd_part}', arg='{arg}'");
-        debug!("Active mode: {:?}", self.active_mode.get());
-
-        match cmd_part {
-            "ob" | "obg" => self.handle_obsidian(cmd_part, arg),
-            "f" => self.handle_file_search(arg),
-            "fg" => self.handle_file_grep(arg),
-            "sh" => {
-                debug!("Calling handle_sh with arg: '{arg}'");
-                self.handle_sh(arg);
-            }
-            _ => {
-                if !cmd_part.is_empty() {
-                    self.show_error_item(format!("Unknown command: :{cmd_part}"));
-                }
-            }
-        }
-    }
-
-    /// Validate the Obsidian vault path from configuration
-    ///
-    /// Returns `Some(PathBuf)` if vault is configured and exists,
-    /// otherwise shows an error and returns `None`.
-    fn validated_vault_path(&self) -> Option<PathBuf> {
-        let obs_cfg = if let Some(c) = &self.obsidian_cfg {
-            c.clone()
-        } else {
-            self.show_error_item("Obsidian not configured - edit config");
-            return None;
-        };
-        let vault_path = expand_home(&obs_cfg.vault);
-        if !vault_path.exists() {
-            self.show_error_item(format!(
-                "Vault path does not exist: {}",
-                vault_path.display()
-            ));
-            return None;
-        }
-        Some(vault_path)
-    }
-
-    /// Handle Obsidian search modes triggered by `:ob` and `:obg` commands
-    fn handle_obsidian(&self, cmd_name: &str, arg: &str) {
-        let Some(vault_path) = self.validated_vault_path() else {
-            return;
-        };
-        let vault_str = vault_path.to_string_lossy().into_owned();
-
-        let (mode, runner): (ActiveMode, Box<dyn FnOnce()>) = match (cmd_name, arg.is_empty()) {
-            ("ob", true) => {
-                // Empty :ob command - show Obsidian action mode
-                self.active_mode.set(ActiveMode::ObsidianAction);
-                self.clear_store();
-                return;
-            }
-            ("obg", true) => {
-                // Empty :obg command - show Obsidian grep mode
-                self.active_mode.set(ActiveMode::ObsidianGrep);
-                self.clear_store();
-                return;
-            }
-            ("ob", false) => {
-                // :ob with argument - file search in vault
-                let arg = arg.to_string();
-                let model_clone = self.clone();
-                (
-                    ActiveMode::ObsidianFile,
-                    Box::new(move || model_clone.run_find_in_vault(PathBuf::from(vault_str), &arg)),
-                )
-            }
-            ("obg", false) => {
-                // :obg with argument - ripgrep (with grep fallback) search in vault
-                let arg = arg.to_string();
-                let model_clone = self.clone();
-                (
-                    ActiveMode::ObsidianGrep,
-                    Box::new(move || model_clone.run_rg_in_vault(PathBuf::from(vault_str), &arg)),
-                )
-            }
-            _ => {
-                // Should never happen as cmd_name comes from known commands
-                error!("Unexpected obsidian command: {cmd_name}");
-                return;
-            }
-        };
-
-        self.active_mode.set(mode);
-        self.bump_task_gen();
-        self.schedule_command(runner);
-    }
-
-    fn handle_file_search(&self, arg: &str) {
-        if arg.is_empty() {
-            self.clear_store();
-            return;
-        }
-
-        self.bump_task_gen();
-        let arg = arg.to_string();
-        let model_clone = self.clone();
-        self.schedule_command(move || {
-            model_clone.run_file_search(&arg);
-        });
-    }
-
-    fn handle_file_grep(&self, arg: &str) {
-        if arg.is_empty() {
-            self.clear_store();
-            return;
-        }
-
-        self.bump_task_gen();
-        let arg = arg.to_string();
-        let model_clone = self.clone();
-        self.schedule_command(move || {
-            model_clone.run_file_grep(&arg);
-        });
-    }
-
-    fn handle_sh(&self, arg: &str) {
-        debug!("Setting active_mode to CustomScript");
-        self.active_mode.set(ActiveMode::CustomScript);
-        self.clear_store();
-
-        debug!(
-            "handle_sh called with arg: '{}', commands count: {}",
-            arg,
-            self.commands.borrow().len()
-        );
-
-        // Filter saved commands based on argument
-        let commands = self.commands.borrow();
-        let filtered_commands: Vec<CommandConfig> = commands
-            .iter()
-            .filter(|cmd| {
-                if arg.is_empty() {
-                    true
-                } else {
-                    // Simple substring match for name or command
-                    cmd.name.to_lowercase().contains(&arg.to_lowercase())
-                        || cmd.command.to_lowercase().contains(&arg.to_lowercase())
-                }
-            })
-            .cloned()
-            .collect();
-
-        debug!("Filtered commands count: {}", filtered_commands.len());
-
-        // Add filtered commands to store
-        for cmd in filtered_commands {
-            // Format as "Name | Command" for display
-            let item_str = format!("{} | {}", cmd.name, cmd.command);
-            self.store.append(&CommandItem::new_with_options(
-                item_str,
-                cmd.working_dir.clone(),
-                cmd.keep_open,
-            ));
-        }
-
-        // If user typed a command that doesn't match saved ones, add "Run: ..." option
-        if !arg.is_empty() {
-            let run_item_str = format!("Run: {arg}");
-            // Custom commands default to keep_open=true
-            self.store
-                .append(&CommandItem::new_with_options(run_item_str, None, true));
-        }
-
-        debug!("Final store count: {}", self.store.n_items());
-        debug!("Active mode is now: {:?}", self.active_mode.get());
+        use crate::command_handler::CommandHandler;
+        let handler = CommandHandler::new(self);
+        handler.handle_colon_command(query);
     }
 
     /// Run a subprocess command and collect its output in a background thread
@@ -804,7 +605,7 @@ impl AppListModel {
     }
 
     /// Execute a file search command without using shell
-    fn run_file_search(&self, argument: &str) {
+    pub(crate) fn run_file_search(&self, argument: &str) {
         // Try plocate first, fall back to find
         let command = if which("plocate").is_some() {
             // plocate -i -- "$argument" 2>/dev/null
@@ -833,7 +634,7 @@ impl AppListModel {
     }
 
     /// Execute a file grep command without using shell
-    fn run_file_grep(&self, argument: &str) {
+    pub(crate) fn run_file_grep(&self, argument: &str) {
         let command = if which("rg").is_some() {
             // rg --with-filename --line-number --no-heading -S "$argument" ~ 2>/dev/null | head -20
             let home = get_home_dir();
@@ -869,7 +670,7 @@ impl AppListModel {
     }
 
     /// Run `find` command to search for files in Obsidian vault
-    fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+    pub(crate) fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
         let mut cmd = std::process::Command::new("find");
         cmd.arg(&vault_path)
             .arg("-type")
@@ -880,7 +681,7 @@ impl AppListModel {
     }
 
     /// Run `rg` (ripgrep with grep fallback) command to search file contents in Obsidian vault
-    fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+    pub(crate) fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
         if which("rg").is_some() {
             let mut cmd = std::process::Command::new("rg");
             cmd.arg("-i")
@@ -917,6 +718,24 @@ impl AppListModel {
             .as_ref()
             .map(|cfg| expand_home(&cfg.vault).to_string_lossy().into_owned());
         crate::ui::list_factory::create_factory(active_mode, vault_path)
+    }
+}
+
+impl CommandProvider for AppListModel {
+    fn get_commands(&self, query: &str) -> Vec<CommandConfig> {
+        let commands = self.commands.borrow();
+        commands
+            .iter()
+            .filter(|cmd| {
+                if query.is_empty() {
+                    true
+                } else {
+                    cmd.name.to_lowercase().contains(&query.to_lowercase())
+                        || cmd.command.to_lowercase().contains(&query.to_lowercase())
+                }
+            })
+            .cloned()
+            .collect()
     }
 }
 

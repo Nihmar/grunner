@@ -1,6 +1,6 @@
 //! Integration tests for configuration module
 
-use grunner::config::{
+use grunner::core::config::{
     Config, DEFAULT_MAX_RESULTS, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, default_app_dirs,
 };
 
@@ -22,7 +22,7 @@ fn test_default_app_dirs_count() {
 #[test]
 fn test_config_path() {
     // This test verifies that config_path returns a valid path
-    use grunner::config::config_path;
+    use grunner::core::config::config_path;
     let path = config_path();
     assert!(path.to_string_lossy().contains("grunner"));
 }

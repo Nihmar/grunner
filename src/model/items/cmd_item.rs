@@ -86,7 +86,7 @@ impl CommandItem {
     ///
     /// # Examples
     /// ```rust
-    /// use grunner::items::CommandItem;
+    /// use grunner::model::items::CommandItem;
     /// let cmd = CommandItem::new("ls -la".to_string());
     /// ```
     #[must_use]
@@ -106,7 +106,7 @@ impl CommandItem {
     ///
     /// # Examples
     /// ```rust
-    /// use grunner::items::CommandItem;
+    /// use grunner::model::items::CommandItem;
     /// let cmd = CommandItem::new_with_options("ls -la".to_string(), None, true);
     /// let cmd = CommandItem::new_with_options("/path/to/file.rs:42".to_string(), Some("/home/user".to_string()), false);
     /// ```
