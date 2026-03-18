@@ -10,6 +10,7 @@ mod list_model;
 mod logging;
 mod obsidian_bar;
 mod power_bar;
+mod providers;
 mod search_provider;
 mod settings_window;
 mod theme;

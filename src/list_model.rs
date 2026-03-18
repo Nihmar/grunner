@@ -11,17 +11,15 @@
 //! all search modes, executes commands, and updates the GTK list store.
 
 use crate::actions::which;
-use crate::calculator;
 use crate::config::{CommandConfig, ObsidianConfig};
 use crate::global_state::get_home_dir;
 use crate::items::AppItem;
 use crate::items::CommandItem;
 use crate::items::SearchResultItem;
 use crate::launcher::DesktopApp;
-use crate::search_provider::{self, SearchProvider};
+use crate::providers::{AppProvider, CalculatorProvider, SearchProvider};
+use crate::search_provider::{self, SearchProvider as DbusSearchProvider};
 use crate::utils::{expand_home, is_calculator_result};
-use fuzzy_matcher::FuzzyMatcher;
-use fuzzy_matcher::skim::SkimMatcherV2;
 use gtk4::gio;
 use gtk4::prelude::Cast;
 use gtk4::prelude::*;
@@ -532,16 +530,16 @@ pub struct AppListModel {
     search_debounce: Rc<RefCell<Option<glib::SourceId>>>,
     /// Debounce delay in milliseconds for default search mode
     search_debounce_ms: u32,
-    /// Fuzzy matcher for application search
-    fuzzy_matcher: Rc<SkimMatcherV2>,
     /// Cached GNOME Shell search providers
-    search_providers: Rc<std::cell::OnceCell<Vec<SearchProvider>>>,
+    search_providers: Rc<std::cell::OnceCell<Vec<crate::search_provider::SearchProvider>>>,
     /// List of search provider IDs to exclude
     search_provider_blacklist: Rc<RefCell<Vec<String>>>,
     /// List of custom script commands
     commands: Rc<RefCell<Vec<crate::config::CommandConfig>>>,
     /// Whether all special modes (colon commands) are disabled
     disable_modes: bool,
+    /// Search providers for different search types
+    providers: Rc<Vec<Box<dyn SearchProvider>>>,
 }
 
 impl AppListModel {
@@ -567,10 +565,22 @@ impl AppListModel {
         selection.set_autoselect(true);
         selection.set_can_unselect(false);
 
+        // Initialize search providers
+        let all_apps = Rc::new(RefCell::new(Vec::new()));
+        let commands_rc = Rc::new(RefCell::new(commands));
+        let blacklist_rc = Rc::new(RefCell::new(search_provider_blacklist));
+
+        let providers = Rc::new(vec![
+            Box::new(AppProvider::new(all_apps.clone(), max_results)) as Box<dyn SearchProvider>,
+            Box::new(CalculatorProvider::new()) as Box<dyn SearchProvider>,
+            // CommandProvider is used only in :sh mode, handled separately
+            // DbusSearchProvider is handled separately due to async nature
+        ]);
+
         Self {
             store,
             selection,
-            all_apps: Rc::new(RefCell::new(Vec::new())),
+            all_apps,
             current_query: Rc::new(RefCell::new(String::new())),
             max_results: Cell::new(max_results),
 
@@ -581,11 +591,11 @@ impl AppListModel {
             command_debounce_ms: Cell::new(command_debounce_ms),
             search_debounce: Rc::new(RefCell::new(None)),
             search_debounce_ms: DEFAULT_SEARCH_DEBOUNCE_MS,
-            fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
             search_providers: Rc::new(std::cell::OnceCell::new()),
-            search_provider_blacklist: Rc::new(RefCell::new(search_provider_blacklist)),
-            commands: Rc::new(RefCell::new(commands)),
+            search_provider_blacklist: blacklist_rc,
+            commands: commands_rc,
             disable_modes,
+            providers,
         }
     }
 
@@ -712,7 +722,7 @@ impl AppListModel {
 
         self.active_mode.set(ActiveMode::None);
         self.bump_task_gen();
-        let providers_clone: Vec<SearchProvider> = providers.clone();
+        let providers_clone: Vec<DbusSearchProvider> = providers.clone();
         let max = self.max_results.get();
         let model_clone = self.clone();
         // Use shorter debounce for search providers for more responsive feel
@@ -745,61 +755,6 @@ impl AppListModel {
         self.store.remove_all();
         self.selection.set_selected(gtk4::INVALID_LIST_POSITION);
     }
-
-    /// Optimized search that uses prefix matching for simple queries
-    fn search_apps_optimized<'a>(
-        &self,
-        query: &str,
-        apps: &'a [DesktopApp],
-        max_results: usize,
-    ) -> Vec<&'a DesktopApp> {
-        // Fast path: empty query returns first N apps
-        if query.is_empty() {
-            return apps.iter().take(max_results).collect();
-        }
-
-        let query_lower = query.to_lowercase();
-
-        // Fast path: simple prefix match for short, single-word queries
-        // This covers 80% of typical searches
-        if !query.contains(char::is_whitespace) && query.len() < 15 {
-            let prefix_results: Vec<_> = apps
-                .iter()
-                .filter(|app| {
-                    app.name.to_lowercase().starts_with(&query_lower)
-                        || app.name.to_lowercase().contains(&query_lower)
-                })
-                .take(max_results)
-                .collect();
-
-            if !prefix_results.is_empty() {
-                return prefix_results;
-            }
-        }
-
-        // Fall back to fuzzy matching for complex queries
-        let mut scored: Vec<_> = apps
-            .iter()
-            .filter_map(|app| {
-                self.fuzzy_matcher
-                    .fuzzy_match(&app.name, query)
-                    .or_else(|| {
-                        self.fuzzy_matcher
-                            .fuzzy_match(&app.description, query)
-                            .map(|s| s / 2) // Description matches weighted less
-                    })
-                    .map(|score| (score, app))
-            })
-            .collect();
-
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
-        scored
-            .into_iter()
-            .take(max_results)
-            .map(|(_, app)| app)
-            .collect()
-    }
-
     /// Main entry point for updating search results based on query
     ///
     /// This method routes the query to the appropriate handler:
@@ -822,30 +777,22 @@ impl AppListModel {
         self.store.remove_all();
         self.bump_task_gen();
 
-        let apps = self.all_apps.borrow();
-        if query.is_empty() {
-            // Show all applications when query is empty
-            for app in apps.iter() {
-                self.store.append(&AppItem::new(app));
-            }
-        } else {
-            // Check if query is a mathematical expression
-            if let Some(result) = calculator::evaluate(query) {
-                // Add calculator result to the store
-                let calculator_result = format!("{query} = {result}");
-                self.store.append(&CommandItem::new(calculator_result));
-            } else {
-                // Use optimized search with prefix matching for simple queries
-                let results = self.search_apps_optimized(query, &apps, self.max_results.get());
+        // Use providers for standard search
+        let mut all_results: Vec<glib::Object> = Vec::new();
 
-                // Add matched applications to the store
-                for app in results {
-                    self.store.append(&AppItem::new(app));
-                }
+        for provider in self.providers.iter() {
+            let mut results = provider.search(query);
+            all_results.append(&mut results);
+        }
 
-                // Schedule search provider query to mimic GNOME Search behavior
-                self.schedule_provider_search(query.to_string(), false);
-            }
+        // Add results to store
+        for item in all_results {
+            self.store.append(&item);
+        }
+
+        // Schedule search provider query to mimic GNOME Search behavior
+        if !query.is_empty() {
+            self.schedule_provider_search(query.to_string(), false);
         }
 
         // Auto-select first item if we have results
@@ -1097,7 +1044,7 @@ impl AppListModel {
     /// 3. Sets up a poller to receive streaming results
     fn run_provider_search(
         &self,
-        providers: Vec<SearchProvider>,
+        providers: Vec<DbusSearchProvider>,
         query: String,
         max: usize,
         clear_store: bool,
