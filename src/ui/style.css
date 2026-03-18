@@ -312,7 +312,7 @@ notebook.pill-tabs > stack {
 
 /* ── Edge trigger ─────────────────────────────────────────────── */
 .edge-trigger {
-    min-width: 5px;
+    min-width: 10px;
     min-height: 0;
     /*margin: 10px 4px;*/
     border-radius: 3px;
