@@ -1,6 +1,7 @@
 # Analisi Architetturale del Codice Sorgente Grunner
 
 **Data:** 18 Marzo 2026
+**Ultimo Aggiornamento:** 18 Marzo 2026
 **Scope:** Identificazione di problemi architetturali, accoppiamenti stretti, funzioni complesse e punti critici per le nuove feature.
 
 ---
@@ -53,7 +54,7 @@ Questo documento riporta i risultati dell'analisi statica del codice sorgente di
 -   **Layout UI Corretto:** Ripristinato il layout originale con icona + (nome + descrizione) su due righe.
 -   **Logica di Binding Ripristinata:** Tutte le funzionalità originali sono state ripristinate:
     - Icone basate sul content type per i risultati di `:obg` (Obsidian Grep)
-    - Icone markdown generiche (`text-x-markdown`) per i risultati di `:ob` (Obsidian File)
+    - Icone markdown (`text-markdown`) per i risultati di `:ob` (Obsidian File)
     - Path accorciati con tilde (`~`) per i file sotto la home directory
     - Path relativi al vault per i risultati Obsidian
     - Icone generiche basate sul content type per file non-Obsidian
@@ -181,8 +182,41 @@ I diversi "provider" di risultati sono gestiti in modo eterogeneo:
 
 ---
 
-## 7. Conclusione
+## 7. Aggiornamenti Recenti (2026)
+
+### 7.1 Fix Icone Modalità Grep (`:obg`, `:fg`)
+
+**Problema Identificato:**
+- In modalità `:obg` e `:fg`, le icone venivano mostrate come file generici (bianche) invece che con l'icona corretta per il tipo di file (es. markdown per file `.md`).
+- Questo era dovuto al fatto che l'output grep ha formato `path:line:content`, e il codice passava l'intera stringa a `content_type_guess()` invece di estrarre solo il path del file.
+
+**Fix Applicato (18 Marzo 2026):**
+- In `src/ui/list_factory.rs`, la funzione `bind_command_item` ora rileva correttamente i risultati grep controllando se la linea:
+  1. Ha `mode == ActiveMode::ObsidianGrep`
+  2. Oppure contiene `:` e non inizia con `/`
+  3. Oppure inizia con `/` e contiene almeno 2 `:`
+- Viene ora estratto solo il path del file prima di chiamare `content_type_guess()`, permettendo a GTK di determinare l'icona corretta.
+
+**Stato:** ✅ Risolto
+
+### 7.2 Fix Icona Markdown per `:ob`
+
+**Problema Identificato:**
+- L'icona `text-x-markdown` non esiste nel tema GTK (Adwaita). L'icona corretta è `text-markdown`.
+
+**Fix Applicato (18 Marzo 2026):**
+- Aggiornato `list_factory.rs` per usare `text-markdown` invece di `text-x-markdown` in:
+  - Linea 239: fallback per risultati grep non parsabili
+  - Linea 251: modalità ObsidianFile (`:ob`)
+
+**Stato:** ✅ Risolto
+
+---
+
+## 8. Conclusione
 
 L'analisi rivela una codebase funzionale ma con chiari segni di "god class" in `src/model/list_model.rs` e `src/ui/window.rs` (nonostante il refactoring di `build_ui`). La separazione tra provider locali (trait `SearchProvider`) e asincroni (D-Bus) è una debolezza architetturale che complica l'estensione.
 
 Le modifiche strutturali già effettuate (refactoring di `build_ui`, introduzione di `SearchProvider`) posizionano bene il progetto per l'implementazione delle nuove feature (Favorites Strip, Context Menu). I prossimi passi dovrebbero concentrarsi sulla riduzione della complessità di `AppListModel` e sull'unificazione della gestione dei provider.
+
+**Nota:** Il sistema di rilevamento icone è stato recentemente corretto per le modalità grep. Nuovi test manuali sono consigliati per verificare il comportamento in tutte le combinazioni di modalità.
