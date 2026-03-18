@@ -782,7 +782,6 @@ impl CommandProvider for AppListModel {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::utils::is_calculator_result;
 
     #[test]

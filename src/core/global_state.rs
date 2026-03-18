@@ -3,17 +3,14 @@
 //! This module provides a single location for all global state variables
 //! using thread-local storage to avoid Sync requirements.
 
+use crate::core::config::Config;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use crate::core::config::Config;
-
 // ─── HOME Directory ──────────────────────────────────────────────────────────
 
-/// Cached home directory to avoid repeated environment variable lookups
 static HOME_DIR: OnceLock<String> = OnceLock::new();
 
-/// Get the home directory, caching the result for performance
 pub fn get_home_dir() -> &'static str {
     HOME_DIR.get_or_init(|| {
         std::env::var_os("HOME")
@@ -24,14 +21,8 @@ pub fn get_home_dir() -> &'static str {
 
 // ─── Tokio Runtime ──────────────────────────────────────────────────────────
 
-/// Global Tokio runtime for async operations
 static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
-/// Get or initialize the shared Tokio runtime
-///
-/// # Panics
-/// Panics if the Tokio runtime fails to build (e.g., due to resource exhaustion).
-#[must_use]
 pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
     TOKIO_RT.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
@@ -91,4 +82,15 @@ pub fn reload_theme(config: &Config) {
             reloader(config);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_home_dir() {
+        let home = get_home_dir();
+        assert!(!home.is_empty());
+    }
 }
