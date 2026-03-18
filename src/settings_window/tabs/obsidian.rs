@@ -4,7 +4,7 @@
 //! This tab is only appended when `config.obsidian` is `Some`.
 
 use super::make_tab_page;
-use crate::config::Config;
+use crate::core::config::Config;
 use crate::utils::{contract_home, expand_home};
 use glib::clone;
 use gtk4::prelude::*;

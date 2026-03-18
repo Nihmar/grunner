@@ -15,14 +15,14 @@
 //! - Background application loading with threading
 
 use crate::app_mode::AppMode;
-use crate::config::Config;
-use crate::global_state;
+use crate::core::config::Config;
+use crate::core::global_state;
 use crate::item_activation::activate_item;
 use crate::launcher;
-use crate::list_model::AppListModel;
-use crate::obsidian_bar::build_obsidian_bar;
-use crate::power_bar::build_power_bar;
-use crate::workspace_bar::build_workspace_bar;
+use crate::model::list_model::AppListModel;
+use crate::ui::obsidian_bar::build_obsidian_bar;
+use crate::ui::power_bar::build_power_bar;
+use crate::ui::workspace_bar::build_workspace_bar;
 use glib::clone;
 
 use gtk4::gdk;
@@ -86,7 +86,7 @@ fn setup_css(cfg: &Config, display: &gdk::Display) {
     );
 
     // Apply theme based on configuration
-    let theme_manager = crate::theme::ThemeManager::new();
+    let theme_manager = crate::core::theme::ThemeManager::new();
     theme_manager.apply(cfg.theme, cfg.custom_theme_path.as_deref(), display);
 
     // Register theme reloader for hot-reload from settings

@@ -3,7 +3,7 @@
 
 use super::make_tab_page;
 use crate::actions::open_uri;
-use crate::config::{self, Config};
+use crate::core::config::{self, Config};
 use crate::settings_window::save::save_config;
 use gtk4::pango;
 use gtk4::prelude::*;

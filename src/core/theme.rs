@@ -3,7 +3,7 @@
 //! This module provides theme loading and application functionality.
 //! It supports system themes, built-in themes, and custom user themes.
 
-use crate::config::ThemeMode;
+use crate::core::config::ThemeMode;
 use crate::utils::expand_home;
 use gtk4::gdk;
 

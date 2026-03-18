@@ -5,7 +5,9 @@
 //! This abstraction allows adding new search sources without modifying the core
 //! list model logic.
 
-use crate::items::{AppItem, CommandItem};
+pub mod dbus_provider;
+
+use crate::model::items::{AppItem, CommandItem};
 use crate::launcher::DesktopApp;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;

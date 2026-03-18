@@ -11,14 +11,14 @@
 //! all search modes, executes commands, and updates the GTK list store.
 
 use crate::actions::which;
-use crate::config::{CommandConfig, ObsidianConfig};
-use crate::global_state::get_home_dir;
-use crate::items::AppItem;
-use crate::items::CommandItem;
-use crate::items::SearchResultItem;
+use crate::core::config::{CommandConfig, ObsidianConfig};
+use crate::core::global_state::get_home_dir;
 use crate::launcher::DesktopApp;
+use crate::model::items::AppItem;
+use crate::model::items::CommandItem;
+use crate::model::items::SearchResultItem;
+use crate::providers::dbus_provider::{self, SearchProvider as DbusSearchProvider};
 use crate::providers::{AppProvider, CalculatorProvider, SearchProvider};
-use crate::search_provider::{self, SearchProvider as DbusSearchProvider};
 use crate::utils::{expand_home, is_calculator_result};
 use gtk4::gio;
 use gtk4::prelude::Cast;
@@ -393,7 +393,7 @@ impl SubprocessPoller {
 /// of results over time.
 struct ProviderSearchPoller {
     /// Channel receiver for search result batches
-    rx: std::sync::mpsc::Receiver<Vec<search_provider::SearchResult>>,
+    rx: std::sync::mpsc::Receiver<Vec<dbus_provider::SearchResult>>,
     /// Reference to the main list model for UI updates
     model: AppListModel,
     /// Generation ID to prevent stale updates after new searches
@@ -442,8 +442,8 @@ impl ProviderSearchPoller {
                         .into_iter()
                         .map(|r| {
                             let (icon_themed, icon_file) = match r.icon {
-                                Some(search_provider::IconData::Themed(n)) => (n, String::new()),
-                                Some(search_provider::IconData::File(p)) => (String::new(), p),
+                                Some(dbus_provider::IconData::Themed(n)) => (n, String::new()),
+                                Some(dbus_provider::IconData::File(p)) => (String::new(), p),
                                 None => (String::new(), String::new()),
                             };
                             SearchResultItem::new(
@@ -531,11 +531,11 @@ pub struct AppListModel {
     /// Debounce delay in milliseconds for default search mode
     search_debounce_ms: u32,
     /// Cached GNOME Shell search providers
-    search_providers: Rc<std::cell::OnceCell<Vec<crate::search_provider::SearchProvider>>>,
+    search_providers: Rc<std::cell::OnceCell<Vec<DbusSearchProvider>>>,
     /// List of search provider IDs to exclude
     search_provider_blacklist: Rc<RefCell<Vec<String>>>,
     /// List of custom script commands
-    commands: Rc<RefCell<Vec<crate::config::CommandConfig>>>,
+    commands: Rc<RefCell<Vec<crate::core::config::CommandConfig>>>,
     /// Whether all special modes (colon commands) are disabled
     disable_modes: bool,
     /// Search providers for different search types
@@ -557,7 +557,7 @@ impl AppListModel {
         obsidian_cfg: Option<ObsidianConfig>,
         command_debounce_ms: u32,
         search_provider_blacklist: Vec<String>,
-        commands: Vec<crate::config::CommandConfig>,
+        commands: Vec<crate::core::config::CommandConfig>,
         disable_modes: bool,
     ) -> Self {
         let store = gio::ListStore::new::<glib::Object>();
@@ -612,7 +612,7 @@ impl AppListModel {
     /// Apply configuration changes (hot-reload after saving settings)
     ///
     /// This updates all configurable settings without restarting the app.
-    pub fn apply_config(&self, config: &crate::config::Config) {
+    pub fn apply_config(&self, config: &crate::core::config::Config) {
         // Update max_results
         self.max_results.set(config.max_results);
 
@@ -713,7 +713,7 @@ impl AppListModel {
     fn schedule_provider_search(&self, query: String, clear_store: bool) {
         // Discover providers (cached after first use)
         let providers = self.search_providers.get_or_init(|| {
-            search_provider::discover_providers(&self.search_provider_blacklist.borrow())
+            dbus_provider::discover_providers(&self.search_provider_blacklist.borrow())
         });
 
         if providers.is_empty() {
@@ -1073,9 +1073,9 @@ impl AppListModel {
         }
 
         // Channel for streaming results from background thread
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<search_provider::SearchResult>>();
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<dbus_provider::SearchResult>>();
         std::thread::spawn(move || {
-            search_provider::run_search_streaming(&providers, &query, max, tx);
+            dbus_provider::run_search_streaming(&providers, &query, max, tx);
         });
 
         let poller = ProviderSearchPoller {
@@ -1209,7 +1209,7 @@ impl AppListModel {
         // Try to find Obsidian icon from various possible names
         let obsidian_icon = ["obsidian", "md.obsidian.Obsidian", "Obsidian"]
             .iter()
-            .map(|id| crate::search_provider::resolve_app_icon(id))
+            .map(|id| crate::providers::dbus_provider::resolve_app_icon(id))
             .find(|s| !s.is_empty())
             .unwrap_or_else(|| "text-x-markdown".to_string());
 

@@ -9,11 +9,12 @@ use crate::actions::{
     perform_obsidian_action,
 };
 use crate::app_mode::AppMode;
-use crate::items::AppItem;
-use crate::items::CommandItem;
-use crate::items::ObsidianActionItem;
-use crate::items::SearchResultItem;
-use crate::list_model::AppListModel;
+use crate::model::items::AppItem;
+use crate::model::items::CommandItem;
+use crate::model::items::ObsidianActionItem;
+use crate::model::items::SearchResultItem;
+use crate::model::list_model::AppListModel;
+use crate::providers::dbus_provider;
 use crate::utils::is_calculator_result;
 use gtk4::prelude::{Cast, DisplayExt};
 use log::{debug, info, warn};
@@ -26,7 +27,7 @@ use log::{debug, info, warn};
 /// # Arguments
 /// * `line` - The grep result line to parse
 /// * `cfg` - Obsidian configuration for vault path and settings
-pub fn open_obsidian_grep_line(line: &str, cfg: &crate::config::ObsidianConfig) {
+pub fn open_obsidian_grep_line(line: &str, cfg: &crate::core::config::ObsidianConfig) {
     debug!("Processing Obsidian grep line: {line}");
     if let Some((file_path, rest)) = line.split_once(':') {
         if let Some((line_num, _)) = rest.split_once(':') {
@@ -162,7 +163,7 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
         info!("Activating search result: {id} from provider {bus}");
         std::thread::spawn(move || {
             // Pass the timestamp
-            crate::search_provider::activate_result(&bus, &path, &id, &terms, timestamp);
+            dbus_provider::activate_result(&bus, &path, &id, &terms, timestamp);
         });
     }
 }

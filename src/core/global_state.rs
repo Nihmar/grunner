@@ -6,7 +6,7 @@
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use crate::config::Config;
+use crate::core::config::Config;
 
 // ─── HOME Directory ──────────────────────────────────────────────────────────
 

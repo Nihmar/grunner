@@ -10,7 +10,7 @@
 //! - Proper handling of desktop entry specifications
 //! - Filtering of non-application and hidden entries
 
-use crate::global_state::get_home_dir;
+use crate::core::global_state::get_home_dir;
 use jwalk::WalkDir;
 use log::{debug, error, info, trace};
 use rayon::prelude::*;

@@ -1,10 +1,10 @@
 //! Commands tab — manage custom script commands for :sh mode.
 
 use super::make_tab_page;
-use crate::config::{CommandConfig, Config};
+use crate::core::config::{CommandConfig, Config};
 use gtk4::prelude::*;
-use libadwaita::PreferencesGroup;
 use libadwaita::prelude::*;
+use libadwaita::PreferencesGroup;
 use std::cell::RefCell;
 use std::rc::Rc;
 

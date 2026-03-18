@@ -1,6 +1,6 @@
 //! Theme settings tab for Grunner settings window
 
-use crate::config::{Config, ThemeMode};
+use crate::core::config::{Config, ThemeMode};
 use gtk4::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;

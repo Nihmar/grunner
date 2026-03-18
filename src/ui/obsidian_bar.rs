@@ -6,8 +6,8 @@
 //! the vault, creating new notes, daily notes, and quick notes.
 
 use crate::actions::perform_obsidian_action;
-use crate::items::ObsidianAction;
-use crate::list_model::AppListModel;
+use crate::model::items::ObsidianAction;
+use crate::model::list_model::AppListModel;
 use glib::clone;
 use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, Button, Entry, Orientation};

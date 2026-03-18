@@ -12,8 +12,8 @@
 pub(crate) mod save;
 pub mod tabs;
 
-use crate::config;
-use crate::global_state;
+use crate::core::config;
+use crate::core::global_state;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use libadwaita::{PreferencesDialog, Toast, ToastOverlay};
@@ -38,7 +38,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
     // Apply theme to settings window display
     if let Some(display) = gtk4::gdk::Display::default() {
         log::info!("Applying theme to settings window");
-        let theme_manager = crate::theme::ThemeManager::new();
+        let theme_manager = crate::core::theme::ThemeManager::new();
         theme_manager.apply(config.theme, config.custom_theme_path.as_deref(), &display);
     }
 

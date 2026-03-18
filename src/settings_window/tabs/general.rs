@@ -1,7 +1,7 @@
 //! General tab — window dimensions.
 
 use super::make_tab_page;
-use crate::config::Config;
+use crate::core::config::Config;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use libadwaita::{PreferencesGroup, SpinRow};

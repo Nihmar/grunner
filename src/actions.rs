@@ -7,8 +7,8 @@
 //! - Obsidian vault and note management
 //! - Settings management
 
-use crate::config::ObsidianConfig;
-use crate::items::ObsidianAction;
+use crate::core::config::ObsidianConfig;
+use crate::model::items::ObsidianAction;
 use crate::launcher;
 use crate::settings_window;
 use crate::utils::expand_home;

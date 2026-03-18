@@ -1,26 +1,31 @@
 mod actions;
 mod app_mode;
 mod calculator;
-mod config;
-mod global_state;
+mod core {
+    pub mod config;
+    pub mod global_state;
+    pub mod theme;
+}
 mod item_activation;
-mod items;
 mod launcher;
-mod list_model;
 mod logging;
-mod obsidian_bar;
-mod power_bar;
+mod model {
+    pub mod list_model;
+    pub mod items;
+}
 mod providers;
-mod search_provider;
 mod settings_window;
-mod theme;
-mod ui;
+mod ui {
+    pub mod obsidian_bar;
+    pub mod power_bar;
+    pub mod workspace_bar;
+    pub mod window;
+}
 mod utils;
 use glib::ExitCode;
 use gtk4::prelude::*;
 use libadwaita::Application;
 use std::env;
-mod workspace_bar; // ← one line, alongside the other mods
 
 /// Application ID for D-Bus and GNOME Shell integration
 const APP_ID: &str = "org.nihmar.grunner";
@@ -74,7 +79,7 @@ fn main() -> glib::ExitCode {
         println!("Grunner Search Providers");
         println!("=======================\n");
 
-        let providers = search_provider::discover_providers(&[]);
+        let providers = providers::dbus_provider::discover_providers(&[]);
         println!("Found {} search provider(s):\n", providers.len());
 
         for (i, provider) in providers.iter().enumerate() {
@@ -112,7 +117,7 @@ fn main() -> glib::ExitCode {
     log::info!("Grunner {} starting up", env!("CARGO_PKG_VERSION"));
 
     // Load application configuration from file
-    let mut cfg = config::load();
+    let mut cfg = core::config::load();
 
     // Apply command-line flags
     cfg.disable_modes = disable_modes;
@@ -161,7 +166,7 @@ fn main() -> glib::ExitCode {
         log::debug!("No launcher window found, building new UI");
 
         // No launcher window exists - build the main user interface
-        ui::build_ui(app, &cfg);
+        ui::window::build_ui(app, &cfg);
     });
 
     // Run the GTK application main loop

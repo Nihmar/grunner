@@ -4,7 +4,7 @@
 //! the application. Currently, it contains path manipulation utilities
 //! for handling user home directory expansion and calculator result parsing.
 
-use crate::global_state::get_home_dir;
+use crate::core::global_state::get_home_dir;
 use std::path::PathBuf;
 
 /// Expand a path starting with `~` to the user's home directory

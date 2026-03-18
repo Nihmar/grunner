@@ -11,7 +11,7 @@
 //! - Obsidian vault integration settings
 //! - Search provider filtering
 
-use crate::global_state::get_home_dir;
+use crate::core::global_state::get_home_dir;
 use crate::utils::expand_home;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};

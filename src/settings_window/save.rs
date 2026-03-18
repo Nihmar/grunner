@@ -3,7 +3,7 @@
 //! Kept separate from the UI code so serialisation logic can be
 //! read and tested independently of GTK.
 
-use crate::config::{self, CommandConfig, Config, ObsidianConfig, ThemeMode};
+use crate::core::config::{self, CommandConfig, Config, ObsidianConfig, ThemeMode};
 use log::debug;
 use serde::Serialize;
 use std::fs;

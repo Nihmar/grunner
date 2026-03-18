@@ -8,7 +8,7 @@
 //!
 //! The bar auto-refreshes every time the Grunner launcher window becomes visible.
 
-use crate::global_state::get_home_dir;
+use crate::core::global_state::get_home_dir;
 use glib::clone;
 use gtk4::{
     Box as GtkBox, Button, EventControllerScroll, EventControllerScrollFlags, Image, Label,

@@ -14,7 +14,7 @@
 //! The module uses a combination of async/await (via Tokio) and D-Bus (via zbus)
 //! to communicate with search providers while keeping the UI responsive.
 
-use crate::global_state::get_home_dir;
+use crate::core::global_state::get_home_dir;
 use futures::stream::{FuturesUnordered, StreamExt};
 use gtk4::gdk::Display;
 use gtk4::prelude::*;
@@ -35,7 +35,7 @@ fn get_runtime() -> &'static tokio::runtime::Runtime {
     // This function will be implemented in global_state.rs
     // For now, we'll use the search_provider-specific implementation
     // that's already been optimized
-    crate::global_state::get_tokio_runtime()
+    crate::core::global_state::get_tokio_runtime()
 }
 
 /// Get or initialize the shared D-Bus session connection
