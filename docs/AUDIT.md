@@ -13,33 +13,38 @@ Questo documento riporta i risultati dell'analisi statica del codice sorgente di
 
 ## 2. Analisi per File
 
-### 2.1 `src/ui.rs`
+### 2.1 `src/ui/window.rs`
 **Responsabilità:** Costruzione completa dell'interfaccia GTK, gestione eventi, coordinamento flusso di ricerca.
 
 **Problemi Identificati:**
-1.  **Funzione Monolitica (`build_ui`):** La funzione principale conta oltre 500 righe. Gestisce CSS, tema, inizializzazione modello, creazione finestra, layout complesso (barre laterali hover), binding eventi e caricamento background.
-2.  **Accoppiamento Stretto:** Mescola logica di presentazione (costruzione widget) con logica di business (inicializzazione modelli, polling thread).
-3.  **Complessità Incapsulata:** La logica per la barra laterale (hover/reveal) è inline e difficile da riusare o testare isolatamente.
+1.  **Funzione Monolitica (Parzialmente Risolta):** La funzione `build_ui` è stata refattorizzata e ora delegate a funzioni helper (`setup_css`, `setup_model`, `create_window`, `build_main_layout`, `connect_*`, `start_background_loading`). Tuttavia, `build_main_layout` rimane lunga (~80 righe) e gestisce la costruzione complessa del layout.
+2.  **Accoppiamento Stretto:** Mescola logica di presentazione (costruzione widget) con logica di business (inicializzazione modelli, polling thread) tramite chiamate dirette.
+3.  **Complessità Incapsulata:** La logica per la barra laterale (hover/reveal) è inline in `build_sidebar` e difficile da riusare o testare isolatamente.
+
+**Stato Attuale:**
+-   Refactoring di `build_ui` completato (funzione principale < 100 righe).
+-   `setup_css`, `setup_model`, `create_window`, `build_sidebar`, `build_main_layout`, `connect_window_signals`, `connect_search_signals`, `connect_list_signals`, `start_background_loading` sono funzioni separate.
 
 **Proposte Concrete:**
--   **Refactoring:** Suddividere `build_ui` in funzioni semantiche:
-    -   `setup_environment()` (CSS, Tema, Global State)
-    -   `create_main_window()`
-    -   `build_layout()` (Struttura gerarchica widget)
-    -   `connect_signals()` (Event handlers)
+-   **Ulteriore Refactoring:** Suddividere `build_main_layout` in costruttori più piccoli (es. `build_search_entry_area`, `build_results_list`).
 -   **Modularità:** Spostare `poll_apps` in un modulo dedicato (es. `background_loader.rs` o in `list_model`).
 
-### 2.2 `src/list_model.rs`
+### 2.2 `src/model/list_model.rs`
 **Responsabilità:** Gestione dati, logica di ricerca, aggiornamento store GTK, creazione factory UI.
 
 **Problemi Identificati:**
-1.  **God Class:** `AppListModel` gestisce ricerca app, obsidian, file, comandi shell, fornitori esterni e creazione factory UI.
-2.  **Violazione Single Responsibility:** `create_factory` definisce la struttura HTML-like dei widget UI all'interno del modello dati.
-3.  **Catena di IF complessa:** `bind_command_item` gestisce 5+ tipi di risultati diversi con una lunga catena `if/else`, violando il principio Open/Closed.
+1.  **God Class:** `AppListModel` gestisce ricerca app, obsidian, file, comandi shell, fornitori esterni (D-Bus) e creazione factory UI.
+2.  **Violazione Single Responsibility:** `create_factory` definisce la struttura UI e il binding dei dati all'interno del modello dati.
+3.  **Catena di IF complessa:** `bind_command_item` gestisce 5+ tipi di risultati diversi con una lunga catena `if/else` (calcolo, script, obsidian grep, file path, output generico), violando il principio Open/Closed.
+4.  **Accoppiamento Provider:** La gestione dei provider D-Bus è separata da quella dei provider locali (`AppProvider`, `CalculatorProvider`). I provider D-Bus sono gestiti tramite canali MPSC e polling asincrono, mentre i provider locali sono chiamati sincronamente.
+
+**Stato Attuale:**
+-   Il trait `SearchProvider` esiste in `src/providers/mod.rs` ed è implementato da `AppProvider` e `CalculatorProvider`.
+-   I fornitori D-Bus (`dbus_provider`) non implementano `SearchProvider` ma sono gestiti internamente da `AppListModel` tramite `run_provider_search`.
 
 **Proposte Concrete:**
--   **Separazione Logica:** Introdurre un trait `SearchProvider` per disaccoppiare gli algoritmi di ricerca.
 -   **Refactoring UI:** Spostare la logica di binding (`bind_*`) nel modulo `items` o in un helper UI, lasciando al model solo la gestione dei dati grezzi.
+-   **Unificazione Provider:** Valutare se creare un trait async o una wrapper struct per unificare la gestione di provider locali e D-Bus, riducendo la complessità in `AppListModel`.
 
 ### 2.3 `src/config.rs`
 **Responsabilità:** Parsing e caricamento configurazione TOML.
@@ -65,8 +70,9 @@ Questo documento riporta i risultati dell'analisi statica del codice sorgente di
 ### 2.5 `src/items/mod.rs` & `src/launcher.rs`
 **Stato:** Buona coesione. `launcher.rs` gestisce efficacemente caching e parsing .desktop.
 
-### 2.6 `src/search_provider.rs`
+### 2.6 `src/providers/dbus_provider.rs`
 **Stato:** Ben encapsulato. Logica D-Bus complessa ma isolata.
+**Nota:** Questo modulo fornisce la scoperta dei provider e l'esecuzione delle query asincrone, ma non implementa il trait `SearchProvider` definito in `src/providers/mod.rs`. È gestito separatamente da `AppListModel`.
 
 ---
 
@@ -77,16 +83,15 @@ Questo documento riporta i risultati dell'analisi statica del codice sorgente di
 2.  **Config <-> Global State:** La creazione del config dipende da `global_state`.
 3.  **Logica Ricerca <-> UI:** `AppListModel::create_factory` definisce la struttura UI. Il pattern attuale mescola Modello e Vista.
 
-### 3.2 Mancanza di Interfacce Trait
-I diversi "provider" di risultati (App, File, Obsidian, Calculator) sono implementati come rami condizionali in `AppListModel`.
-**Proposta:** Introdurre un trait `SearchProvider`:
-```rust
-trait SearchProvider {
-    fn search(&self, query: &str) -> Vec<ResultItem>;
-    fn id(&self) -> &str;
-}
-```
-Questo permetterebbe di aggiungere nuovi provider (es. Promemoria, Note rapide) senza modificare `AppListModel`.
+### 3.2 Interfacce Trait (Esistenti e Mancanti)
+I diversi "provider" di risultati sono gestiti in modo eterogeneo:
+1.  **Provider Locali (`AppProvider`, `CalculatorProvider`):** Implementano il trait `SearchProvider` in `src/providers/mod.rs`. Sono disaccoppiati da `AppListModel`.
+2.  **Provider D-Bus (`dbus_provider`):** Non implementano `SearchProvider`. Sono gestiti tramite logica specifica asincrona (`run_search_streaming`) all'interno di `AppListModel`.
+3.  **Provider Interni (File, Obsidian, Shell):** Sono implementati come metodi diretti in `AppListModel` (`run_file_search`, `handle_obsidian`, `handle_sh`).
+
+**Proposta:**
+-   **Unificazione (Opzionale/Complesso):** Creare un trait async o una wrapper struct per unificare provider locali e D-Bus.
+-   **Estensibilità:** Per nuovi provider sincroni, usare `SearchProvider`. Per provider asincroni, valutare un pattern simile a D-Bus (canali MPSC) ma generico.
 
 ### 3.3 Duplicazioni di Codice
 -   **Icone:** Logica simile per trovare iconi valide in `list_model.rs` e `power_bar.rs`. Da estrarre in `utils.rs`.
@@ -115,13 +120,15 @@ Questo permetterebbe di aggiungere nuovi provider (es. Promemoria, Note rapide) 
 ## 5. Punti Critici per Nuove Feature
 
 ### 5.1 Striscia Preferiti (Prompt 1)
--   **Posizione:** In `ui.rs`, tra barra ricerca e lista risultati.
--   **Impatto:** Modifica moderata a `build_ui`. Refactoring necessario prima di aggiungere complessità.
--   **Config:** Aggiungere `favorites: Vec<String>` in `Config`.
+-   **Posizione:** In `src/ui/window.rs` (o modulo UI dedicato), tra barra ricerca e lista risultati.
+-   **Impatto:** Modifica a `build_main_layout`. Il refactoring già completato facilita l'inserimento del nuovo widget.
+-   **Config:** Aggiungere `favorites: Vec<String>` in `Config` (in `src/core/config.rs`).
+-   **Dati:** Potrebbe richiedere una nuova struttura dati in `src/model/items/` per rappresentare un preferito.
 
 ### 5.2 Context Menus (Prompt 2-6)
--   **Posizione:** In `list_model::create_factory`, aggiungendo `GtkGestureClick`.
--   **Impatto:** Modifica alla factory UI. Necessita accesso al model per azioni.
+-   **Posizione:** In `src/model/list_model.rs` nella funzione `create_factory`, aggiungendo `GtkGestureClick` o `GtkPopover` ai list items.
+-   **Impatto:** Modifica alla factory UI e alla logica di binding. Necessita accesso al model per azioni (es. "Apri percorso", "Copia").
+-   **Integrazione:** La logica di attivazione (`item_activation.rs`) dovrà espandersi per gestire azioni contestuali.
 
 ### 5.3 Estensibilità Config
 -   Il sistema attuale richiede modifiche a 3 punti per aggiungere un campo. Valutare l'uso di `serde` + `toml` per deserializzazione automatica.
@@ -135,11 +142,13 @@ Questo permetterebbe di aggiungere nuovi provider (es. Promemoria, Note rapide) 
     -   Suddividere in funzioni più piccole e semantiche.
     -   Obiettivo: Renderla gestibile prima di aggiungere la "Favorites Strip".
     -   **Stato:** Completato. La funzione è stata suddivisa in `setup_css`, `setup_model`, `create_window`, `build_sidebar`, `build_main_layout`, `connect_window_signals`, `connect_search_signals`, `connect_list_signals` e `start_background_loading`.
+    -   **Nota:** `build_main_layout` potrebbe essere ulteriormente spezzata.
 
 2.  **[X] Introduzione Trait `SearchProvider`**
     -   Disaccoppiare la logica di ricerca dalle implementazioni concrete.
     -   Facilitare l'aggiunta di nuovi provider di risultati.
-    -   **Stato:** Completato. Introdotto trait `SearchProvider` con implementazioni per `AppProvider` e `CalculatorProvider`. La logica di ricerca è ora disaccoppiata da `AppListModel`.
+    -   **Stato:** Completato per i provider locali. Introdotto trait `SearchProvider` con implementazioni per `AppProvider` e `CalculatorProvider`.
+    -   **Nota:** I fornitori D-Bus non implementano questo trait e richiedono gestione separata (async).
 
 3.  **[X] Riordino struttura moduli**
     -   Raggruppare i file in sottocartelle (`core`, `model`, `providers`, `ui`).
@@ -161,4 +170,6 @@ Questo permetterebbe di aggiungere nuovi provider (es. Promemoria, Note rapide) 
 
 ## 7. Conclusione
 
-L'analisi rivela una codebase funzionale ma con chiari segni di "god class" in `ui.rs` e `list_model.rs`. Il refactoring preventivo su `build_ui` e l'introduzione di un trait per i provider di ricerca sono fondamentali per supportare lo sviluppo futuro in modo sostenibile.
+L'analisi rivela una codebase funzionale ma con chiari segni di "god class" in `src/model/list_model.rs` e `src/ui/window.rs` (nonostante il refactoring di `build_ui`). La separazione tra provider locali (trait `SearchProvider`) e asincroni (D-Bus) è una debolezza architetturale che complica l'estensione.
+
+Le modifiche strutturali già effettuate (refactoring di `build_ui`, introduzione di `SearchProvider`) posizionano bene il progetto per l'implementazione delle nuove feature (Favorites Strip, Context Menu). I prossimi passi dovrebbero concentrarsi sulla riduzione della complessità di `AppListModel` e sull'unificazione della gestione dei provider.
