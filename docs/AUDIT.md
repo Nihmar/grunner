@@ -131,9 +131,10 @@ Questo permetterebbe di aggiungere nuovi provider (es. Promemoria, Note rapide) 
 ## 6. Interventi Consigliati (Prioritizzati)
 
 ### Alta Priorità
-1.  **Refactoring di `ui::build_ui`**
+1.  **[X] Refactoring di `ui::build_ui`**
     -   Suddividere in funzioni più piccole e semantiche.
     -   Obiettivo: Renderla gestibile prima di aggiungere la "Favorites Strip".
+    -   **Stato:** Completato. La funzione è stata suddivisa in `setup_css`, `setup_model`, `create_window`, `build_sidebar`, `build_main_layout`, `connect_window_signals`, `connect_search_signals`, `connect_list_signals` e `start_background_loading`.
 
 2.  **Introduzione Trait `SearchProvider`**
     -   Disaccoppiare la logica di ricerca dalle implementazioni concrete.
