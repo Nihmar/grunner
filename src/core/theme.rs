@@ -21,7 +21,10 @@ impl ThemeManager {
 
     pub fn apply(&self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
         let css = match mode {
-            ThemeMode::System => themes::DARK,
+            ThemeMode::System => {
+                log::info!("Using system theme (libadwaita defaults)");
+                return;
+            }
             ThemeMode::SystemLight => themes::LIGHT,
             ThemeMode::SystemDark => themes::DARK,
             ThemeMode::TokioNight => themes::TOKIO_NIGHT,
