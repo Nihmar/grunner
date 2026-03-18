@@ -169,16 +169,19 @@ I diversi "provider" di risultati sono gestiti in modo eterogeneo:
     -   **Stato:** Completato. I file sono stati organizzati in una struttura logica che migliora la manutenibilità.
 
 ### Media Priorità
-4.  **Pulizia `Config`**
+4.  **[X] Pulizia `Config`**
     -   Rimuovere I/O da `Config::default()`.
     -   Garantire che i path vengano espansi solo al momento dell'uso.
+    -   **Stato:** Completato. `app_dirs` ora memorizza raw paths (`Vec<String>`) invece di expanded paths (`Vec<PathBuf>`). Aggiunto metodo `expanded_app_dirs()` per l'espansione lazy. I path vengono espansi solo quando necessario.
 
-5.  **Helper Icone**
+5.  **[X] Helper Icone**
     -   Estrazione della logica di selezione icona in `utils.rs`.
+    -   **Stato:** Completato. Creata funzione `get_file_icon(file_path: &str) -> gio::Icon` in `src/utils.rs`. La logica duplicata in `list_factory.rs` ora usa questo helper.
 
 ### Bassa Priorità
-5.  **Gestione Errori Runtime**
+6.  **[X] Gestione Errori Runtime**
     -   Propagare `Result` da `launch_app` fino alla UI per feedback utente.
+    -   **Stato:** Completato. Aggiunta funzione `show_error_notification()` in `src/actions.rs` che mostra una notifica GTK quando il lancio di un'app fallisce.
 
 ---
 
@@ -219,4 +222,4 @@ L'analisi rivela una codebase funzionale ma con chiari segni di "god class" in `
 
 Le modifiche strutturali già effettuate (refactoring di `build_ui`, introduzione di `SearchProvider`) posizionano bene il progetto per l'implementazione delle nuove feature (Favorites Strip, Context Menu). I prossimi passi dovrebbero concentrarsi sulla riduzione della complessità di `AppListModel` e sull'unificazione della gestione dei provider.
 
-**Nota:** Il sistema di rilevamento icone è stato recentemente corretto per le modalità grep. Nuovi test manuali sono consigliati per verificare il comportamento in tutte le combinazioni di modalità.
+**Nota:** Il sistema di rilevamento icone è stato recentemente corretto per le modalità grep. Le attività di Media e Bassa priorità (Pulizia Config, Helper Icone, Gestione Errori Runtime) sono state completate. Nuovi test manuali sono consigliati per verificare il comportamento in tutte le combinazioni di modalità.

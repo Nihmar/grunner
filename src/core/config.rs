@@ -127,8 +127,8 @@ pub struct Config {
     pub window_height: i32,
     /// Maximum number of search results to display
     pub max_results: usize,
-    /// Directories to scan for .desktop files (expanded paths)
-    pub app_dirs: Vec<PathBuf>,
+    /// Directories to scan for .desktop files (raw paths, use expanded_app_dirs())
+    pub app_dirs: Vec<String>,
     /// Optional Obsidian integration configuration
     pub obsidian: Option<ObsidianConfig>,
     /// Debounce time in milliseconds for command execution
@@ -148,13 +148,24 @@ pub struct Config {
     pub custom_theme_path: Option<String>,
 }
 
+impl Config {
+    /// Get application directories with home paths expanded
+    ///
+    /// This lazily expands ~ to the actual home directory path.
+    /// Call this method when you need actual filesystem paths.
+    #[must_use]
+    pub fn expanded_app_dirs(&self) -> Vec<PathBuf> {
+        self.app_dirs.iter().map(|s| expand_home(s)).collect()
+    }
+}
+
 impl Default for Config {
     /// Create a default configuration with sensible values
     ///
     /// The default configuration includes:
     /// - Standard window dimensions
     /// - Default search result limit
-    /// - Common application directories
+    /// - Common application directories (stored as raw strings, not expanded)
     /// - Fixed colon commands (:ob, :obg, :f, :fg)
     /// - Empty Obsidian configuration
     fn default() -> Self {
@@ -162,11 +173,7 @@ impl Default for Config {
             window_width: DEFAULT_WINDOW_WIDTH,
             window_height: DEFAULT_WINDOW_HEIGHT,
             max_results: DEFAULT_MAX_RESULTS,
-            // Expand ~ in directory paths to actual home directory
-            app_dirs: default_app_dirs()
-                .into_iter()
-                .map(|s| expand_home(&s))
-                .collect(),
+            app_dirs: default_app_dirs(),
             obsidian: None,
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
             search_provider_blacklist: Vec::new(),
@@ -352,7 +359,7 @@ fn apply_toml(content: &str) -> Config {
         }
         if let Some(dirs) = search.app_dirs {
             debug!("Setting app_dirs to {dirs:?}");
-            cfg.app_dirs = dirs.into_iter().map(|s| expand_home(&s)).collect();
+            cfg.app_dirs = dirs;
         }
         if let Some(debounce) = search.command_debounce_ms {
             debug!("Setting command_debounce_ms to {debounce}");
@@ -499,6 +506,17 @@ mod tests {
         assert!(config.app_dirs.len() > 0);
         assert!(config.workspace_bar_enabled);
         assert!(config.obsidian.is_none());
+    }
+
+    #[test]
+    fn test_expanded_app_dirs() {
+        let config = Config {
+            app_dirs: vec!["~/.local/share/applications".to_string()],
+            ..Default::default()
+        };
+        let expanded = config.expanded_app_dirs();
+        assert_eq!(expanded.len(), 1);
+        assert!(expanded[0].to_string_lossy().starts_with("/home"));
     }
 
     #[test]

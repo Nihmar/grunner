@@ -2,9 +2,11 @@
 //!
 //! This module provides general-purpose helper functions used throughout
 //! the application. Currently, it contains path manipulation utilities
-//! for handling user home directory expansion and calculator result parsing.
+//! for handling user home directory expansion, calculator result parsing,
+//! and icon selection.
 
 use crate::core::global_state::get_home_dir;
+use gtk4::gio;
 use std::path::PathBuf;
 
 /// Expand a path starting with `~` to the user's home directory
@@ -133,4 +135,20 @@ pub fn is_calculator_result(line: &str) -> bool {
     }
 
     true
+}
+
+/// Get the icon for a file based on its content type
+///
+/// Uses GTK's content type detection to determine the appropriate icon
+/// for displaying files in the UI.
+///
+/// # Arguments
+/// * `file_path` - Path to the file
+///
+/// # Returns
+/// A `gio::Icon` suitable for use with GTK image widgets
+#[must_use]
+pub fn get_file_icon(file_path: &str) -> gio::Icon {
+    let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
+    gio::content_type_get_icon(&ctype)
 }

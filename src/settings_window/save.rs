@@ -49,13 +49,6 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
         custom_theme_path: Option<String>,
     }
 
-    // Convert app_dirs back to strings (without home expansion)
-    let app_dirs: Vec<String> = config
-        .app_dirs
-        .iter()
-        .map(|p| p.to_string_lossy().to_string())
-        .collect();
-
     let toml_config = TomlConfig {
         window: WindowConfig {
             width: config.window_width,
@@ -63,7 +56,7 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
         },
         search: SearchConfig {
             max_results: config.max_results,
-            app_dirs,
+            app_dirs: config.app_dirs.clone(),
             command_debounce_ms: config.command_debounce_ms,
             provider_blacklist: config.search_provider_blacklist.clone(),
             workspace_bar_enabled: config.workspace_bar_enabled,

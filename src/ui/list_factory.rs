@@ -6,8 +6,7 @@
 
 use crate::app_mode::ActiveMode;
 use crate::model::items::{AppItem, CommandItem, ObsidianActionItem, SearchResultItem};
-use crate::utils::{contract_home, is_calculator_result};
-use gtk4::gio;
+use crate::utils::{contract_home, get_file_icon, is_calculator_result};
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Image, Label, ListItem, Orientation, SignalListItemFactory, Widget,
@@ -228,9 +227,7 @@ fn bind_command_item(
         || (line.starts_with('/') && line.matches(':').count() >= 2);
     if is_grep_result {
         if let Some((file_path, rest)) = line.split_once(':') {
-            // Use content type to get the appropriate icon for the file
-            let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
-            image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+            image.set_from_gicon(&get_file_icon(file_path));
 
             // For ObsidianGrep, use vault-relative path; for FileSearch use full path
             let display_path = if mode == ActiveMode::ObsidianGrep {
@@ -275,8 +272,7 @@ fn bind_command_item(
         } else {
             // Regular file path (not Obsidian mode)
             // Use generic icon based on file type
-            let (ctype, _) = gio::content_type_guess(Some(&line), None::<&[u8]>);
-            image.set_from_gicon(&gio::content_type_get_icon(&ctype));
+            image.set_from_gicon(&get_file_icon(&line));
 
             let (filename, parent) = extract_filename_and_parent(&line);
             name_label.set_text(filename);

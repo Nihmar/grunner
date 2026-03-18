@@ -13,7 +13,7 @@ use crate::model::items::ObsidianAction;
 use crate::settings_window;
 use crate::utils::expand_home;
 use chrono::Local;
-use gtk4::prelude::DisplayExt;
+use gtk4::prelude::{ApplicationExt, DisplayExt};
 use log::{debug, error, info, warn};
 use std::fs;
 use std::fs::File;
@@ -21,6 +21,16 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+
+fn show_error_notification(message: &str) {
+    if gtk4::gdk::Display::default().is_some() {
+        let notification = gtk4::gio::Notification::new("Launch Failed");
+        notification.set_body(Some(message));
+        if let Some(app) = gtk4::gio::Application::default() {
+            app.send_notification(Some("launch-error"), &notification);
+        }
+    }
+}
 
 /// Check if a file at the given path is executable
 ///
@@ -136,11 +146,13 @@ pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
             debug!("Spawning terminal command: {cmd:?}");
             if let Err(e) = cmd.spawn() {
                 error!("Failed to launch terminal {term} with command '{clean}': {e}");
+                show_error_notification(&format!("Failed to launch: {clean}"));
             } else {
                 info!("Successfully launched application in terminal {term}: {clean}");
             }
         } else {
             warn!("No terminal emulator found for command: {clean}");
+            show_error_notification("No terminal emulator found");
         }
     } else {
         // Run directly without terminal
@@ -152,6 +164,7 @@ pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
         debug!("Spawning command directly: {cmd:?}");
         if let Err(e) = cmd.spawn() {
             error!("Failed to launch command '{clean}': {e}");
+            show_error_notification(&format!("Failed to launch: {clean}"));
         } else {
             info!("Successfully launched application: {clean}");
         }

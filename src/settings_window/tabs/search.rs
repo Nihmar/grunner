@@ -62,15 +62,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
         .wrap_mode(gtk4::WrapMode::WordChar)
         .build();
     let dirs_buffer = dirs_text.buffer();
-    dirs_buffer.set_text(
-        &config_rc
-            .borrow()
-            .app_dirs
-            .iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect::<Vec<_>>()
-            .join("\n"),
-    );
+    dirs_buffer.set_text(&config_rc.borrow().app_dirs.join("\n"));
     dirs_buffer.connect_changed({
         let config_rc = Rc::clone(config_rc);
         move |buffer| {
@@ -79,7 +71,6 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
                 .split('\n')
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
-                .map(|s| crate::utils::expand_home(&s))
                 .collect();
         }
     });

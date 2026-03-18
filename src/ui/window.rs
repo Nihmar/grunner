@@ -398,17 +398,14 @@ fn connect_list_signals(
 
 /// Start background loading of desktop applications
 fn start_background_loading(cfg: &Config, model: &AppListModel) {
-    // Load desktop applications in background thread to avoid UI freeze
-    let dirs = cfg.app_dirs.clone();
+    let dirs = cfg.expanded_app_dirs();
     let model_poll = model.clone();
     let (tx, rx) = std::sync::mpsc::channel();
 
-    // Spawn background thread for application scanning
     std::thread::spawn(move || {
         let _ = tx.send(launcher::load_apps(&dirs));
     });
 
-    // Start polling for application loading results
     glib::idle_add_local_once(move || poll_apps(rx, model_poll));
 }
 
