@@ -14,15 +14,16 @@ pub mod core {
 pub mod item_activation;
 pub mod launcher;
 pub mod model {
-    pub mod list_model;
     pub mod items;
+    pub mod list_model;
 }
 pub mod providers;
 pub mod settings_window;
 pub mod ui {
+    pub mod list_factory;
     pub mod obsidian_bar;
     pub mod power_bar;
-    pub mod workspace_bar;
     pub mod window;
+    pub mod workspace_bar;
 }
 pub mod utils;

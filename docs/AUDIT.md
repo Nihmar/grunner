@@ -43,8 +43,21 @@ Questo documento riporta i risultati dell'analisi statica del codice sorgente di
 -   I fornitori D-Bus (`dbus_provider`) non implementano `SearchProvider` ma sono gestiti internamente da `AppListModel` tramite `run_provider_search`.
 
 **Proposte Concrete:**
--   **Refactoring UI:** Spostare la logica di binding (`bind_*`) nel modulo `items` o in un helper UI, lasciando al model solo la gestione dei dati grezzi.
+-   **Refactoring UI:** Spostare la logica di binding (`bind_*`) nel modulo `items` o in un helper UI, lasciando al model solo la gestione dei dati grezzi. **[COMPLETATO]** Creato `src/ui/list_factory.rs` per gestire la creazione della factory e il binding dei dati.
 -   **Unificazione Provider:** Valutare se creare un trait async o una wrapper struct per unificare la gestione di provider locali e D-Bus, riducendo la complessità in `AppListModel`.
+
+**Stato Attuale:**
+-   **Factory UI Separata:** La logica di creazione della factory e binding dei dati è stata spostata in `src/ui/list_factory.rs`.
+-   **ActiveMode Condiviso:** L'enum `ActiveMode` è stato spostato in `src/app_mode.rs` per essere accessibile sia al modello che alla UI.
+-   **Riduzione Complessità:** `AppListModel::create_factory` è ora una semplice delega a `list_factory::create_factory`.
+-   **Layout UI Corretto:** Ripristinato il layout originale con icona + (nome + descrizione) su due righe.
+-   **Logica di Binding Ripristinata:** Tutte le funzionalità originali sono state ripristinate:
+    - Icone basate sul content type per i risultati di `:obg` (Obsidian Grep)
+    - Icone markdown generiche (`text-x-markdown`) per i risultati di `:ob` (Obsidian File)
+    - Path accorciati con tilde (`~`) per i file sotto la home directory
+    - Path relativi al vault per i risultati Obsidian
+    - Icone generiche basate sul content type per file non-Obsidian
+    - Gestione corretta della visibility della descrizione con `set_desc`
 
 ### 2.3 `src/config.rs`
 **Responsabilità:** Parsing e caricamento configurazione TOML.

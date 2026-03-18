@@ -7,10 +7,10 @@
 
 pub mod dbus_provider;
 
-use crate::model::items::{AppItem, CommandItem};
 use crate::launcher::DesktopApp;
-use fuzzy_matcher::skim::SkimMatcherV2;
+use crate::model::items::{AppItem, CommandItem};
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use gtk4::glib;
 use gtk4::prelude::Cast;
 use std::cell::RefCell;

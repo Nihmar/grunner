@@ -10,16 +10,17 @@ mod item_activation;
 mod launcher;
 mod logging;
 mod model {
-    pub mod list_model;
     pub mod items;
+    pub mod list_model;
 }
 mod providers;
 mod settings_window;
 mod ui {
+    pub mod list_factory;
     pub mod obsidian_bar;
     pub mod power_bar;
-    pub mod workspace_bar;
     pub mod window;
+    pub mod workspace_bar;
 }
 mod utils;
 use glib::ExitCode;

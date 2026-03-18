@@ -3,8 +3,8 @@
 use super::make_tab_page;
 use crate::core::config::{CommandConfig, Config};
 use gtk4::prelude::*;
-use libadwaita::prelude::*;
 use libadwaita::PreferencesGroup;
+use libadwaita::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 

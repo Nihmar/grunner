@@ -26,6 +26,25 @@ pub enum AppMode {
     CustomScript,
 }
 
+/// Enum representing the rendering mode for list items
+///
+/// This is used internally by the list model to determine how to render
+/// command items based on the current search mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActiveMode {
+    /// Default mode - no special rendering
+    #[default]
+    None,
+    /// Obsidian action mode (vault open, new note, etc.)
+    ObsidianAction,
+    /// Obsidian file search results
+    ObsidianFile,
+    /// Obsidian grep (ripgrep with grep fallback) search results
+    ObsidianGrep,
+    /// Custom script mode for :sh command
+    CustomScript,
+}
+
 impl AppMode {
     /// Determine the application mode based on input text
     ///

@@ -8,8 +8,8 @@
 //! - Settings management
 
 use crate::core::config::ObsidianConfig;
-use crate::model::items::ObsidianAction;
 use crate::launcher;
+use crate::model::items::ObsidianAction;
 use crate::settings_window;
 use crate::utils::expand_home;
 use chrono::Local;
