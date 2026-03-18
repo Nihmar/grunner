@@ -30,54 +30,100 @@ use std::time::Duration;
 
 const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 100;
 
-// ── Pollers ───────────────────────────────────────────────────────────────────
+// ── Subprocess Runner ─────────────────────────────────────────────────────────
 
-/// Drives the idle-poll loop for a plain subprocess result (`run_subprocess`).
+/// Unified subprocess execution handler
 ///
-/// This struct manages the asynchronous collection of command output
-/// from background threads, updating the UI when results are ready.
-struct SubprocessPoller {
-    /// Channel receiver for command output lines
-    rx: std::sync::mpsc::Receiver<Vec<String>>,
+/// This struct encapsulates the common pattern of spawning a background thread,
+/// sending results through a channel, and polling for results in the main thread.
+/// It supports different result types and generation tracking to cancel stale tasks.
+pub struct SubprocessRunner<R> {
+    /// Channel receiver for results
+    rx: std::sync::mpsc::Receiver<R>,
     /// Reference to the main list model for UI updates
     model: AppListModel,
     /// Generation ID to prevent stale updates after new searches
     generation: u64,
+    /// Callback to process results and update the UI
+    processor: Box<dyn Fn(&AppListModel, u64, R) + 'static>,
 }
 
-impl SubprocessPoller {
+impl<R: 'static> SubprocessRunner<R> {
+    /// Create a new subprocess runner
+    ///
+    /// # Arguments
+    /// * `rx` - Channel receiver for results
+    /// * `model` - Reference to the AppListModel for UI updates
+    /// * `generation` - Generation ID to track stale tasks
+    /// * `processor` - Callback to process results and update UI
+    pub fn new<F>(
+        rx: std::sync::mpsc::Receiver<R>,
+        model: AppListModel,
+        generation: u64,
+        processor: F,
+    ) -> Self
+    where
+        F: Fn(&AppListModel, u64, R) + 'static,
+    {
+        Self {
+            rx,
+            model,
+            generation,
+            processor: Box::new(processor),
+        }
+    }
+
     /// Poll for subprocess results and update UI when ready
     ///
     /// This method checks for available output from the background thread
     /// and updates the list store if the generation still matches.
     /// If no data is ready yet, it schedules itself to run again on idle.
-    fn poll(self) {
+    pub fn poll(self) {
         match self.rx.try_recv() {
-            Ok(lines) => {
-                // Only update if this poller is still for the current search
+            Ok(results) => {
                 if self.model.task_gen.get() == self.generation {
-                    self.model.store.remove_all();
-                    for line in lines {
-                        self.model.store.append(&CommandItem::new(line));
-                    }
-                    // Auto-select first item if nothing is selected
-                    if self.model.store.n_items() > 0
-                        && self.model.selection.selected() == gtk4::INVALID_LIST_POSITION
-                    {
-                        self.model.selection.set_selected(0);
-                    }
+                    (self.processor)(&self.model, self.generation, results);
                 }
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => {
-                // No data yet - reschedule poll on next idle
                 glib::idle_add_local_once(move || self.poll());
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                // Thread finished without sending data (empty output or error)
+                // Thread finished without sending data
             }
         }
     }
 }
+
+/// Spawn a subprocess with the given closure
+///
+/// This static method creates a background thread that executes the provided
+/// command, collects results, and sends them through the channel.
+///
+/// # Arguments
+/// * `cmd_fn` - Closure that creates and configures the Command
+/// * `max_results` - Maximum number of results to collect
+/// * `tx` - Channel sender for results
+pub fn spawn_subprocess<F>(cmd_fn: F, max_results: usize, tx: std::sync::mpsc::Sender<Vec<String>>)
+where
+    F: FnOnce() -> std::process::Command + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let lines = cmd_fn()
+            .output()
+            .map(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .take(max_results)
+                    .map(String::from)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let _ = tx.send(lines);
+    });
+}
+
+// ── Pollers ───────────────────────────────────────────────────────────────────
 
 /// Drives the idle-poll loop for a streaming search-provider query.
 ///
@@ -520,34 +566,29 @@ impl AppListModel {
     /// Run a subprocess command and collect its output in a background thread
     ///
     /// The command output is sent back to the main thread via a channel,
-    /// then processed by a `SubprocessPoller` to update the UI.
-    fn run_subprocess(&self, mut cmd: std::process::Command) {
+    /// then processed by a `SubprocessRunner` to update the UI.
+    fn run_subprocess(&self, cmd: std::process::Command) {
         let generation = self.task_gen.get();
         let max_results = self.max_results.get();
         let model_clone = self.clone();
 
         let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
 
-        std::thread::spawn(move || {
-            let lines = cmd
-                .output()
-                .map(|out| {
-                    String::from_utf8_lossy(&out.stdout)
-                        .lines()
-                        .take(max_results)
-                        .map(String::from)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            let _ = tx.send(lines);
-        });
+        spawn_subprocess(move || cmd, max_results, tx);
 
-        let poller = SubprocessPoller {
-            rx,
-            model: model_clone,
-            generation,
+        let processor = |model: &AppListModel, _gen: u64, lines: Vec<String>| {
+            model.store.remove_all();
+            for line in lines {
+                model.store.append(&CommandItem::new(line));
+            }
+            if model.store.n_items() > 0
+                && model.selection.selected() == gtk4::INVALID_LIST_POSITION
+            {
+                model.selection.set_selected(0);
+            }
         };
-        glib::idle_add_local_once(move || poller.poll());
+        let runner = SubprocessRunner::new(rx, model_clone, generation, processor);
+        glib::idle_add_local_once(move || runner.poll());
     }
 
     /// Run a search query through GNOME Shell search providers

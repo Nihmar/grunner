@@ -12,6 +12,191 @@ use gtk4::{
     Align, Box as GtkBox, Image, Label, ListItem, Orientation, SignalListItemFactory, Widget,
 };
 
+/// Context for binding list items, containing all necessary data
+pub struct BindContext<'a> {
+    pub image: &'a Image,
+    pub name_label: &'a Label,
+    pub desc_label: &'a Label,
+    pub mode: ActiveMode,
+    pub vault_path: Option<&'a str>,
+}
+
+impl<'a> BindContext<'a> {
+    pub fn new(
+        image: &'a Image,
+        name_label: &'a Label,
+        desc_label: &'a Label,
+        mode: ActiveMode,
+        vault_path: Option<&'a str>,
+    ) -> Self {
+        Self {
+            image,
+            name_label,
+            desc_label,
+            mode,
+            vault_path,
+        }
+    }
+}
+
+/// Trait for binding strategies
+///
+/// Each strategy handles binding a specific type of item to the UI widgets.
+/// This allows for easy extension and testing of individual binding behaviors.
+pub trait BindStrategy {
+    fn matches(&self, ctx: &BindContext, line: &str) -> bool;
+    fn bind(&self, ctx: &BindContext, line: &str);
+}
+
+/// Strategy for calculator results
+struct CalculatorBinder;
+
+impl BindStrategy for CalculatorBinder {
+    fn matches(&self, _ctx: &BindContext, line: &str) -> bool {
+        is_calculator_result(line)
+    }
+
+    fn bind(&self, ctx: &BindContext, line: &str) {
+        ctx.image.set_icon_name(Some("accessories-calculator"));
+        if let Some((_expr, result)) = line.split_once('=') {
+            ctx.name_label.set_text(result.trim());
+            set_desc(ctx.desc_label, &format!("Calc: {line}"));
+        } else {
+            ctx.name_label.set_text(line);
+            set_desc(ctx.desc_label, "Calculator result");
+        }
+    }
+}
+
+/// Strategy for shell command results (CustomScript mode)
+struct ShellCommandBinder;
+
+impl BindStrategy for ShellCommandBinder {
+    fn matches(&self, ctx: &BindContext, line: &str) -> bool {
+        ctx.mode == ActiveMode::CustomScript || line.starts_with("Run: ") || line.contains(" | ")
+    }
+
+    fn bind(&self, ctx: &BindContext, line: &str) {
+        ctx.image.set_icon_name(Some("utilities-terminal"));
+        if let Some((name, command)) = line.split_once(" | ") {
+            ctx.name_label.set_text(name.trim());
+            set_desc(ctx.desc_label, command.trim());
+        } else if let Some(stripped) = line.strip_prefix("Run: ") {
+            ctx.name_label.set_text("Run command");
+            set_desc(ctx.desc_label, stripped);
+        } else {
+            ctx.name_label.set_text(line);
+            set_desc(ctx.desc_label, "");
+        }
+    }
+}
+
+/// Strategy for grep results (file:line:content format)
+struct GrepResultBinder;
+
+impl BindStrategy for GrepResultBinder {
+    fn matches(&self, ctx: &BindContext, line: &str) -> bool {
+        ctx.mode == ActiveMode::ObsidianGrep
+            || (line.contains(':') && !line.starts_with('/'))
+            || (line.starts_with('/') && line.matches(':').count() >= 2)
+    }
+
+    fn bind(&self, ctx: &BindContext, line: &str) {
+        if let Some((file_path, rest)) = line.split_once(':') {
+            ctx.image.set_from_gicon(&get_file_icon(file_path));
+
+            let display_path = if ctx.mode == ActiveMode::ObsidianGrep {
+                relative_to_vault(file_path, ctx.vault_path)
+            } else {
+                file_path
+            };
+            let filename = std::path::Path::new(display_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(display_path);
+            ctx.name_label.set_text(filename);
+            set_desc(ctx.desc_label, rest);
+        } else {
+            ctx.image.set_icon_name(Some("text-markdown"));
+            ctx.name_label.set_text(line);
+            set_desc(ctx.desc_label, "");
+        }
+    }
+}
+
+/// Strategy for Obsidian file paths
+struct ObsidianFileBinder;
+
+impl BindStrategy for ObsidianFileBinder {
+    fn matches(&self, ctx: &BindContext, line: &str) -> bool {
+        ctx.mode == ActiveMode::ObsidianFile && line.starts_with('/')
+    }
+
+    fn bind(&self, ctx: &BindContext, line: &str) {
+        ctx.image.set_icon_name(Some("text-markdown"));
+
+        let (filename, _parent) = extract_filename_and_parent(line);
+        ctx.name_label.set_text(filename);
+        let relative = relative_to_vault(line, ctx.vault_path);
+        let parent = std::path::Path::new(relative)
+            .parent()
+            .and_then(|p| p.to_str())
+            .filter(|s| !s.is_empty())
+            .or_else(|| std::path::Path::new(line).parent().and_then(|p| p.to_str()));
+        set_desc(ctx.desc_label, parent.unwrap_or(""));
+    }
+}
+
+/// Strategy for generic file paths
+struct FilePathBinder;
+
+impl BindStrategy for FilePathBinder {
+    fn matches(&self, ctx: &BindContext, line: &str) -> bool {
+        ctx.mode != ActiveMode::ObsidianFile && line.starts_with('/')
+    }
+
+    fn bind(&self, ctx: &BindContext, line: &str) {
+        ctx.image.set_from_gicon(&get_file_icon(line));
+
+        let (filename, parent) = extract_filename_and_parent(line);
+        ctx.name_label.set_text(filename);
+
+        let display_parent = if parent.is_empty() {
+            String::new()
+        } else {
+            contract_home(std::path::Path::new(parent))
+        };
+        set_desc(ctx.desc_label, &display_parent);
+    }
+}
+
+/// Default strategy for generic command output
+struct DefaultBinder;
+
+impl BindStrategy for DefaultBinder {
+    fn matches(&self, _ctx: &BindContext, _line: &str) -> bool {
+        true
+    }
+
+    fn bind(&self, ctx: &BindContext, line: &str) {
+        ctx.image.set_icon_name(Some("system-search"));
+        ctx.name_label.set_text(line);
+        set_desc(ctx.desc_label, "");
+    }
+}
+
+/// List of all binding strategies in order of priority
+fn get_binders() -> Vec<Box<dyn BindStrategy>> {
+    vec![
+        Box::new(CalculatorBinder),
+        Box::new(ShellCommandBinder),
+        Box::new(GrepResultBinder),
+        Box::new(ObsidianFileBinder),
+        Box::new(FilePathBinder),
+        Box::new(DefaultBinder),
+    ]
+}
+
 /// Create a factory for the list view
 ///
 /// This function builds a `GTK SignalListItemFactory` that handles
@@ -179,7 +364,7 @@ fn extract_filename_and_parent(path: &str) -> (&str, &str) {
     (filename, parent)
 }
 
-/// Bind a command item to the list widget (calculator, file paths, scripts)
+/// Bind a command item to the list widget using strategy pattern
 fn bind_command_item(
     image: &Image,
     name_label: &Label,
@@ -189,109 +374,14 @@ fn bind_command_item(
     vault_path: Option<&str>,
 ) {
     let line = cmd_item.line();
+    let ctx = BindContext::new(image, name_label, desc_label, mode, vault_path);
 
-    // Check if this is a calculator result
-    if is_calculator_result(&line) {
-        image.set_icon_name(Some("accessories-calculator"));
-        if let Some((_expr, result)) = line.split_once('=') {
-            name_label.set_text(result.trim());
-            set_desc(desc_label, &format!("Calc: {line}"));
-        } else {
-            name_label.set_text(&line);
-            set_desc(desc_label, "Calculator result");
+    for strategy in get_binders() {
+        if strategy.matches(&ctx, &line) {
+            strategy.bind(&ctx, &line);
+            return;
         }
-        return;
     }
-
-    // Check if this is a shell command result
-    if mode == ActiveMode::CustomScript || line.starts_with("Run: ") || line.contains(" | ") {
-        image.set_icon_name(Some("utilities-terminal"));
-        if let Some((name, command)) = line.split_once(" | ") {
-            name_label.set_text(name.trim());
-            set_desc(desc_label, command.trim());
-        } else if let Some(stripped) = line.strip_prefix("Run: ") {
-            name_label.set_text("Run command");
-            set_desc(desc_label, stripped);
-        } else {
-            name_label.set_text(&line);
-            set_desc(desc_label, "");
-        }
-        return;
-    }
-
-    // Check if this is a grep result (file:line:content format)
-    // grep output: /path/file.md:42:content (starts with /, has at least 2 colons)
-    // :obg also outputs in this format
-    let is_grep_result = mode == ActiveMode::ObsidianGrep
-        || (line.contains(":") && !line.starts_with("/"))
-        || (line.starts_with('/') && line.matches(':').count() >= 2);
-    if is_grep_result {
-        if let Some((file_path, rest)) = line.split_once(':') {
-            image.set_from_gicon(&get_file_icon(file_path));
-
-            // For ObsidianGrep, use vault-relative path; for FileSearch use full path
-            let display_path = if mode == ActiveMode::ObsidianGrep {
-                relative_to_vault(file_path, vault_path)
-            } else {
-                file_path
-            };
-            let filename = std::path::Path::new(display_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(display_path);
-            name_label.set_text(filename);
-            set_desc(desc_label, rest);
-        } else {
-            image.set_icon_name(Some("text-markdown"));
-            name_label.set_text(&line);
-            set_desc(desc_label, "");
-        }
-        return;
-    }
-
-    // Check if this is a file path (starts with /)
-    if line.starts_with('/') {
-        // Handle Obsidian file mode
-        if mode == ActiveMode::ObsidianFile {
-            // Use markdown icon for Obsidian file mode
-            image.set_icon_name(Some("text-markdown"));
-
-            let (filename, _parent) = extract_filename_and_parent(&line);
-            name_label.set_text(filename);
-            let relative = relative_to_vault(&line, vault_path);
-            let parent = std::path::Path::new(relative)
-                .parent()
-                .and_then(|p| p.to_str())
-                .filter(|s| !s.is_empty())
-                .or_else(|| {
-                    std::path::Path::new(&line)
-                        .parent()
-                        .and_then(|p| p.to_str())
-                });
-            set_desc(desc_label, parent.unwrap_or(""));
-        } else {
-            // Regular file path (not Obsidian mode)
-            // Use generic icon based on file type
-            image.set_from_gicon(&get_file_icon(&line));
-
-            let (filename, parent) = extract_filename_and_parent(&line);
-            name_label.set_text(filename);
-
-            // Contract home directory to tilde
-            let display_parent = if parent.is_empty() {
-                String::new()
-            } else {
-                contract_home(std::path::Path::new(parent))
-            };
-            set_desc(desc_label, &display_parent);
-        }
-        return;
-    }
-
-    // Default: generic command output
-    image.set_icon_name(Some("system-search"));
-    name_label.set_text(&line);
-    set_desc(desc_label, "");
 }
 /// Bind an Obsidian action item to the list widget
 fn bind_obsidian_item(
