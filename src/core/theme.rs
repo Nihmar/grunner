@@ -20,21 +20,55 @@ impl ThemeManager {
     }
 
     pub fn apply(&self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
+        let style_manager = libadwaita::StyleManager::default();
+
         let css = match mode {
             ThemeMode::System => {
                 log::info!("Using system theme (libadwaita defaults)");
+                style_manager.set_color_scheme(libadwaita::ColorScheme::Default);
                 return;
             }
-            ThemeMode::SystemLight => themes::LIGHT,
-            ThemeMode::SystemDark => themes::DARK,
-            ThemeMode::TokioNight => themes::TOKIO_NIGHT,
-            ThemeMode::CatppuccinMocha => themes::CATPPUCCIN_MOCHA,
-            ThemeMode::CatppuccinLatte => themes::CATPPUCCIN_LATTE,
-            ThemeMode::Nord => themes::NORD,
-            ThemeMode::GruvboxDark => themes::GRUVBOX_DARK,
-            ThemeMode::GruvboxLight => themes::GRUVBOX_LIGHT,
-            ThemeMode::Dracula => themes::DRACULA,
-            ThemeMode::Custom => self.load_custom_theme(custom_path),
+            ThemeMode::SystemLight => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceLight);
+                themes::LIGHT
+            }
+            ThemeMode::SystemDark => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceDark);
+                themes::DARK
+            }
+            ThemeMode::TokioNight => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceDark);
+                themes::TOKIO_NIGHT
+            }
+            ThemeMode::CatppuccinMocha => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceDark);
+                themes::CATPPUCCIN_MOCHA
+            }
+            ThemeMode::CatppuccinLatte => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceLight);
+                themes::CATPPUCCIN_LATTE
+            }
+            ThemeMode::Nord => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceDark);
+                themes::NORD
+            }
+            ThemeMode::GruvboxDark => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceDark);
+                themes::GRUVBOX_DARK
+            }
+            ThemeMode::GruvboxLight => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceLight);
+                themes::GRUVBOX_LIGHT
+            }
+            ThemeMode::Dracula => {
+                style_manager.set_color_scheme(libadwaita::ColorScheme::ForceDark);
+                themes::DRACULA
+            }
+            ThemeMode::Custom => {
+                // For custom themes, we don't know if it's light or dark,
+                // so we don't force a color scheme. The theme CSS should define everything.
+                self.load_custom_theme(custom_path)
+            }
         };
 
         self.provider.load_from_data(css);
