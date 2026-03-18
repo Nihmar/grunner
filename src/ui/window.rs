@@ -434,7 +434,6 @@ fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
 /// - Arrow keys: move selection up/down
 /// - Page Up/Down: jump 10 items
 fn setup_keyboard_controller(
-    entry: &Entry,
     list_view: &ListView,
     window: &ApplicationWindow,
     model: &AppListModel,
@@ -500,7 +499,7 @@ fn setup_keyboard_controller(
             }
         }
     ));
-    entry.add_controller(key_ctrl);
+    window.add_controller(key_ctrl);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,7 +579,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     }
 
     // 5.4 Keyboard navigation
-    setup_keyboard_controller(&entry, &list_view, &window, &model, &current_mode);
+    setup_keyboard_controller(&list_view, &window, &model, &current_mode);
 
     // 5.5 List view activation
     connect_list_signals(&list_view, &window, &model, &current_mode);
