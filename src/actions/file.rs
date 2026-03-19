@@ -1,4 +1,4 @@
-use gtk4::prelude::DisplayExt;
+use crate::utils::clipboard::copy_text;
 use log::{debug, error, info, warn};
 use std::path::Path;
 
@@ -78,9 +78,7 @@ pub fn open_file_or_line(line: &str) {
     } else {
         // Path doesn't exist - copy text to clipboard as fallback
         warn!("Path does not exist, copying to clipboard: {line}");
-        let display = gtk4::gdk::Display::default().expect("cannot get display");
-        let clipboard = display.clipboard();
-        clipboard.set_text(line);
+        copy_text(line);
         info!("Copied text to clipboard: {line}");
     }
 }

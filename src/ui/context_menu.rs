@@ -80,7 +80,7 @@ pub fn add_copy_file_button(ctx: &MenuContext, label: &str, path: &str) {
     let path = path.to_string();
     let weak = ctx.weak_popover.clone();
     add_menu_button(ctx, label, move || {
-        copy_file_to_clipboard(&path);
+        let _ = copy_file_to_clipboard(&path);
         if let Some(p) = weak.upgrade() {
             p.popdown();
         }
@@ -115,24 +115,8 @@ pub fn add_open_with_default_app_button(ctx: &MenuContext, label: &str, path: &s
 // Clipboard operations
 // ---------------------------------------------------------------------------
 
-/// Copy plain text to the system clipboard
-pub fn copy_text_to_clipboard(text: &str) {
-    if let Some(display) = gtk4::gdk::Display::default() {
-        let clipboard = display.clipboard();
-        clipboard.set_text(text);
-    }
-}
-
-/// Copy a file (as GFile) to the system clipboard
-pub fn copy_file_to_clipboard(path: &str) {
-    if let Some(display) = gtk4::gdk::Display::default() {
-        let file = gtk4::gio::File::for_path(path);
-        let value = file.to_value();
-        let content_provider = gtk4::gdk::ContentProvider::for_value(&value);
-        let clipboard = display.clipboard();
-        let _ = clipboard.set_content(Some(&content_provider));
-    }
-}
+pub use crate::utils::clipboard::copy_file as copy_file_to_clipboard;
+pub use crate::utils::clipboard::copy_text as copy_text_to_clipboard;
 
 // ---------------------------------------------------------------------------
 // File operations
