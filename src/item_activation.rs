@@ -12,7 +12,7 @@ use crate::app_mode::AppMode;
 use crate::core::config::ObsidianConfig;
 use crate::model::items::{AppItem, CommandItem, ObsidianActionItem, SearchResultItem};
 use crate::model::list_model::AppListModel;
-use crate::providers::dbus_provider;
+use crate::providers::dbus;
 use crate::utils::is_calculator_result;
 use gtk4::prelude::{Cast, DisplayExt};
 use log::{debug, info, warn};
@@ -157,7 +157,7 @@ fn activate_search_result(item: &SearchResultItem, ctx: &ActivationContext) {
     info!("Activating search result: {id} from provider {bus}");
     let timestamp = ctx.timestamp;
     std::thread::spawn(move || {
-        dbus_provider::activate_result(&bus, &path, &id, &terms, timestamp);
+        dbus::activate_result(&bus, &path, &id, &terms, timestamp);
     });
 }
 

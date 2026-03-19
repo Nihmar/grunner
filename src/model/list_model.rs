@@ -17,7 +17,7 @@ use crate::core::global_state::get_home_dir;
 use crate::launcher::DesktopApp;
 use crate::model::items::CommandItem;
 use crate::model::items::SearchResultItem;
-use crate::providers::dbus_provider::{self, SearchProvider as DbusSearchProvider};
+use crate::providers::dbus::{self, SearchProvider as DbusSearchProvider};
 use crate::providers::{AppProvider, CalculatorProvider, CommandProvider, SearchProvider};
 use crate::utils::expand_home;
 use gtk4::gio;
@@ -132,7 +132,7 @@ where
 /// of results over time.
 struct ProviderSearchPoller {
     /// Channel receiver for search result batches
-    rx: std::sync::mpsc::Receiver<Vec<dbus_provider::SearchResult>>,
+    rx: std::sync::mpsc::Receiver<Vec<dbus::SearchResult>>,
     /// Reference to the main list model for UI updates
     model: AppListModel,
     /// Generation ID to prevent stale updates after new searches
@@ -181,8 +181,8 @@ impl ProviderSearchPoller {
                         .into_iter()
                         .map(|r| {
                             let (icon_themed, icon_file) = match r.icon {
-                                Some(dbus_provider::IconData::Themed(n)) => (n, String::new()),
-                                Some(dbus_provider::IconData::File(p)) => (String::new(), p),
+                                Some(dbus::IconData::Themed(n)) => (n, String::new()),
+                                Some(dbus::IconData::File(p)) => (String::new(), p),
                                 None => (String::new(), String::new()),
                             };
                             SearchResultItem::new(
@@ -453,9 +453,9 @@ impl AppListModel {
     /// alongside application results when filtering.
     fn schedule_provider_search(&self, query: String, clear_store: bool) {
         // Discover providers (cached after first use)
-        let providers = self.search_providers.get_or_init(|| {
-            dbus_provider::discover_providers(&self.search_provider_blacklist.borrow())
-        });
+        let providers = self
+            .search_providers
+            .get_or_init(|| dbus::discover_providers(&self.search_provider_blacklist.borrow()));
 
         if providers.is_empty() {
             return;
@@ -628,9 +628,9 @@ impl AppListModel {
         }
 
         // Channel for streaming results from background thread
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<dbus_provider::SearchResult>>();
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<dbus::SearchResult>>();
         std::thread::spawn(move || {
-            dbus_provider::run_search_streaming(&providers, &query, max, tx);
+            dbus::run_search_streaming(&providers, &query, max, tx);
         });
 
         let poller = ProviderSearchPoller {

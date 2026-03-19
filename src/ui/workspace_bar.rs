@@ -8,7 +8,8 @@
 //!
 //! The bar auto-refreshes every time the Grunner launcher window becomes visible.
 
-use crate::utils::desktop::resolve_desktop_info;
+use crate::actions::workspace::{self as ws, WindowInfo};
+use crate::core::global_state::get_tokio_runtime;
 use glib::clone;
 use gtk4::{
     Box as GtkBox, Button, EventControllerMotion, EventControllerScroll,
@@ -16,234 +17,10 @@ use gtk4::{
     ScrolledWindow, gdk, prelude::*,
 };
 use libadwaita::ApplicationWindow;
-use serde::Deserialize;
 use std::rc::Rc;
-use std::sync::OnceLock;
-use zbus::{Connection, proxy};
 
-// ─── D-Bus proxy definitions ──────────────────────────────────────────────────
-
-/// Proxy for `org.gnome.Shell.Extensions.Windows` — window enumeration via
-/// the window-calls GNOME Shell extension.
-#[proxy(
-    interface = "org.gnome.Shell.Extensions.Windows",
-    default_service = "org.gnome.Shell",
-    default_path = "/org/gnome/Shell/Extensions/Windows"
-)]
-trait WindowCalls {
-    /// Returns JSON array of all windows with their properties.
-    ///
-    /// Each entry contains: `id`, `wm_class`, `wm_class_instance`, `pid`,
-    /// `workspace`, `in_current_workspace`, `frame_type`, `window_type`, etc.
-    fn list(&self) -> zbus::Result<String>;
-
-    /// Activates (focuses) the window with the given ID.
-    fn activate(&self, win_id: u32) -> zbus::Result<()>;
-
-    /// Closes the window with the given ID (sends WM_DELETE_WINDOW).
-    fn close(&self, win_id: u32) -> zbus::Result<()>;
-}
-
-// ─── Global runtime management ─────────────────────────────────────────────────
-
-/// Global Tokio runtime for async workspace operations
-///
-/// This runtime is used for D-Bus communication with the window-calls extension.
-/// It's shared across all workspace bar refresh operations to avoid the overhead
-/// of creating a new runtime for each window map event.
-static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-
-/// Get or initialize the shared Tokio runtime
-///
-/// Creates a current-thread runtime optimized for I/O operations,
-/// suitable for D-Bus communication with the window-calls extension.
-fn get_runtime() -> &'static tokio::runtime::Runtime {
-    TOKIO_RT.get_or_init(|| {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_io()
-            .enable_time()
-            .build()
-            .expect("[workspace_bar] failed to build tokio runtime")
-    })
-}
-
-// ─── Internal data model ──────────────────────────────────────────────────────
-
-/// Lightweight representation of a single open window.
-#[derive(Debug, Clone)]
-struct WindowInfo {
-    /// Window ID used by Mutter (used for activation).
-    id: u64,
-    /// Human-readable window title as set by the client application.
-    title: String,
-    /// Best-effort GTK icon theme name derived from the window's app identity.
-    ///
-    /// Resolution order: lowercase `wm_class_instance` → lowercase `wm_class` →
-    /// `"application-x-executable"` fallback.
-    icon_name: String,
-}
-
-/// Raw window entry from the extension's List method.
-#[derive(Debug, Deserialize)]
-struct RawWindowEntry {
-    id: u64,
-    #[serde(rename = "wm_class")]
-    wm_class: Option<String>,
-    #[serde(rename = "wm_class_instance")]
-    wm_class_instance: Option<String>,
-    #[serde(rename = "in_current_workspace")]
-    in_current_workspace: bool,
-    pid: u64,
-    title: Option<String>,
-}
-
-// ─── Async D-Bus queries ──────────────────────────────────────────────────────
-
-/// Query the window-calls extension for all windows on the active workspace.
-///
-/// Returns `None` on any D-Bus error (e.g. extension not installed).
-/// The bar will simply remain hidden in that case.
-async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
-    let our_pid = std::process::id();
-
-    let conn = Connection::session()
-        .await
-        .map_err(|e| log::warn!("[workspace_bar] D-Bus session connect failed: {e}"))
-        .ok()?;
-
-    let windows = WindowCallsProxy::new(&conn)
-        .await
-        .map_err(|e| {
-            log::warn!(
-                "[workspace_bar] WindowCalls proxy failed: {e}. Is the window-calls \
-                 extension installed? (<https://extensions.gnome.org/extension/4724/window-calls/>)"
-            );
-        })
-        .ok()?;
-
-    let json = windows
-        .list()
-        .await
-        .map_err(|e| log::warn!("[workspace_bar] WindowCalls.List failed: {e}"))
-        .ok()?;
-
-    let raw_windows: Vec<RawWindowEntry> = serde_json::from_str(&json)
-        .map_err(|e| log::warn!("[workspace_bar] Failed to parse window list JSON: {e}"))
-        .ok()?;
-
-    log::debug!(
-        "[workspace_bar] List returned {} entries, our_pid={}",
-        raw_windows.len(),
-        our_pid
-    );
-
-    let mut result = Vec::new();
-
-    for raw in raw_windows {
-        if !raw.in_current_workspace {
-            continue;
-        }
-
-        let wm_class = raw.wm_class.as_deref().unwrap_or("");
-        let wm_class_instance = raw.wm_class_instance.as_deref().unwrap_or("");
-
-        if wm_class == "org.nihmar.grunner" || wm_class_instance == "org.nihmar.grunner" {
-            continue;
-        }
-
-        // Try to get app name and icon from desktop file
-        let (title, icon_from_desktop) = resolve_desktop_info(wm_class)
-            .or_else(|| resolve_desktop_info(wm_class_instance))
-            .map_or_else(|| (String::new(), None), |info| (info.name, info.icon));
-
-        let title = if title.is_empty() {
-            raw.title
-                .clone()
-                .filter(|t| !t.is_empty())
-                .or_else(|| raw.wm_class.clone())
-                .or_else(|| raw.wm_class_instance.clone())
-                .unwrap_or_else(|| "Untitled".to_string())
-        } else {
-            title
-        };
-
-        let icon_name = icon_from_desktop
-            .filter(|i| !i.is_empty())
-            .or_else(|| {
-                if !wm_class_instance.is_empty() {
-                    Some(wm_class_instance.to_lowercase())
-                } else if !wm_class.is_empty() {
-                    Some(wm_class.to_lowercase())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| "application-x-executable".to_string());
-
-        log::debug!(
-            "[workspace_bar]  id={} pid={} ws=current title={:?} icon={:?}",
-            raw.id,
-            raw.pid,
-            title,
-            icon_name
-        );
-
-        result.push(WindowInfo {
-            id: raw.id,
-            title,
-            icon_name,
-        });
-    }
-
-    log::debug!("[workspace_bar] {} window(s) passed filter", result.len());
-
-    result.sort_by(|a, b| a.title.cmp(&b.title));
-    Some(result)
-}
-
-/// Ask the window-calls extension to bring a window to the foreground.
-async fn activate_window(id: u64) {
-    let Ok(conn) = Connection::session().await else {
-        return;
-    };
-    let Ok(windows) = WindowCallsProxy::new(&conn).await else {
-        return;
-    };
-
-    let result = windows.activate(id as u32).await;
-    if let Err(e) = result {
-        log::warn!("[workspace_bar] Activate({id}) failed: {e}");
-    }
-}
-
-/// Ask the window-calls extension to close a window.
-async fn close_window(id: u64) {
-    let Ok(conn) = Connection::session().await else {
-        return;
-    };
-    let Ok(windows) = WindowCallsProxy::new(&conn).await else {
-        return;
-    };
-
-    let result = windows.close(id as u32).await;
-    if let Err(e) = result {
-        log::warn!("[workspace_bar] Close({id}) failed: {e}");
-    }
-}
-
-/// Close all windows in the given list.
-async fn close_all_windows(ids: Vec<u64>) {
-    for id in ids {
-        close_window(id).await;
-    }
-}
-
-// ─── Widget helpers ───────────────────────────────────────────────────────────
-
-/// Maximum title length (in Unicode scalar values) shown inside a button.
 const MAX_TITLE_CHARS: usize = 22;
 
-/// Return `s` truncated to `max` characters, with a trailing `…` if cut.
 fn truncate(s: &str, max: usize) -> String {
     let mut chars = s.chars();
     let head: String = chars.by_ref().take(max).collect();
@@ -254,14 +31,11 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-/// Resolve the best matching icon name available in `theme`, trying a few
-/// common variations of `preferred` before falling back to a generic icon.
 fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
     if theme.has_icon(preferred) {
         return preferred.to_owned();
     }
 
-    // Try with common prefix replacements
     let replacements = [
         ("org.gnome.", "gnome-"),
         ("org.freedesktop.", ""),
@@ -277,14 +51,12 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
         }
     }
 
-    // Try last segment only (e.g., "org.gnome.Nautilus" -> "nautilus")
     if let Some(last) = preferred.rsplit('.').next()
         && theme.has_icon(last)
     {
         return last.to_owned();
     }
 
-    // Try with "gnome-" prefix
     if let Some(last) = preferred.rsplit('.').next() {
         let candidate = format!("gnome-{last}");
         if theme.has_icon(&candidate) {
@@ -295,7 +67,6 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
     "application-x-executable".to_owned()
 }
 
-/// Build a close badge button that sits in the top-right corner of an overlay.
 fn build_close_badge() -> Button {
     let badge = Button::builder()
         .icon_name("window-close-symbolic")
@@ -307,13 +78,6 @@ fn build_close_badge() -> Button {
     badge
 }
 
-// ─── Populate ─────────────────────────────────────────────────────────────────
-
-/// Clear and refill `buttons_box` with one button per entry in `windows`.
-///
-/// The outer `scroll` container is shown when there are windows to display and
-/// hidden when the list is empty.  This is the only place where the bar's
-/// visibility is mutated.
 fn populate(
     buttons_box: &GtkBox,
     scroll: &ScrolledWindow,
@@ -372,20 +136,18 @@ fn populate(
 
         btn.set_child(Some(&inner));
 
-        // ── Left click: activate window ──
         let win_id = info.id;
         btn.connect_clicked(clone!(
             #[weak]
             app_window,
             move |_| {
                 glib::spawn_future_local(async move {
-                    activate_window(win_id).await;
+                    ws::activate_window(win_id).await;
                 });
                 app_window.hide();
             }
         ));
 
-        // ── Close badge (on-hover overlay) ──
         let overlay = Overlay::new();
         overlay.set_child(Some(&btn));
 
@@ -414,7 +176,7 @@ fn populate(
         close_badge.connect_clicked(move |_| {
             let refresh = refresh_badge.clone();
             glib::spawn_future_local(async move {
-                close_window(badge_win_id).await;
+                ws::close_window(badge_win_id).await;
                 refresh();
             });
         });
@@ -422,7 +184,6 @@ fn populate(
         buttons_box.append(&overlay);
     }
 
-    // ── "Close All" button at the bottom ──
     let separator = gtk4::Separator::new(Orientation::Horizontal);
     separator.add_css_class("workspace-separator-h");
     buttons_box.append(&separator);
@@ -440,7 +201,7 @@ fn populate(
         let ids = ids_for_close_all.clone();
         let refresh = refresh_close_all.clone();
         glib::spawn_future_local(async move {
-            close_all_windows(ids).await;
+            ws::close_all_windows(ids).await;
             refresh();
         });
     });
@@ -458,9 +219,6 @@ fn populate(
     }
 }
 
-// ─── Public constructor ───────────────────────────────────────────────────────
-
-/// Launch a background fetch and repopulate the bar when results arrive.
 fn spawn_refresh(
     scroll: &ScrolledWindow,
     buttons_box: &GtkBox,
@@ -483,8 +241,8 @@ fn spawn_refresh_delayed(
         if delay_ms > 0 {
             std::thread::sleep(std::time::Duration::from_millis(delay_ms));
         }
-        let rt = get_runtime();
-        let windows = rt.block_on(fetch_workspace_windows());
+        let rt = get_tokio_runtime();
+        let windows = rt.block_on(ws::fetch_workspace_windows());
         log::debug!(
             "[workspace_bar] background thread result: {:?}",
             windows.as_ref().map(std::vec::Vec::len)
@@ -520,18 +278,12 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     buttons_box.add_css_class("workspace-bar-buttons");
     scroll.set_child(Some(&buttons_box));
 
-    // Add event controller scroll to ensure scroll wheel events are handled
-    // Use BOTH_AXES to handle both horizontal and vertical scroll events
     let scroll_controller = EventControllerScroll::new(EventControllerScrollFlags::BOTH_AXES);
     scroll_controller.set_propagation_phase(PropagationPhase::Capture);
 
-    // Connect to the scroll signal to handle scroll events
     let scroll_clone = scroll.clone();
     scroll_controller.connect_scroll(move |_, dx, dy| {
         log::debug!("[workspace_bar] scroll event: dx={dx}, dy={dy}");
-        // Get the current adjustment for horizontal scrolling
-        // For horizontal scrolling, we use dx (horizontal delta)
-        // For vertical scroll wheel, we translate dy to horizontal scrolling
         let adjustment = scroll_clone.hadjustment();
         let delta = if dx == 0.0 { dy } else { dx };
         let new_value = adjustment.value() + delta * adjustment.step_increment();
@@ -541,8 +293,6 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
 
     scroll.add_controller(scroll_controller);
 
-    // Build a self-referential on_change callback via Rc<RefCell>.
-    // Uses a small delay so the window list reflects completed D-Bus close calls.
     let on_change_cell: Rc<std::cell::RefCell<Option<Rc<dyn Fn()>>>> =
         Rc::new(std::cell::RefCell::new(None));
     let oc_cell = on_change_cell.clone();

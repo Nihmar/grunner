@@ -6,12 +6,14 @@
 //! - File and line opening operations
 //! - Obsidian vault and note management
 //! - Settings management
+//! - Workspace window operations
 
 pub mod file;
 pub mod launcher;
 pub mod obsidian;
 pub mod power;
 pub mod settings;
+pub mod workspace;
 
 pub use file::*;
 pub use launcher::*;

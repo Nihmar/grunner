@@ -5,7 +5,7 @@
 //! This abstraction allows adding new search sources without modifying the core
 //! list model logic.
 
-pub mod dbus_provider;
+pub mod dbus;
 
 use crate::core::config::CommandConfig;
 use crate::launcher::DesktopApp;

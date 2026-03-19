@@ -83,7 +83,7 @@ fn main() -> glib::ExitCode {
         println!("Grunner Search Providers");
         println!("=======================\n");
 
-        let providers = providers::dbus_provider::discover_providers(&[]);
+        let providers = providers::dbus::discover_providers(&[]);
         println!("Found {} search provider(s):\n", providers.len());
 
         for (i, provider) in providers.iter().enumerate() {
