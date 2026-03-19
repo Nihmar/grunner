@@ -38,7 +38,7 @@ use gtk4::{
     ScrolledWindow,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
-use libadwaita::{Application, ApplicationWindow};
+use libadwaita::{Application, ApplicationWindow, Toast, ToastOverlay};
 use log::{debug, error, info, trace};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -61,6 +61,7 @@ use std::rc::Rc;
 /// * `pinned_separator` - The pinned separator to update
 /// * `pinned_apps` - Current pinned apps list
 /// * `window` - Application window for pinned strip context menus
+#[allow(clippy::too_many_arguments)]
 fn poll_apps(
     rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>,
     model: AppListModel,
@@ -69,6 +70,7 @@ fn poll_apps(
     pinned_separator: GtkBox,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: ApplicationWindow,
+    entry: Entry,
 ) {
     match rx.try_recv() {
         Ok(apps) => {
@@ -89,6 +91,7 @@ fn poll_apps(
                 &all_apps,
                 &pinned_strip,
                 &pinned_separator,
+                &entry,
             );
             update_strip_visibility(&pinned_strip, &pinned_separator, &pinned, true);
 
@@ -106,6 +109,7 @@ fn poll_apps(
                     pinned_separator,
                     pinned_apps,
                     window,
+                    entry,
                 )
             });
         }
@@ -258,7 +262,15 @@ fn build_main_layout(
     model: &AppListModel,
     cfg: &Config,
     display: &gdk::Display,
-) -> (GtkBox, ListView, Option<GtkBox>, Image, GtkBox, GtkBox) {
+) -> (
+    GtkBox,
+    ListView,
+    Option<GtkBox>,
+    Image,
+    GtkBox,
+    GtkBox,
+    ToastOverlay,
+) {
     // Create vertical box as root container for all UI elements
     let root = GtkBox::new(Orientation::Horizontal, 0);
     root.add_css_class("launcher-box");
@@ -333,8 +345,10 @@ fn build_main_layout(
         entry_box.append(pb);
     }
 
-    // Set root container as window content
-    window.set_content(Some(&root));
+    // Set root container as window content, wrapped in toast overlay
+    let toast_overlay = ToastOverlay::new();
+    toast_overlay.set_child(Some(&root));
+    window.set_content(Some(&toast_overlay));
 
     (
         root,
@@ -343,6 +357,7 @@ fn build_main_layout(
         command_icon,
         pinned_strip,
         pinned_separator,
+        toast_overlay,
     )
 }
 
@@ -476,12 +491,14 @@ fn connect_list_signals(
 fn setup_list_context_menu(
     list_view: &ListView,
     window: &ApplicationWindow,
+    entry: &Entry,
     model: &AppListModel,
     current_mode: &Rc<Cell<AppMode>>,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pinned_strip: GtkBox,
     pinned_separator: GtkBox,
+    toast_overlay: ToastOverlay,
 ) {
     let right_click = GestureClick::new();
     right_click.set_button(3);
@@ -490,6 +507,8 @@ fn setup_list_context_menu(
         list_view,
         #[weak]
         window,
+        #[strong]
+        entry,
         #[strong]
         model,
         #[strong]
@@ -502,14 +521,26 @@ fn setup_list_context_menu(
         pinned_strip,
         #[strong]
         pinned_separator,
-        move |_gesture, _n_press, click_x, click_y| {
-            let pos = model.selection.selected();
-            if pos == gtk4::INVALID_LIST_POSITION {
-                return;
-            }
-            let Some(obj) = model.store.item(pos) else {
+        #[strong]
+        toast_overlay,
+        move |_gesture, _n_press, _click_x, click_y| {
+            // Determine which model position was clicked
+            let scroll_y = gtk4::prelude::ScrollableExt::vadjustment(&list_view)
+                .map(|a| a.value())
+                .unwrap_or(0.0);
+            let row_height = list_view
+                .first_child()
+                .map(|c| c.allocation().height() as f64)
+                .filter(|h| *h > 0.0)
+                .unwrap_or(48.0);
+            let clicked_pos = ((scroll_y + click_y) / row_height) as u32;
+
+            let Some(obj) = model.store.item(clicked_pos) else {
                 return;
             };
+
+            // Select the clicked row so keyboard/actions target it
+            model.selection.set_selected(clicked_pos);
 
             // Determine if this app is pinned
             let (desktop_id_opt, is_pinned) = if let Some(app_item) = obj.downcast_ref::<AppItem>()
@@ -551,6 +582,7 @@ fn setup_list_context_menu(
             vbox.append(&open_btn);
 
             // Add / Remove from Favorites
+            let entry_for_btns = entry.clone();
             if is_pinned {
                 let btn = make_menu_button("Remove from Favorites");
                 let did = desktop_id_opt.clone();
@@ -567,11 +599,17 @@ fn setup_list_context_menu(
                     }
                     crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
                     crate::ui::pinned_strip::refresh_pinned_strip(
-                        &p_strip, &p_sep, &p_apps, &p_all, &win_ref,
+                        &p_strip,
+                        &p_sep,
+                        &p_apps,
+                        &p_all,
+                        &win_ref,
+                        &entry_for_btns,
                     );
                     if let Some(p) = p_ref.upgrade() {
                         p.popdown();
                     }
+                    entry_for_btns.grab_focus();
                 });
                 vbox.append(&btn);
             } else {
@@ -583,91 +621,48 @@ fn setup_list_context_menu(
                 let p_all = all_apps.clone();
                 let win_ref = window.clone();
                 let p_ref = weak_popover.clone();
+                let toast_ref = toast_overlay.clone();
+                let entry_add = entry_for_btns.clone();
                 btn.connect_clicked(move |_| {
-                    if let Some(ref id) = did {
-                        let mut pinned = p_apps.borrow_mut();
-                        if !pinned.contains(id) {
-                            pinned.push(id.clone());
-                            info!("Added to Favorites: {id}");
+                    let Some(ref id) = did else {
+                        if let Some(p) = p_ref.upgrade() {
+                            p.popdown();
                         }
-                        drop(pinned);
-                        crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-                        crate::ui::pinned_strip::refresh_pinned_strip(
-                            &p_strip, &p_sep, &p_apps, &p_all, &win_ref,
-                        );
+                        return;
+                    };
+                    if p_apps.borrow().len() >= 9 {
+                        if let Some(p) = p_ref.upgrade() {
+                            p.popdown();
+                        }
+                        let toast = Toast::builder()
+                            .title("Maximum 9 favourites reached")
+                            .timeout(2)
+                            .build();
+                        toast_ref.add_toast(toast);
+                        return;
                     }
+                    let mut pinned = p_apps.borrow_mut();
+                    if !pinned.contains(id) {
+                        pinned.push(id.clone());
+                        info!("Added to Favorites: {id}");
+                    }
+                    drop(pinned);
+                    crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
+                    crate::ui::pinned_strip::refresh_pinned_strip(
+                        &p_strip, &p_sep, &p_apps, &p_all, &win_ref, &entry_add,
+                    );
                     if let Some(p) = p_ref.upgrade() {
                         p.popdown();
                     }
-                });
-                vbox.append(&btn);
-            }
-
-            // Open as Administrator
-            if obj.downcast_ref::<AppItem>().is_some() {
-                let btn = make_menu_button("Open as Administrator");
-                let obj_admin = obj.clone();
-                let win_admin = window.clone();
-                btn.connect_clicked(move |_| {
-                    if let Some(app_item) = obj_admin.downcast_ref::<AppItem>() {
-                        let exec = format!("pkexec {}", app_item.exec());
-                        info!("Launching as admin: {exec}");
-                        crate::actions::launch_app(&exec, false, None);
-                        win_admin.hide();
-                    }
-                });
-                vbox.append(&btn);
-            }
-
-            // Open File Location
-            if obj.downcast_ref::<AppItem>().is_some() {
-                let btn = make_menu_button("Open File Location");
-                let obj_path = obj.clone();
-                let p_ref = weak_popover.clone();
-                btn.connect_clicked(move |_| {
-                    if let Some(app_item) = obj_path.downcast_ref::<AppItem>() {
-                        let exec = app_item.exec();
-                        let clean = crate::launcher::clean_exec(&exec);
-                        let parts: Vec<&str> = clean.split_whitespace().collect();
-                        if let Some(first) = parts.first() {
-                            let path = std::path::Path::new(first);
-                            if let Some(parent) = path.parent() {
-                                let _ = std::process::Command::new("xdg-open").arg(parent).spawn();
-                            }
-                        }
-                    }
-                    if let Some(p) = p_ref.upgrade() {
-                        p.popdown();
-                    }
-                });
-                vbox.append(&btn);
-            }
-
-            // Copy Command
-            if obj.downcast_ref::<AppItem>().is_some() {
-                let btn = make_menu_button("Copy Command");
-                let obj_copy = obj.clone();
-                let p_ref = weak_popover.clone();
-                btn.connect_clicked(move |_| {
-                    if let Some(app_item) = obj_copy.downcast_ref::<AppItem>() {
-                        let exec = app_item.exec();
-                        if let Some(display) = gdk::Display::default() {
-                            display.clipboard().set_text(&exec);
-                            info!("Copied command: {exec}");
-                        }
-                    }
-                    if let Some(p) = p_ref.upgrade() {
-                        p.popdown();
-                    }
+                    entry_add.grab_focus();
                 });
                 vbox.append(&btn);
             }
 
             popover.set_child(Some(&vbox));
 
-            // Parent to list_view and anchor the popover at the click coordinates
             popover.set_parent(&list_view);
-            let rect = gdk::Rectangle::new(click_x as i32, click_y as i32, 1, 1);
+            let rect = gdk::Rectangle::new(_click_x as i32, click_y as i32, 1, 1);
             popover.set_pointing_to(Some(&rect));
             popover.popup();
         }
@@ -686,6 +681,7 @@ fn make_menu_button(label: &str) -> Button {
 }
 
 /// Start background loading of desktop applications
+#[allow(clippy::too_many_arguments)]
 fn start_background_loading(
     cfg: &Config,
     model: &AppListModel,
@@ -694,6 +690,7 @@ fn start_background_loading(
     pinned_separator: GtkBox,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: &ApplicationWindow,
+    entry: Entry,
 ) {
     let dirs = cfg.expanded_app_dirs();
     let model_poll = model.clone();
@@ -713,6 +710,7 @@ fn start_background_loading(
             pinned_separator,
             pinned_apps,
             win_clone,
+            entry,
         )
     });
 }
@@ -880,8 +878,15 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .build();
     entry.add_css_class("search-entry");
 
-    let (_root, list_view, obsidian_bar, command_icon, pinned_strip, pinned_separator) =
-        build_main_layout(&window, &entry, &model, cfg, &display);
+    let (
+        _root,
+        list_view,
+        obsidian_bar,
+        command_icon,
+        pinned_strip,
+        pinned_separator,
+        toast_overlay,
+    ) = build_main_layout(&window, &entry, &model, cfg, &display);
 
     // Display the window
     window.present();
@@ -942,12 +947,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     setup_list_context_menu(
         &list_view,
         &window,
+        &entry,
         &model,
         &current_mode,
         pinned_apps.clone(),
         all_apps.clone(),
         pinned_strip.clone(),
         pinned_separator.clone(),
+        toast_overlay,
     );
 
     // 6. Background Application Loading
@@ -959,5 +966,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         pinned_separator,
         pinned_apps,
         &window,
+        entry,
     );
 }
