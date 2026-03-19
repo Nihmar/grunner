@@ -14,10 +14,6 @@ use zbus::zvariant::OwnedValue;
 use super::icons::parse_icon_variant;
 use super::types::{SearchProvider, SearchResult};
 
-fn get_runtime() -> &'static tokio::runtime::Runtime {
-    get_tokio_runtime()
-}
-
 async fn get_or_init_conn() -> zbus::Result<Connection> {
     static DBUS_CONN: OnceLock<Connection> = OnceLock::new();
     if let Some(c) = DBUS_CONN.get() {
@@ -37,7 +33,7 @@ pub fn run_search_streaming(
     if terms.is_empty() {
         return;
     }
-    get_runtime().block_on(query_all_streaming(providers, &terms, max_per_provider, tx));
+    get_tokio_runtime().block_on(query_all_streaming(providers, &terms, max_per_provider, tx));
 }
 
 async fn query_all_streaming(
@@ -233,7 +229,7 @@ pub fn activate_result(
     let terms = terms.to_vec();
     debug!("Activating search result: {result_id} from provider {bus_name}");
 
-    get_runtime().block_on(async move {
+    get_tokio_runtime().block_on(async move {
         let Ok(conn) = get_or_init_conn().await else {
             error!("Cannot connect to D-Bus session bus for result activation");
             return;
