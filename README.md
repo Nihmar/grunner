@@ -17,6 +17,8 @@ A fast, keyboard-driven application launcher for GNOME and other Linux desktops,
 | ![Obsidian grep](screenshots/obsidian_grep.png) | **Obsidian vault grep** (`:obg`) — search vault file contents |
 | ![Favourites](screenshots/favourites.png) | **Pinned apps** — sidebar favourites with `Alt+1..9` shortcuts |
 | ![Workspace bar](screenshots/workspace.png) | **Workspace bar** — open windows on the current workspace |
+| ![Calculator](screenshots/calculator.png) | **Calculator fallback** — auto-evaluate math expressions, Enter to copy |
+| ![Search providers](screenshots/search_providers.png) | **GNOME Shell search providers** — files, calendar, contacts, etc. |
 | ![Settings — Info](screenshots/settings_01_info.png) | **Settings** — Info tab |
 | ![Settings — General](screenshots/settings_02_general.png) | **Settings** — General tab (window size, workspace bar toggle) |
 | ![Settings — Search](screenshots/settings_03_search.png) | **Settings** — Search tab (app dirs, debounce, provider blacklist) |
