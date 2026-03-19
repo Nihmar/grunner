@@ -293,6 +293,7 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
 
     scroll.add_controller(scroll_controller);
 
+    #[allow(clippy::type_complexity)]
     let on_change_cell: Rc<std::cell::RefCell<Option<Rc<dyn Fn()>>>> =
         Rc::new(std::cell::RefCell::new(None));
     let oc_cell = on_change_cell.clone();

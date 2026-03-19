@@ -45,6 +45,7 @@ pub struct SubprocessRunner<R> {
     /// Generation ID to prevent stale updates after new searches
     generation: u64,
     /// Callback to process results and update the UI
+    #[allow(clippy::type_complexity)]
     processor: Box<dyn Fn(&AppListModel, u64, R) + 'static>,
 }
 
