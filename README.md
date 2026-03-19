@@ -395,29 +395,69 @@ For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md
 
 ## Architecture overview
 
-| File                         | Purpose                                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------- |
-| `main.rs`                    | Entry point; loads config, creates the GTK application, and calls `build_ui`                |
-| `lib.rs`                     | Library exports for internal modules                                                        |
-| `ui.rs`                      | Builds the GTK4/libadwaita window, entry bar, list view, Obsidian action bar, and power bar |
-| `list_model.rs`              | Central search model; dispatches queries to the correct mode and populates the `ListStore`  |
-| `launcher.rs`                | Scans `.desktop` files, parses them, and deduplicates entries                               |
-| `app_mode.rs`                | Application mode detection and management (Normal, FileSearch, Obsidian)                    |
-| `item_activation.rs`         | Item activation logic based on item type and application mode                               |
-| `calculator.rs`              | Mathematical expression evaluator using shunting yard algorithm (used in default search)    |
-| `obsidian_bar.rs`           | Obsidian action bar UI component with buttons for vault operations                          |
-| `power_bar.rs`               | Power action bar UI component with system management buttons                                |
-| `settings_window/`           | Settings dialog UI with configuration editing and validation                                |
-| `utils.rs`                   | Utility functions for path expansion, shell escaping, and home directory resolution         |
-| `global_state.rs`            | Global state management (Tokio runtime, home directory, etc.)                              |
-| `search_provider.rs`         | D-Bus client for GNOME Shell search providers (discovery + query + activation)              |
-| `actions.rs`                | Side-effectful actions: launching apps, power commands, opening files, Obsidian URIs        |
-| `config.rs`                  | TOML config loading with defaults and `~` expansion                                         |
-| `logging.rs`                 | Logging configuration and initialization with journald, syslog, file, and stderr backends   |
-| `theme.rs` / `theme/`        | Theme manager and built-in theme definitions (10 themes included)                          |
-| `items/`                     | GObject wrappers for different item types                                                   |
-| `workspace_bar.rs`          | Workspace bar UI component showing open windows                                             |
-| `style.css`                  | libadwaita CSS using `var(--accent-color)` and `var(--window-bg-color)`                     |
+```
+src/
+├── main.rs                    # Entry point, GTK app setup
+├── lib.rs                     # Module exports
+├── app_mode.rs               # App mode (Normal, FileSearch, Obsidian, etc.)
+├── calculator.rs              # Math expression evaluator
+├── command_handler.rs        # Colon command parsing and routing
+├── item_activation.rs        # Item activation logic
+├── launcher.rs              # Desktop file scanner and parser
+├── utils.rs                  # Path utils, file icons, calculator result detection
+├── logging.rs               # Logging initialization (journald, syslog, file, stderr)
+│
+├── core/
+│   ├── config.rs             # TOML config loading with defaults
+│   ├── global_state.rs      # Tokio runtime, home dir, hot-reload callbacks
+│   └── theme.rs             # Theme manager and built-in themes
+│
+├── model/
+│   ├── list_model.rs        # Central search model, debounce, provider coordination
+│   └── items/               # GObject item types (AppItem, CommandItem, etc.)
+│
+├── providers/
+│   ├── mod.rs               # SearchProvider trait, AppProvider, CalculatorProvider
+│   └── dbus/                # GNOME Shell search provider integration
+│       ├── mod.rs           # Module exports
+│       ├── discovery.rs      # Provider discovery from .ini files
+│       ├── query.rs         # D-Bus query execution, result building
+│       ├── icons.rs         # Icon parsing from D-Bus variants
+│       └── types.rs         # SearchProvider, SearchResult, IconData types
+│
+├── ui/
+│   ├── window.rs            # Main window, search entry, list view
+│   ├── context_menu.rs      # Context menu helpers
+│   ├── list_factory.rs      # List item factory for GTK
+│   ├── pinned_strip.rs      # Favorites/pinned apps strip
+│   ├── power_bar.rs         # Power action bar
+│   ├── obsidian_bar.rs      # Obsidian action bar
+│   ├── workspace_bar.rs     # Workspace window bar
+│   └── style.css            # libadwaita CSS
+│
+├── actions/
+│   ├── mod.rs               # Action exports
+│   ├── launcher.rs          # App launching, terminal detection
+│   ├── power.rs             # Suspend, reboot, shutdown, logout
+│   ├── obsidian.rs          # Obsidian URI handling
+│   ├── file.rs              # File/line opening
+│   ├── settings.rs          # Settings file management
+│   └── workspace.rs         # D-Bus window operations
+│
+└── settings_window/
+    └── tabs/                # Settings dialog tabs
+```
+
+### Module responsibilities
+
+| Module | Purpose |
+|--------|---------|
+| `core/` | Config, global state (Tokio runtime), theming |
+| `model/` | GTK ListStore, debounce logic, search coordination |
+| `providers/` | Fuzzy app search, calculator, D-Bus search providers |
+| `ui/` | GTK widgets, context menus, styling |
+| `actions/` | Side effects: launching, power, workspace operations |
+| `utils/` | Clipboard, desktop file parsing, path utilities |
 
 ---
 
