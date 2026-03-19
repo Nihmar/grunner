@@ -26,6 +26,8 @@ use std::time::SystemTime;
 /// needed for launching and displaying applications in the Grunner launcher.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DesktopApp {
+    /// Desktop entry ID (filename without .desktop extension, slashes replaced with dashes)
+    pub desktop_id: String,
     /// Display name of the application (from the `Name=` field)
     pub name: String,
     /// Command to execute when launching the application (from the `Exec=` field)
@@ -339,6 +341,13 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     trace!("Parsing desktop file: {}", path.display());
     let content = fs::read_to_string(path).ok()?;
 
+    // Derive desktop entry ID from filename
+    let desktop_id = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown")
+        .replace('/', "-");
+
     // Initialize parser state
     let mut name: Option<String> = None;
     let mut exec: Option<String> = None;
@@ -429,6 +438,7 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
         path.display()
     );
     Some(DesktopApp {
+        desktop_id,
         name,
         exec,
         description,

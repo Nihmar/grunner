@@ -41,6 +41,7 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
         command_debounce_ms: u32,
         provider_blacklist: Vec<String>,
         workspace_bar_enabled: bool,
+        pinned_apps: Vec<String>,
     }
 
     #[derive(Serialize)]
@@ -60,6 +61,7 @@ pub(crate) fn save_config(config: &Config) -> Result<(), std::io::Error> {
             command_debounce_ms: config.command_debounce_ms,
             provider_blacklist: config.search_provider_blacklist.clone(),
             workspace_bar_enabled: config.workspace_bar_enabled,
+            pinned_apps: config.pinned_apps.clone(),
         },
         obsidian: config.obsidian.clone(),
         commands: config.commands.clone(),

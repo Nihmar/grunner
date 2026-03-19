@@ -146,6 +146,8 @@ pub struct Config {
     pub theme: ThemeMode,
     /// Path to custom theme file (used when theme = Custom)
     pub custom_theme_path: Option<String>,
+    /// List of pinned (favorite) application desktop entry IDs
+    pub pinned_apps: Vec<String>,
 }
 
 impl Config {
@@ -182,6 +184,7 @@ impl Default for Config {
             disable_modes: false,
             theme: ThemeMode::default(),
             custom_theme_path: None,
+            pinned_apps: Vec::new(),
         }
     }
 }
@@ -235,6 +238,8 @@ struct SearchConfig {
     provider_blacklist: Option<Vec<String>>,
     /// Optional workspace bar enabled flag (default: true)
     workspace_bar_enabled: Option<bool>,
+    /// Optional list of pinned (favorite) application IDs
+    pinned_apps: Option<Vec<String>>,
 }
 
 /// Get the path to the user's configuration file
@@ -373,6 +378,10 @@ fn apply_toml(content: &str) -> Config {
             debug!("Setting workspace_bar_enabled to {enabled}");
             cfg.workspace_bar_enabled = enabled;
         }
+        if let Some(pinned) = search.pinned_apps {
+            debug!("Setting pinned_apps to {pinned:?}");
+            cfg.pinned_apps = pinned;
+        }
     }
 
     // Apply Obsidian settings if present
@@ -448,6 +457,11 @@ provider_blacklist = []
 # Install from: https://extensions.gnome.org/extension/4724/window-calls/
 workspace_bar_enabled = true
 
+# List of pinned (favorite) application desktop entry IDs.
+# These appear as quick-access icons above the search results.
+# Example: pinned_apps = ["firefox.desktop", "org.gnome.Terminal.desktop"]
+pinned_apps = []
+
 [obsidian]
 vault = ""
 daily_notes_folder = ""
@@ -506,6 +520,7 @@ mod tests {
         assert!(config.app_dirs.len() > 0);
         assert!(config.workspace_bar_enabled);
         assert!(config.obsidian.is_none());
+        assert!(config.pinned_apps.is_empty());
     }
 
     #[test]
@@ -633,5 +648,17 @@ mod tests {
         // Test that default config has empty commands Vec
         let config = Config::default();
         assert!(config.commands.is_empty());
+    }
+
+    #[test]
+    fn test_apply_toml_pinned_apps() {
+        let toml = r#"
+            [search]
+            pinned_apps = ["firefox.desktop", "org.gnome.Terminal.desktop"]
+        "#;
+        let config = apply_toml(toml);
+        assert_eq!(config.pinned_apps.len(), 2);
+        assert_eq!(config.pinned_apps[0], "firefox.desktop");
+        assert_eq!(config.pinned_apps[1], "org.gnome.Terminal.desktop");
     }
 }

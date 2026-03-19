@@ -19,6 +19,7 @@ mod settings_window;
 mod ui {
     pub mod list_factory;
     pub mod obsidian_bar;
+    pub mod pinned_strip;
     pub mod power_bar;
     pub mod window;
     pub mod workspace_bar;

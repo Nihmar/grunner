@@ -385,3 +385,77 @@ notebook.pill-tabs > stack {
     );
     min-width: 1px;
 }
+
+/* ── Pinned apps strip ───────────────────────────────────────── */
+.pinned-strip {
+    min-height: 42px;
+    padding: 4px 12px;
+    spacing: 4px;
+    transition: opacity 150ms ease;
+}
+
+.pinned-button {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 4px;
+    border-radius: calc(var(--window-radius, 12px) - 6px);
+    background: transparent;
+    box-shadow: none;
+    border: none;
+    transition: background-color 80ms ease;
+}
+
+.pinned-button:hover {
+    background-color: color-mix(
+        in srgb,
+        var(--window-fg-color) 10%,
+        transparent
+    );
+}
+
+.pinned-button:active {
+    background-color: color-mix(
+        in srgb,
+        var(--window-fg-color) 16%,
+        transparent
+    );
+}
+
+.pinned-separator {
+    min-height: 1px;
+    margin: 0 12px;
+    background-color: color-mix(
+        in srgb,
+        var(--window-fg-color) 12%,
+        transparent
+    );
+    transition: opacity 150ms ease;
+}
+
+/* Pinned strip popover menu */
+.pinned-popover-menu button.flat {
+    padding: 6px 16px;
+    border-radius: 0;
+    min-width: 160px;
+    text-align: left;
+}
+
+.pinned-popover-menu button.flat:first-child {
+    border-radius: calc(var(--window-radius, 12px) - 6px) calc(var(--window-radius, 12px) - 6px) 0 0;
+}
+
+.pinned-popover-menu button.flat:last-child {
+    border-radius: 0 0 calc(var(--window-radius, 12px) - 6px) calc(var(--window-radius, 12px) - 6px);
+}
+
+/* Context menu popover */
+.context-menu-box {
+    padding: 4px;
+}
+
+.context-menu-item {
+    padding: 6px 16px;
+    border-radius: calc(var(--window-radius, 12px) - 8px);
+    min-width: 180px;
+    text-align: left;
+}
