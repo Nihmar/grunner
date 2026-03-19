@@ -511,28 +511,3 @@ notebook.pill-tabs > stack {
     min-width: 180px;
     text-align: left;
 }
-
-/* ── Workspace bar context menu ─────────────────────────────── */
-.workspace-ctx-menu {
-    background-color: var(--popover-bg-color, #2d2d2d);
-    border: 1px solid rgba(127, 127, 127, 0.2);
-    border-radius: 8px;
-    padding: 4px;
-    min-width: 160px;
-}
-
-.workspace-ctx-item {
-    padding: 0;
-    margin: 0;
-    border-radius: 4px;
-    background: transparent;
-    box-shadow: none;
-    border: none;
-    min-width: 0;
-    min-height: 0;
-    transition: background-color 80ms ease;
-}
-
-.workspace-ctx-item:hover {
-    background-color: rgba(127, 127, 127, 0.15);
-}

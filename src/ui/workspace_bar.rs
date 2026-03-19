@@ -12,12 +12,11 @@ use crate::core::global_state::get_home_dir;
 use glib::clone;
 use gtk4::{
     Box as GtkBox, Button, EventControllerMotion, EventControllerScroll,
-    EventControllerScrollFlags, Image, Label, Orientation, Overlay, PolicyType, Popover,
-    PropagationPhase, ScrolledWindow, gdk, prelude::*,
+    EventControllerScrollFlags, Image, Label, Orientation, Overlay, PolicyType, PropagationPhase,
+    ScrolledWindow, gdk, prelude::*,
 };
 use libadwaita::ApplicationWindow;
 use serde::Deserialize;
-use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::OnceLock;
 use zbus::{Connection, proxy};
@@ -347,105 +346,6 @@ fn build_close_badge() -> Button {
     badge
 }
 
-/// Build a context menu popover for a window button with Open, Close, and Close All actions.
-fn build_context_menu(
-    win_id: u64,
-    all_ids: &[u64],
-    parent: &impl IsA<gtk4::Widget>,
-    on_change: Rc<dyn Fn()>,
-    popover_active: Rc<Cell<bool>>,
-) -> Popover {
-    let box_ = GtkBox::new(Orientation::Vertical, 0);
-    box_.add_css_class("workspace-ctx-menu");
-
-    // Open
-    let btn_open = Button::new();
-    btn_open.add_css_class("workspace-ctx-item");
-    let btn_open_inner = GtkBox::new(Orientation::Horizontal, 8);
-    let icon_open = Image::from_icon_name("window-symbolic");
-    icon_open.set_pixel_size(16);
-    let label_open = Label::new(Some("Open"));
-    btn_open_inner.append(&icon_open);
-    btn_open_inner.append(&label_open);
-    btn_open_inner.set_margin_start(10);
-    btn_open_inner.set_margin_end(10);
-    btn_open_inner.set_margin_top(6);
-    btn_open_inner.set_margin_bottom(6);
-    btn_open.set_child(Some(&btn_open_inner));
-
-    btn_open.connect_clicked(move |_| {
-        glib::spawn_future_local(async move {
-            activate_window(win_id).await;
-        });
-    });
-    box_.append(&btn_open);
-
-    // Close
-    let btn_close = Button::new();
-    btn_close.add_css_class("workspace-ctx-item");
-    let btn_close_inner = GtkBox::new(Orientation::Horizontal, 8);
-    let icon_close = Image::from_icon_name("window-close-symbolic");
-    icon_close.set_pixel_size(16);
-    let label_close = Label::new(Some("Close"));
-    btn_close_inner.append(&icon_close);
-    btn_close_inner.append(&label_close);
-    btn_close_inner.set_margin_start(10);
-    btn_close_inner.set_margin_end(10);
-    btn_close_inner.set_margin_top(6);
-    btn_close_inner.set_margin_bottom(6);
-    btn_close.set_child(Some(&btn_close_inner));
-
-    let refresh_close = on_change.clone();
-    btn_close.connect_clicked(move |_| {
-        let refresh = refresh_close.clone();
-        glib::spawn_future_local(async move {
-            close_window(win_id).await;
-            refresh();
-        });
-    });
-    box_.append(&btn_close);
-
-    // Close All
-    let btn_close_all = Button::new();
-    btn_close_all.add_css_class("workspace-ctx-item");
-    let btn_close_all_inner = GtkBox::new(Orientation::Horizontal, 8);
-    let icon_close_all = Image::from_icon_name("window-close-symbolic");
-    icon_close_all.set_pixel_size(16);
-    let label_close_all = Label::new(Some("Close All"));
-    btn_close_all_inner.append(&icon_close_all);
-    btn_close_all_inner.append(&label_close_all);
-    btn_close_all_inner.set_margin_start(10);
-    btn_close_all_inner.set_margin_end(10);
-    btn_close_all_inner.set_margin_top(6);
-    btn_close_all_inner.set_margin_bottom(6);
-    btn_close_all.set_child(Some(&btn_close_all_inner));
-
-    let ids_clone: Vec<u64> = all_ids.to_vec();
-    let refresh_all = on_change.clone();
-    btn_close_all.connect_clicked(move |_| {
-        let ids = ids_clone.clone();
-        let refresh = refresh_all.clone();
-        glib::spawn_future_local(async move {
-            close_all_windows(ids).await;
-            refresh();
-        });
-    });
-    box_.append(&btn_close_all);
-
-    let popover = Popover::new();
-    popover.set_has_arrow(false);
-    popover.set_child(Some(&box_));
-    popover.set_parent(parent);
-
-    popover_active.set(true);
-    popover.connect_closed(move |p| {
-        popover_active.set(false);
-        p.unparent();
-    });
-
-    popover
-}
-
 // ─── Populate ─────────────────────────────────────────────────────────────────
 
 /// Clear and refill `buttons_box` with one button per entry in `windows`.
@@ -460,7 +360,6 @@ fn populate(
     icon_theme: &gtk4::IconTheme,
     app_window: &ApplicationWindow,
     on_change: &Rc<dyn Fn()>,
-    popover_active: &Rc<Cell<bool>>,
 ) {
     log::debug!(
         "[workspace_bar] populate called with {} window(s), scroll visible={}",
@@ -559,27 +458,6 @@ fn populate(
             });
         });
 
-        // ── Right click: context menu ──
-        let all_ids_for_menu = all_ids.clone();
-        let refresh_ctx = on_change.clone();
-        let pa_ctx = popover_active.clone();
-        let right_click = gtk4::GestureClick::builder().button(3).build();
-        right_click.connect_pressed(move |gesture, _, _, _| {
-            let Some(widget) = gesture.widget() else {
-                return;
-            };
-            let btn_ref = widget.downcast_ref::<Button>().unwrap();
-            let popover = build_context_menu(
-                badge_win_id,
-                &all_ids_for_menu,
-                btn_ref,
-                refresh_ctx.clone(),
-                pa_ctx.clone(),
-            );
-            popover.popup();
-        });
-        btn.add_controller(right_click);
-
         buttons_box.append(&overlay);
     }
 
@@ -627,18 +505,15 @@ fn spawn_refresh(
     buttons_box: &GtkBox,
     window: &ApplicationWindow,
     on_change: &Rc<dyn Fn()>,
-    popover_active: &Rc<Cell<bool>>,
 ) {
-    spawn_refresh_delayed(scroll, buttons_box, window, on_change, popover_active, 0);
+    spawn_refresh_delayed(scroll, buttons_box, window, on_change, 0);
 }
 
-/// Like `spawn_refresh` but waits `delay_ms` before fetching from D-Bus.
 fn spawn_refresh_delayed(
     scroll: &ScrolledWindow,
     buttons_box: &GtkBox,
     window: &ApplicationWindow,
     on_change: &Rc<dyn Fn()>,
-    popover_active: &Rc<Cell<bool>>,
     delay_ms: u64,
 ) {
     let (tx, rx) = std::sync::mpsc::channel::<Option<Vec<WindowInfo>>>();
@@ -657,7 +532,6 @@ fn spawn_refresh_delayed(
     });
 
     let oc = on_change.clone();
-    let pa = popover_active.clone();
     glib::idle_add_local_once(clone!(
         #[weak]
         scroll,
@@ -666,20 +540,13 @@ fn spawn_refresh_delayed(
         #[weak]
         window,
         move || {
-            poll_windows(rx, scroll, buttons_box, window, oc, pa);
+            poll_windows(rx, scroll, buttons_box, window, oc);
         }
     ));
 }
 
-/// Build the workspace window bar.
-///
-/// The widget is invisible until populated, hidden when no windows exist,
-/// and expands taller when more than 6 windows require a scrollbar.
 #[must_use]
-pub fn build_workspace_bar(
-    window: &ApplicationWindow,
-    popover_active: &Rc<Cell<bool>>,
-) -> ScrolledWindow {
+pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
     let scroll = ScrolledWindow::builder()
         .vscrollbar_policy(PolicyType::Automatic)
         .hscrollbar_policy(PolicyType::Never)
@@ -721,15 +588,13 @@ pub fn build_workspace_bar(
     let scroll_r = scroll.clone();
     let buttons_r = buttons_box.clone();
     let window_r = window.clone();
-    let pa_r = popover_active.clone();
     let on_change: Rc<dyn Fn()> = Rc::new(move || {
         if let Some(ref cb) = *oc_cell.borrow() {
-            spawn_refresh_delayed(&scroll_r, &buttons_r, &window_r, cb, &pa_r, 350);
+            spawn_refresh_delayed(&scroll_r, &buttons_r, &window_r, cb, 350);
         }
     });
     on_change_cell.borrow_mut().replace(on_change.clone());
     let oc = on_change.clone();
-    let pa = popover_active.clone();
 
     window.connect_map(clone!(
         #[weak]
@@ -740,7 +605,7 @@ pub fn build_workspace_bar(
         window,
         move |_| {
             log::debug!("[workspace_bar] connect_map fired, launching fetch thread");
-            spawn_refresh(&scroll, &buttons_box, &window, &oc, &pa);
+            spawn_refresh(&scroll, &buttons_box, &window, &oc);
         }
     ));
 
@@ -753,7 +618,6 @@ fn poll_windows(
     buttons_box: GtkBox,
     window: ApplicationWindow,
     on_change: Rc<dyn Fn()>,
-    popover_active: Rc<Cell<bool>>,
 ) {
     match rx.try_recv() {
         Ok(Some(windows)) => {
@@ -772,7 +636,6 @@ fn poll_windows(
                 &icon_theme,
                 &window,
                 &on_change,
-                &popover_active,
             );
         }
         Ok(None) => {
@@ -781,7 +644,7 @@ fn poll_windows(
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => {
             glib::idle_add_local_once(move || {
-                poll_windows(rx, scroll, buttons_box, window, on_change, popover_active)
+                poll_windows(rx, scroll, buttons_box, window, on_change)
             });
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
