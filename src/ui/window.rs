@@ -208,7 +208,8 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
         return None;
     }
 
-    let workspace_bar = build_workspace_bar(window);
+    let popover_active = Rc::new(Cell::new(false));
+    let workspace_bar = build_workspace_bar(window, &popover_active);
 
     // ── Sidebar hover wrapper ────────────────────────────────────
     // Un HBox che contiene edge trigger + revealer. L'EventControllerMotion
@@ -243,11 +244,14 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
             sidebar_revealer.set_reveal_child(true);
         }
     ));
+    let pa_leave = popover_active.clone();
     motion.connect_leave(clone!(
         #[weak]
         sidebar_revealer,
         move |_| {
-            sidebar_revealer.set_reveal_child(false);
+            if !pa_leave.get() {
+                sidebar_revealer.set_reveal_child(false);
+            }
         }
     ));
     sidebar_wrapper.add_controller(motion);

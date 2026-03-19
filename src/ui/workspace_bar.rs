@@ -11,11 +11,14 @@
 use crate::core::global_state::get_home_dir;
 use glib::clone;
 use gtk4::{
-    Box as GtkBox, Button, EventControllerScroll, EventControllerScrollFlags, Image, Label,
-    Orientation, PolicyType, PropagationPhase, ScrolledWindow, gdk, prelude::*,
+    Box as GtkBox, Button, EventControllerMotion, EventControllerScroll,
+    EventControllerScrollFlags, Image, Label, Orientation, Overlay, PolicyType, Popover,
+    PropagationPhase, ScrolledWindow, gdk, prelude::*,
 };
 use libadwaita::ApplicationWindow;
 use serde::Deserialize;
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::OnceLock;
 use zbus::{Connection, proxy};
 
@@ -37,6 +40,9 @@ trait WindowCalls {
 
     /// Activates (focuses) the window with the given ID.
     fn activate(&self, win_id: u32) -> zbus::Result<()>;
+
+    /// Closes the window with the given ID (sends WM_DELETE_WINDOW).
+    fn close(&self, win_id: u32) -> zbus::Result<()>;
 }
 
 // ─── Global runtime management ─────────────────────────────────────────────────
@@ -211,6 +217,28 @@ async fn activate_window(id: u64) {
     }
 }
 
+/// Ask the window-calls extension to close a window.
+async fn close_window(id: u64) {
+    let Ok(conn) = Connection::session().await else {
+        return;
+    };
+    let Ok(windows) = WindowCallsProxy::new(&conn).await else {
+        return;
+    };
+
+    let result = windows.close(id as u32).await;
+    if let Err(e) = result {
+        log::warn!("[workspace_bar] Close({id}) failed: {e}");
+    }
+}
+
+/// Close all windows in the given list.
+async fn close_all_windows(ids: Vec<u64>) {
+    for id in ids {
+        close_window(id).await;
+    }
+}
+
 // ─── Widget helpers ───────────────────────────────────────────────────────────
 
 /// Resolve app name and icon from desktop file using `wm_class`
@@ -307,6 +335,117 @@ fn resolve_icon(preferred: &str, theme: &gtk4::IconTheme) -> String {
     "application-x-executable".to_owned()
 }
 
+/// Build a close badge button that sits in the top-right corner of an overlay.
+fn build_close_badge() -> Button {
+    let badge = Button::builder()
+        .icon_name("window-close-symbolic")
+        .halign(gtk4::Align::End)
+        .valign(gtk4::Align::Start)
+        .build();
+    badge.add_css_class("workspace-close-badge");
+    badge.set_visible(false);
+    badge
+}
+
+/// Build a context menu popover for a window button with Open, Close, and Close All actions.
+fn build_context_menu(
+    win_id: u64,
+    all_ids: &[u64],
+    parent: &impl IsA<gtk4::Widget>,
+    on_change: Rc<dyn Fn()>,
+    popover_active: Rc<Cell<bool>>,
+) -> Popover {
+    let box_ = GtkBox::new(Orientation::Vertical, 0);
+    box_.add_css_class("workspace-ctx-menu");
+
+    // Open
+    let btn_open = Button::new();
+    btn_open.add_css_class("workspace-ctx-item");
+    let btn_open_inner = GtkBox::new(Orientation::Horizontal, 8);
+    let icon_open = Image::from_icon_name("window-symbolic");
+    icon_open.set_pixel_size(16);
+    let label_open = Label::new(Some("Open"));
+    btn_open_inner.append(&icon_open);
+    btn_open_inner.append(&label_open);
+    btn_open_inner.set_margin_start(10);
+    btn_open_inner.set_margin_end(10);
+    btn_open_inner.set_margin_top(6);
+    btn_open_inner.set_margin_bottom(6);
+    btn_open.set_child(Some(&btn_open_inner));
+
+    btn_open.connect_clicked(move |_| {
+        glib::spawn_future_local(async move {
+            activate_window(win_id).await;
+        });
+    });
+    box_.append(&btn_open);
+
+    // Close
+    let btn_close = Button::new();
+    btn_close.add_css_class("workspace-ctx-item");
+    let btn_close_inner = GtkBox::new(Orientation::Horizontal, 8);
+    let icon_close = Image::from_icon_name("window-close-symbolic");
+    icon_close.set_pixel_size(16);
+    let label_close = Label::new(Some("Close"));
+    btn_close_inner.append(&icon_close);
+    btn_close_inner.append(&label_close);
+    btn_close_inner.set_margin_start(10);
+    btn_close_inner.set_margin_end(10);
+    btn_close_inner.set_margin_top(6);
+    btn_close_inner.set_margin_bottom(6);
+    btn_close.set_child(Some(&btn_close_inner));
+
+    let refresh_close = on_change.clone();
+    btn_close.connect_clicked(move |_| {
+        let refresh = refresh_close.clone();
+        glib::spawn_future_local(async move {
+            close_window(win_id).await;
+            refresh();
+        });
+    });
+    box_.append(&btn_close);
+
+    // Close All
+    let btn_close_all = Button::new();
+    btn_close_all.add_css_class("workspace-ctx-item");
+    let btn_close_all_inner = GtkBox::new(Orientation::Horizontal, 8);
+    let icon_close_all = Image::from_icon_name("window-close-symbolic");
+    icon_close_all.set_pixel_size(16);
+    let label_close_all = Label::new(Some("Close All"));
+    btn_close_all_inner.append(&icon_close_all);
+    btn_close_all_inner.append(&label_close_all);
+    btn_close_all_inner.set_margin_start(10);
+    btn_close_all_inner.set_margin_end(10);
+    btn_close_all_inner.set_margin_top(6);
+    btn_close_all_inner.set_margin_bottom(6);
+    btn_close_all.set_child(Some(&btn_close_all_inner));
+
+    let ids_clone: Vec<u64> = all_ids.to_vec();
+    let refresh_all = on_change.clone();
+    btn_close_all.connect_clicked(move |_| {
+        let ids = ids_clone.clone();
+        let refresh = refresh_all.clone();
+        glib::spawn_future_local(async move {
+            close_all_windows(ids).await;
+            refresh();
+        });
+    });
+    box_.append(&btn_close_all);
+
+    let popover = Popover::new();
+    popover.set_has_arrow(false);
+    popover.set_child(Some(&box_));
+    popover.set_parent(parent);
+
+    popover_active.set(true);
+    popover.connect_closed(move |p| {
+        popover_active.set(false);
+        p.unparent();
+    });
+
+    popover
+}
+
 // ─── Populate ─────────────────────────────────────────────────────────────────
 
 /// Clear and refill `buttons_box` with one button per entry in `windows`.
@@ -320,6 +459,8 @@ fn populate(
     windows: Vec<WindowInfo>,
     icon_theme: &gtk4::IconTheme,
     app_window: &ApplicationWindow,
+    on_change: &Rc<dyn Fn()>,
+    popover_active: &Rc<Cell<bool>>,
 ) {
     log::debug!(
         "[workspace_bar] populate called with {} window(s), scroll visible={}",
@@ -338,8 +479,9 @@ fn populate(
     }
 
     let window_count = windows.len();
+    let all_ids: Vec<u64> = windows.iter().map(|w| w.id).collect();
 
-    for info in windows {
+    for info in &windows {
         log::debug!(
             "[workspace_bar] creating button id={} title={:?} icon={:?}",
             info.id,
@@ -370,6 +512,7 @@ fn populate(
 
         btn.set_child(Some(&inner));
 
+        // ── Left click: activate window ──
         let win_id = info.id;
         btn.connect_clicked(clone!(
             #[weak]
@@ -382,8 +525,87 @@ fn populate(
             }
         ));
 
-        buttons_box.append(&btn);
+        // ── Close badge (on-hover overlay) ──
+        let overlay = Overlay::new();
+        overlay.set_child(Some(&btn));
+
+        let close_badge = build_close_badge();
+        overlay.add_overlay(&close_badge);
+
+        let motion = EventControllerMotion::new();
+        motion.connect_enter(clone!(
+            #[weak]
+            close_badge,
+            move |_, _, _| {
+                close_badge.set_visible(true);
+            }
+        ));
+        motion.connect_leave(clone!(
+            #[weak]
+            close_badge,
+            move |_| {
+                close_badge.set_visible(false);
+            }
+        ));
+        overlay.add_controller(motion);
+
+        let badge_win_id = info.id;
+        let refresh_badge = on_change.clone();
+        close_badge.connect_clicked(move |_| {
+            let refresh = refresh_badge.clone();
+            glib::spawn_future_local(async move {
+                close_window(badge_win_id).await;
+                refresh();
+            });
+        });
+
+        // ── Right click: context menu ──
+        let all_ids_for_menu = all_ids.clone();
+        let refresh_ctx = on_change.clone();
+        let pa_ctx = popover_active.clone();
+        let right_click = gtk4::GestureClick::builder().button(3).build();
+        right_click.connect_pressed(move |gesture, _, _, _| {
+            let Some(widget) = gesture.widget() else {
+                return;
+            };
+            let btn_ref = widget.downcast_ref::<Button>().unwrap();
+            let popover = build_context_menu(
+                badge_win_id,
+                &all_ids_for_menu,
+                btn_ref,
+                refresh_ctx.clone(),
+                pa_ctx.clone(),
+            );
+            popover.popup();
+        });
+        btn.add_controller(right_click);
+
+        buttons_box.append(&overlay);
     }
+
+    // ── "Close All" button at the bottom ──
+    let separator = gtk4::Separator::new(Orientation::Horizontal);
+    separator.add_css_class("workspace-separator-h");
+    buttons_box.append(&separator);
+
+    let close_all_btn = Button::builder()
+        .icon_name("window-close-symbolic")
+        .halign(gtk4::Align::Center)
+        .build();
+    close_all_btn.add_css_class("workspace-close-all-btn");
+    close_all_btn.set_tooltip_text(Some("Close all windows"));
+
+    let ids_for_close_all = all_ids.clone();
+    let refresh_close_all = on_change.clone();
+    close_all_btn.connect_clicked(move |_| {
+        let ids = ids_for_close_all.clone();
+        let refresh = refresh_close_all.clone();
+        glib::spawn_future_local(async move {
+            close_all_windows(ids).await;
+            refresh();
+        });
+    });
+    buttons_box.append(&close_all_btn);
 
     log::debug!("[workspace_bar] populate done, showing scroll");
     scroll.set_visible(true);
@@ -399,12 +621,65 @@ fn populate(
 
 // ─── Public constructor ───────────────────────────────────────────────────────
 
+/// Launch a background fetch and repopulate the bar when results arrive.
+fn spawn_refresh(
+    scroll: &ScrolledWindow,
+    buttons_box: &GtkBox,
+    window: &ApplicationWindow,
+    on_change: &Rc<dyn Fn()>,
+    popover_active: &Rc<Cell<bool>>,
+) {
+    spawn_refresh_delayed(scroll, buttons_box, window, on_change, popover_active, 0);
+}
+
+/// Like `spawn_refresh` but waits `delay_ms` before fetching from D-Bus.
+fn spawn_refresh_delayed(
+    scroll: &ScrolledWindow,
+    buttons_box: &GtkBox,
+    window: &ApplicationWindow,
+    on_change: &Rc<dyn Fn()>,
+    popover_active: &Rc<Cell<bool>>,
+    delay_ms: u64,
+) {
+    let (tx, rx) = std::sync::mpsc::channel::<Option<Vec<WindowInfo>>>();
+
+    std::thread::spawn(move || {
+        if delay_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        }
+        let rt = get_runtime();
+        let windows = rt.block_on(fetch_workspace_windows());
+        log::debug!(
+            "[workspace_bar] background thread result: {:?}",
+            windows.as_ref().map(std::vec::Vec::len)
+        );
+        let _ = tx.send(windows);
+    });
+
+    let oc = on_change.clone();
+    let pa = popover_active.clone();
+    glib::idle_add_local_once(clone!(
+        #[weak]
+        scroll,
+        #[weak]
+        buttons_box,
+        #[weak]
+        window,
+        move || {
+            poll_windows(rx, scroll, buttons_box, window, oc, pa);
+        }
+    ));
+}
+
 /// Build the workspace window bar.
 ///
 /// The widget is invisible until populated, hidden when no windows exist,
 /// and expands taller when more than 6 windows require a scrollbar.
 #[must_use]
-pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
+pub fn build_workspace_bar(
+    window: &ApplicationWindow,
+    popover_active: &Rc<Cell<bool>>,
+) -> ScrolledWindow {
     let scroll = ScrolledWindow::builder()
         .vscrollbar_policy(PolicyType::Automatic)
         .hscrollbar_policy(PolicyType::Never)
@@ -438,6 +713,24 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
 
     scroll.add_controller(scroll_controller);
 
+    // Build a self-referential on_change callback via Rc<RefCell>.
+    // Uses a small delay so the window list reflects completed D-Bus close calls.
+    let on_change_cell: Rc<std::cell::RefCell<Option<Rc<dyn Fn()>>>> =
+        Rc::new(std::cell::RefCell::new(None));
+    let oc_cell = on_change_cell.clone();
+    let scroll_r = scroll.clone();
+    let buttons_r = buttons_box.clone();
+    let window_r = window.clone();
+    let pa_r = popover_active.clone();
+    let on_change: Rc<dyn Fn()> = Rc::new(move || {
+        if let Some(ref cb) = *oc_cell.borrow() {
+            spawn_refresh_delayed(&scroll_r, &buttons_r, &window_r, cb, &pa_r, 350);
+        }
+    });
+    on_change_cell.borrow_mut().replace(on_change.clone());
+    let oc = on_change.clone();
+    let pa = popover_active.clone();
+
     window.connect_map(clone!(
         #[weak]
         scroll,
@@ -447,30 +740,7 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
         window,
         move |_| {
             log::debug!("[workspace_bar] connect_map fired, launching fetch thread");
-
-            let (tx, rx) = std::sync::mpsc::channel::<Option<Vec<WindowInfo>>>();
-
-            std::thread::spawn(move || {
-                let rt = get_runtime();
-                let windows = rt.block_on(fetch_workspace_windows());
-                log::debug!(
-                    "[workspace_bar] background thread result: {:?}",
-                    windows.as_ref().map(std::vec::Vec::len)
-                );
-                let _ = tx.send(windows);
-            });
-
-            glib::idle_add_local_once(clone!(
-                #[weak]
-                scroll,
-                #[weak]
-                buttons_box,
-                #[weak]
-                window,
-                move || {
-                    poll_windows(rx, scroll, buttons_box, window);
-                }
-            ));
+            spawn_refresh(&scroll, &buttons_box, &window, &oc, &pa);
         }
     ));
 
@@ -482,6 +752,8 @@ fn poll_windows(
     scroll: ScrolledWindow,
     buttons_box: GtkBox,
     window: ApplicationWindow,
+    on_change: Rc<dyn Fn()>,
+    popover_active: Rc<Cell<bool>>,
 ) {
     match rx.try_recv() {
         Ok(Some(windows)) => {
@@ -493,14 +765,24 @@ fn poll_windows(
                 return;
             };
             let icon_theme = gtk4::IconTheme::for_display(&display);
-            populate(&buttons_box, &scroll, windows, &icon_theme, &window);
+            populate(
+                &buttons_box,
+                &scroll,
+                windows,
+                &icon_theme,
+                &window,
+                &on_change,
+                &popover_active,
+            );
         }
         Ok(None) => {
             log::debug!("[workspace_bar] extension not available, hiding bar");
             scroll.set_visible(false);
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => {
-            glib::idle_add_local_once(move || poll_windows(rx, scroll, buttons_box, window));
+            glib::idle_add_local_once(move || {
+                poll_windows(rx, scroll, buttons_box, window, on_change, popover_active)
+            });
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
             log::warn!("[workspace_bar] background thread disconnected without sending");
