@@ -4,8 +4,9 @@ use crate::actions::launch_app;
 use crate::core::config;
 use crate::launcher::DesktopApp;
 use glib::clone;
+use gtk4::gdk;
 use gtk4::prelude::*;
-use gtk4::{Align, Box as GtkBox, Button, Entry, GestureClick, Image, Orientation, Popover};
+use gtk4::{Align, Box as GtkBox, Button, Entry, EventControllerKey, GestureClick, Image, Orientation, Popover};
 use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -192,6 +193,22 @@ fn build_pinned_popover(
     vbox.append(&remove_btn);
 
     popover.set_child(Some(&vbox));
+
+    let popover_esc = popover.clone();
+    let entry_esc = entry.clone();
+    let key_ctrl = EventControllerKey::new();
+    key_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    key_ctrl.connect_key_pressed(move |_, key, _, _| {
+        if key == gdk::Key::Escape {
+            popover_esc.popdown();
+            entry_esc.grab_focus();
+            glib::Propagation::Stop
+        } else {
+            glib::Propagation::Proceed
+        }
+    });
+    popover.add_controller(key_ctrl);
+
     popover
 }
 
