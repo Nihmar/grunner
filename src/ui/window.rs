@@ -576,6 +576,9 @@ fn setup_list_context_menu(
                         &window,
                     );
                 }
+                AppMode::CustomScript => {
+                    build_shell_context_menu(&obj, &popover, &vbox, &weak_popover, &model, &window);
+                }
                 _ => {
                     build_normal_context_menu(
                         &obj,
@@ -900,6 +903,71 @@ fn build_file_search_context_menu(
         }
     });
     vbox.append(&btn_manager);
+}
+
+fn build_shell_context_menu(
+    obj: &glib::Object,
+    _popover: &Popover,
+    vbox: &GtkBox,
+    weak_popover: &glib::WeakRef<Popover>,
+    model: &AppListModel,
+    window: &ApplicationWindow,
+) {
+    let cmd_item = match obj.downcast_ref::<CommandItem>() {
+        Some(item) => item,
+        None => return,
+    };
+
+    let line = cmd_item.line();
+    let command = if let Some((_, cmd)) = line.split_once(" | ") {
+        cmd.trim().to_string()
+    } else if let Some(stripped) = line.strip_prefix("Run: ") {
+        stripped.trim().to_string()
+    } else {
+        line
+    };
+
+    // Run
+    let run_btn = make_menu_button("Run");
+    let obj_run = obj.clone();
+    let model_run = model.clone();
+    let win_run = window.clone();
+    run_btn.connect_clicked(move |_| {
+        activate_item(
+            &obj_run,
+            &model_run,
+            AppMode::CustomScript,
+            gdk::CURRENT_TIME,
+        );
+        win_run.hide();
+    });
+    vbox.append(&run_btn);
+
+    // Copy command
+    let btn_copy_cmd = make_menu_button("Copy command");
+    let cmd_for_copy = command.clone();
+    let p_ref1 = weak_popover.clone();
+    btn_copy_cmd.connect_clicked(move |_| {
+        copy_text_to_clipboard(&cmd_for_copy);
+        if let Some(p) = p_ref1.upgrade() {
+            p.popdown();
+        }
+    });
+    vbox.append(&btn_copy_cmd);
+
+    // Copy working directory (only if set)
+    if let Some(working_dir) = cmd_item.working_dir() {
+        let btn_copy_wd = make_menu_button("Copy working directory");
+        let wd_for_copy = working_dir.clone();
+        let p_ref2 = weak_popover.clone();
+        btn_copy_wd.connect_clicked(move |_| {
+            copy_text_to_clipboard(&wd_for_copy);
+            if let Some(p) = p_ref2.upgrade() {
+                p.popdown();
+            }
+        });
+        vbox.append(&btn_copy_wd);
+    }
 }
 
 /// Create a flat menu button for context menus
