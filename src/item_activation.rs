@@ -173,15 +173,15 @@ pub fn as_activatable<'a>(obj: &'a glib::Object) -> Option<ActivatableItem<'a>> 
 
 /// Activate an Obsidian action item
 pub fn activate_obsidian_action_item(obj: &glib::Object, ctx: &ActivationContext) {
-    if let Ok(item) = obj.clone().downcast::<ObsidianActionItem>() {
-        activate_obsidian_action(&item, ctx);
+    if let Some(item) = obj.downcast_ref::<ObsidianActionItem>() {
+        activate_obsidian_action(item, ctx);
     }
 }
 
 /// Activate a search result item
 pub fn activate_search_result_item(obj: &glib::Object, ctx: &ActivationContext) {
-    if let Ok(item) = obj.clone().downcast::<SearchResultItem>() {
-        activate_search_result(&item, ctx);
+    if let Some(item) = obj.downcast_ref::<SearchResultItem>() {
+        activate_search_result(item, ctx);
     }
 }
 

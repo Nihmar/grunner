@@ -1110,20 +1110,11 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // Enable window dragging on background click
     let click = GestureClick::new();
     click.set_button(1); // left click only
-    click.set_propagation_phase(gtk4::PropagationPhase::Bubble);
+    click.set_propagation_phase(gtk4::PropagationPhase::Target);
     click.connect_pressed(clone!(
-        #[weak]
-        root,
         #[weak]
         window,
         move |gesture, _n_press, x, y| {
-            // Only start move if click landed on the root box itself
-            let Some(target) = gesture.widget() else {
-                return;
-            };
-            if target != root {
-                return;
-            }
             let Some(surface) = window.surface() else {
                 return;
             };
