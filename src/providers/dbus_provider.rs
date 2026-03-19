@@ -15,6 +15,7 @@
 //! to communicate with search providers while keeping the UI responsive.
 
 use crate::core::global_state::get_home_dir;
+use crate::utils::desktop::resolve_icon_from_desktop;
 use futures::stream::{FuturesUnordered, StreamExt};
 use gtk4::gdk::Display;
 use gtk4::prelude::*;
@@ -286,75 +287,10 @@ fn parse_ini(path: &std::path::Path) -> Option<SearchProvider> {
     Some(SearchProvider {
         bus_name,
         object_path,
-        app_icon: resolve_app_icon(&desktop_id),
+        app_icon: resolve_icon_from_desktop(&desktop_id),
         desktop_id,
         default_disabled,
     })
-}
-
-/// Resolve the icon name from a desktop ID
-///
-/// Looks up the .desktop file for a given desktop ID and extracts
-/// the Icon= field to determine what icon to use for this provider.
-///
-/// Searches both standard XDG application directories and Flatpak export
-/// directories, matching the locations GNOME Shell itself uses.
-///
-/// # Arguments
-/// * `desktop_id` - Desktop ID (with or without .desktop extension)
-///
-/// # Returns
-/// Icon name string, or empty string if not found.
-#[must_use]
-pub fn resolve_app_icon(desktop_id: &str) -> String {
-    let home = get_home_dir();
-
-    // Ensure we have the .desktop extension
-    let filename = if desktop_id.ends_with(".desktop") {
-        desktop_id.to_string()
-    } else {
-        format!("{desktop_id}.desktop")
-    };
-
-    debug!("Resolving app icon for desktop ID: {desktop_id} (filename: {filename})");
-
-    // FIX: Include Flatpak export paths so that Flatpak-installed apps like
-    // Bazaar have their icons resolved correctly. The original code only checked
-    // XDG standard paths, causing Flatpak providers to always produce an empty
-    // app_icon string.
-    let search_dirs = [
-        format!("/usr/share/applications/{filename}"),
-        format!("{home}/.local/share/applications/{filename}"),
-        format!("/usr/local/share/applications/{filename}"),
-        // System-wide Flatpak exports
-        format!("/var/lib/flatpak/exports/share/applications/{filename}"),
-        // Per-user Flatpak exports
-        format!("{home}/.local/share/flatpak/exports/share/applications/{filename}"),
-    ];
-
-    for path in &search_dirs {
-        debug!("Checking for desktop file at: {path}");
-        match std::fs::read_to_string(path) {
-            Ok(content) => {
-                for line in content.lines() {
-                    if let Some(icon) = line.trim().strip_prefix("Icon=") {
-                        let icon_name = icon.trim().to_string();
-                        debug!(
-                            "Found icon '{icon_name}' for desktop ID '{desktop_id}' at path: {path}"
-                        );
-                        return icon_name;
-                    }
-                }
-                debug!("Desktop file found at {path} but no Icon= line");
-            }
-            Err(e) => {
-                debug!("Could not read desktop file {path}: {e}");
-            }
-        }
-    }
-
-    warn!("No icon found for desktop ID: {desktop_id}");
-    String::new()
 }
 
 // ---------------------------------------------------------------------------

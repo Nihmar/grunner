@@ -6,6 +6,7 @@
 //! and icon selection.
 
 pub mod clipboard;
+pub mod desktop;
 
 use crate::core::global_state::get_home_dir;
 use gtk4::gio;

@@ -8,7 +8,7 @@
 //!
 //! The bar auto-refreshes every time the Grunner launcher window becomes visible.
 
-use crate::core::global_state::get_home_dir;
+use crate::utils::desktop::resolve_desktop_info;
 use glib::clone;
 use gtk4::{
     Box as GtkBox, Button, EventControllerMotion, EventControllerScroll,
@@ -152,9 +152,9 @@ async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
         }
 
         // Try to get app name and icon from desktop file
-        let (title, icon_from_desktop) = resolve_from_desktop(wm_class)
-            .or_else(|| resolve_from_desktop(wm_class_instance))
-            .map_or_else(|| (String::new(), None), |(n, i)| (n, Some(i)));
+        let (title, icon_from_desktop) = resolve_desktop_info(wm_class)
+            .or_else(|| resolve_desktop_info(wm_class_instance))
+            .map_or_else(|| (String::new(), None), |info| (info.name, info.icon));
 
         let title = if title.is_empty() {
             raw.title
@@ -239,45 +239,6 @@ async fn close_all_windows(ids: Vec<u64>) {
 }
 
 // ─── Widget helpers ───────────────────────────────────────────────────────────
-
-/// Resolve app name and icon from desktop file using `wm_class`
-fn resolve_from_desktop(wm_class: &str) -> Option<(String, String)> {
-    let home = get_home_dir();
-
-    let filename = format!("{wm_class}.desktop");
-    let search_dirs = [
-        format!("/usr/share/applications/{filename}"),
-        format!("{home}/.local/share/applications/{filename}"),
-        format!("/usr/local/share/applications/{filename}"),
-        format!("/var/lib/flatpak/exports/share/applications/{filename}"),
-        format!("{home}/.local/share/flatpak/exports/share/applications/{filename}"),
-    ];
-
-    for path in &search_dirs {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            let mut name: Option<String> = None;
-            let mut icon: Option<String> = None;
-            for line in content.lines() {
-                // Take the first Name= entry (usually the main app name)
-                // Desktop files can have multiple entries like "New Window" for actions
-                if name.is_none()
-                    && line.trim().starts_with("Name=")
-                    && let Some(n) = line.trim().strip_prefix("Name=")
-                {
-                    name = Some(n.trim().to_string());
-                }
-                if let Some(i) = line.trim().strip_prefix("Icon=") {
-                    icon = Some(i.trim().to_string());
-                }
-            }
-            if let Some(n) = name {
-                let i = icon.unwrap_or_default();
-                return Some((n, i));
-            }
-        }
-    }
-    None
-}
 
 /// Maximum title length (in Unicode scalar values) shown inside a button.
 const MAX_TITLE_CHARS: usize = 22;
