@@ -53,7 +53,7 @@ pub fn update_pinned_strip(
             btn.add_css_class("pinned-button");
 
             let icon = Image::new();
-            icon.set_pixel_size(32);
+            icon.set_pixel_size(30);
             icon.set_valign(Align::Center);
             if app.icon.is_empty() {
                 icon.set_icon_name(Some("application-x-executable"));

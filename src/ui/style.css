@@ -388,8 +388,8 @@ notebook.pill-tabs > stack {
 
 /* ── Pinned apps strip ───────────────────────────────────────── */
 .pinned-strip {
-    min-height: 42px;
-    padding: 4px 12px;
+    min-height: 36px;
+    padding: 2px 12px;
     spacing: 4px;
     transition: opacity 150ms ease;
 }
@@ -397,7 +397,8 @@ notebook.pill-tabs > stack {
 .pinned-button {
     min-width: 32px;
     min-height: 32px;
-    padding: 4px;
+    padding: 6px;
+    margin: 4px;
     border-radius: calc(var(--window-radius, 12px) - 6px);
     background: transparent;
     box-shadow: none;
