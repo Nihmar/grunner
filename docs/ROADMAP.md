@@ -179,11 +179,7 @@ Devo aggiungere a Grunner un **menu contestuale (tasto destro) sui risultati del
 Devo aggiungere a Grunner un **menu contestuale (tasto destro) sui risultati della modalità shell** (`:sh`).
 
 **Voci del menu:**
-- **Esegui** — stessa azione del doppio click / Enter (esecuzione silenziosa)
-- **Esegui in terminale** — lancia il comando in un terminale visibile; rilevare il terminale disponibile con lista di fallback ordinata (`kgx` → `gnome-terminal` → `foot` → `xterm`)
-- **Esegui come amministratore** — lancia tramite `pkexec` nel terminale
 - **Copia comando** — copia la stringa del comando negli appunti
-- **Modifica comando** — apre il comando in un piccolo popover inline editabile per modificarlo al volo prima di eseguirlo, senza passare dalle impostazioni e senza modificare il comando salvato permanentemente
 
 **Note implementative:**
 - Il menu appare solo quando la modalità attiva è shell (`:sh`)
