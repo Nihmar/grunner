@@ -418,7 +418,7 @@ fn bind_search_result_item(
     sr_item: &SearchResultItem,
 ) {
     // Icon (try to use the icon from the result, fallback to default)
-    // Logic from original list_model.rs: bind_search_result_item
+    // Try result-specific icons first, then fall back to provider app icon
     let icon_file = sr_item.icon_file();
     let icon_themed = sr_item.icon_themed();
     let app_icon = sr_item.app_icon_name();

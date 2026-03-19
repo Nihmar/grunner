@@ -140,7 +140,7 @@ pub struct Config {
     /// List of custom script commands for :sh mode
     pub commands: Vec<CommandConfig>,
     /// Disable all special modes (colon commands) and hide power bar
-    /// Activated via --d / -D command-line flag
+    /// Activated via --simple / -s command-line flag or GRUNNER_SIMPLE env var
     pub disable_modes: bool,
     /// Theme mode selection
     pub theme: ThemeMode,
@@ -168,8 +168,8 @@ impl Default for Config {
     /// - Standard window dimensions
     /// - Default search result limit
     /// - Common application directories (stored as raw strings, not expanded)
-    /// - Fixed colon commands (:ob, :obg, :f, :fg)
-    /// - Empty Obsidian configuration
+    /// - Empty commands list (colon commands are built-in mode triggers)
+    /// - No Obsidian configuration (None)
     fn default() -> Self {
         Self {
             window_width: DEFAULT_WINDOW_WIDTH,

@@ -5,8 +5,8 @@
 //! GTK object subclassing to make application data accessible to GTK's property
 //! system and list views.
 
-use glib::Object;
 use glib::subclass::prelude::*;
+use glib::Object;
 use std::cell::RefCell;
 
 use crate::launcher::DesktopApp;

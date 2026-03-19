@@ -201,9 +201,9 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
     let workspace_bar = build_workspace_bar(window);
 
     // ── Sidebar hover wrapper ────────────────────────────────────
-    // Un HBox che contiene edge trigger + revealer. L'EventControllerMotion
-    // è attaccato a questo wrapper: enter → apre, leave → chiude.
-    // In questo modo la sidebar resta aperta mentre il mouse è dentro.
+    // An HBox containing edge trigger + revealer. The EventControllerMotion
+    // is attached to this wrapper: enter → opens, leave → closes.
+    // This keeps the sidebar open while the mouse is inside.
     let sidebar_wrapper = GtkBox::new(Orientation::Horizontal, 0);
 
     // ── Edge trigger ────────────────────────────────────────────
@@ -212,9 +212,7 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
     edge_trigger.set_can_focus(false);
     sidebar_wrapper.append(&edge_trigger);
 
-    // ── Revealer con Overlay per il fade del bordo destro ────────
-    // L'Overlay sovrappone un Box con gradiente CSS sopra la sidebar,
-    // simulando la dissolvenza che mask-image multipla non può fare.
+    // ── Revealer ────────────────────────────────────────────────
     let sidebar_revealer = Revealer::builder()
         .transition_type(RevealerTransitionType::SlideRight)
         .transition_duration(180)
@@ -224,7 +222,7 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
     sidebar_revealer.set_child(Some(&workspace_bar));
     sidebar_wrapper.append(&sidebar_revealer);
 
-    // ── Hover: apre/chiude al passaggio del mouse ────────────────
+    // ── Hover: opens/closes on mouse enter/leave ────────────────
     let motion = EventControllerMotion::new();
     motion.connect_enter(clone!(
         #[weak]
@@ -1069,7 +1067,6 @@ fn setup_keyboard_controller(
 /// * `cfg` - Application configuration loaded from file or defaults
 pub fn build_ui(app: &Application, cfg: &Config) {
     debug!("Workspace bar enabled: {}", cfg.workspace_bar_enabled);
-    info!("Workspace bar enabled: {}", cfg.workspace_bar_enabled);
 
     // 1. Display and CSS Setup
     let display = gtk4::gdk::Display::default().expect("Cannot connect to display");

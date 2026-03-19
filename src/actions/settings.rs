@@ -1,6 +1,5 @@
 use log::info;
 
-/// Open the application settings file
 /// Open the settings GUI window
 ///
 /// Opens a graphical interface for editing Grunner's configuration settings.

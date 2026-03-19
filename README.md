@@ -2,96 +2,85 @@
 
 A fast, keyboard-driven application launcher for GNOME and other Linux desktops, written in Rust. Inspired by Rofi, grunner is built on GTK4 and libadwaita, and follows your system's light/dark theme and accent color automatically.
 
-![[attachments/5e4f631aa3db39a78a3a6e8dca7de263_MD5.svg]]
-
-**📚 [Comprehensive Documentation](docs/README.md) available in the `docs/` directory**
+**Version:** 2.5.0
 
 ---
 
 ## Gallery
 
-Take a quick look at grunner in action:
-
 |                                                                                                    |                                                                                                             |
 | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Main window** – fuzzy application search                                                         | ![Main view](screenshots/main_view.png)                                                                     |
+| **Main window** — fuzzy application search                                                         | ![Main view](screenshots/main_view.png)                                                                     |
 | **Application filtering**                                                                          | ![App filter](screenshots/app_filter.png)                                                                   |
-| **File search** (`:f`) with fallback support                                                       | ![Locate](screenshots/locate.png)                                                                           |
-| **Full‑text grep** (`:fg`) with fallback support                                                   | ![Ripgrep](screenshots/ripgrep.png)                                                                         |
-| **Obsidian actions** (`:ob`) – vault, new note, daily note, quick note                             | ![Obsidian](screenshots/obsidian.png)                                                                       |
+| **File search** (`:f`)                                                                             | ![Locate](screenshots/locate.png)                                                                           |
+| **Full-text grep** (`:fg`)                                                                         | ![Ripgrep](screenshots/ripgrep.png)                                                                         |
+| **Obsidian actions** (`:ob`) — vault, new note, daily note, quick note                             | ![Obsidian](screenshots/obsidian.png)                                                                       |
 | **Obsidian file search** (`:ob` with file list)                                                    | ![Obsidian locate](screenshots/obsidian_locate.png)                                                         |
 | **Obsidian vault grep** (`:obg`)                                                                   | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png)                                                       |
-| **GNOME Shell search providers** – files, calendar, contacts, etc. (integrated in standard search) | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
-| **Settings window** – Info tab                                                                     | ![Info tab](screenshots/settings_1.png)                                                                     |
-| **Settings window** – General tab                                                                  | ![General tab](screenshots/settings_2.png)                                                                  |
-| **Settings window** – Search tab                                                                   | ![Search tab](screenshots/settings_3.png)                                                                   |
-| **Settings window** – Obsidian tab                                                                 | ![Obsidian tab](screenshots/settings_4.png)                                                                 |
-| **Settings window** – Commands tab (custom terminal commands for `:sh`)                            | ![Commands tab](screenshots/settings_5.png)                                                                |
-| **Settings window** – Theme tab (built-in and custom themes)                                        | ![Theme tab](screenshots/settings_6.png)                                                                  |
+| **GNOME Shell search providers** — files, calendar, contacts, etc.                                | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
+| **Settings** — Info, General, Search, Obsidian tabs                                                | ![Settings 1](screenshots/settings_1.png) ![Settings 2](screenshots/settings_2.png) ![Settings 3](screenshots/settings_3.png) ![Settings 4](screenshots/settings_4.png) |
 
 ---
 
 ## Features
 
-- **Fuzzy application search** — instantly searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
-- **Calculator fallback** — automatically evaluates mathematical expressions and displays results with a calculator icon; press Enter to copy result to clipboard
-- **Colon commands** — built-in fixed commands for file search (`:f`), full-text grep (`:fg`), and Obsidian integration (`:ob`, `:obg`)
-- **Terminal commands (`:sh`)** — run custom shell commands directly from the launcher. Configure your own commands in the settings or add new ones on the fly. Each command can specify a working directory and whether to keep the terminal open after execution.
-- **Obsidian integration** — open your vault, create new notes, append to a daily note, or open/search vault files without leaving the keyboard
-- **GNOME Shell search providers** — query any installed GNOME Shell search provider (Files, GNOME Calendar, GNOME Contacts, etc.) integrated in standard search
-- **Workspace bar** — shows open windows in the current workspace. Expands taller when scrollbar is needed (7+ windows). Requires window-calls GNOME Shell extension.
-- **Power bar** — suspend, restart, power off, and log out, each with a confirmation dialog
-- **Settings window** — graphical dialog with tabs for editing configuration, accessible from the power bar
-- **Hot reload** — changes to settings (including terminal commands) take effect immediately after saving, without needing to restart the app
-- **Themeable** — choose from 10 built-in themes (System, Light, Dark, Tokyo Night, Catppuccin, Nord, Gruvbox, Dracula) or create your own custom theme with CSS variables
-- **Configurable** — a single TOML file controls window size, search directories, result limits, debounce timing, custom commands, and Obsidian paths
-- **Comprehensive logging** — integrated logging system with journald, syslog, file, and stderr backends, configurable via environment variables with panic capture for debugging
+- **Fuzzy application search** — searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
+- **Calculator fallback** — automatically evaluates mathematical expressions; press Enter to copy the result to clipboard
+- **Colon commands** — built-in commands for file search (`:f`), full-text grep (`:fg`), and Obsidian integration (`:ob`, `:obg`)
+- **Terminal commands (`:sh`)** — run custom shell commands from the launcher; configure in settings or TOML config
+- **Obsidian integration** — open your vault, create notes, append to daily notes, or search vault files
+- **GNOME Shell search providers** — query installed GNOME Shell search providers (Files, Calendar, Contacts, etc.) inline with app search
+- **Workspace bar** — shows open windows on the current workspace; requires the [window-calls](https://extensions.gnome.org/extension/4724/window-calls/) GNOME Shell extension
+- **Pinned apps** — right-sidebar strip of favorite apps with `Alt+1`..`9` shortcuts
+- **Power bar** — suspend, restart, power off, and log out with confirmation dialogs
+- **Settings window** — graphical dialog with tabs for editing configuration; hot-reload on save
+- **Themeable** — 10 built-in themes or load a custom CSS file
+- **Configurable** — single TOML file (`~/.config/grunner/grunner.toml`) controls window size, search directories, debounce timing, custom commands, and more
+- **Comprehensive logging** — systemd journal, syslog, file, or stderr backends, configurable via environment variables
 
 ---
 
 ## Dependencies
 
-The following is only tested for Arch Linux (btw), so I won't give instructions for other distros.
+Tested on Arch Linux. Instructions for other distros may vary.
 
 ### Build dependencies
 
 - **Rust** (edition 2024)
-- **GTK4** (≥ 0.10)
-- **libadwaita** (≥ 0.8 with `v1_6` feature)
+- **GTK4** (≥ 0.11)
+- **libadwaita** (≥ 0.9 with `v1_6` feature)
 
-Install them on your OS:
-
-**Arch Linux**
+**Arch Linux:**
 
 ```bash
 sudo pacman -S rust gtk4 libadwaita
 ```
 
-For optimal performance with `:f` file search, install `plocate` and enable its index auto-update (falls back to `find` if not available):
+For best `:f` file search performance, install `plocate` and enable its index:
 
 ```bash
 sudo updatedb
 sudo systemctl enable --now plocate-updatedb.timer
 ```
 
-For optimal performance with `:fg` file search, install `ripgrep`.
+For best `:fg` performance, install `ripgrep`.
 
 ### Optional runtime tools
 
-| Tool                     | Used by                                       | Notes                                                                                                                              |
-| ------------------------ | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `plocate`                | `:f` file search                              | Preferred tool; falls back to `find` if not available. Index must be populated via `updatedb` for best performance.                |
-| `rg` (ripgrep)           | `:fg` full-text grep, `:obg` vault grep       | Preferred tool; falls back to `grep` if not available.                                                                             |
-| Terminal emulator        | Apps with `Terminal=true`                     | Auto-detected in order: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm` |
-| `obsidian`               | `:ob` / `:obg` commands                       | Must be launchable via `xdg-open obsidian://…`                                                                                     |
-| `systemctl` / `loginctl` | Power bar (suspend, reboot, poweroff, logout) | Standard on systemd-based distros                                                                                                  |
-| window-calls extension  | Workspace bar                                 | GNOME Shell extension for showing open windows. Install from https://extensions.gnome.org/extension/4724/window-calls/             |
+| Tool                     | Used by                                 | Notes                                                                                                                          |
+| ------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `plocate`                | `:f` file search                        | Preferred; falls back to `find` if unavailable. Run `updatedb` to populate the index.                                          |
+| `rg` (ripgrep)           | `:fg` full-text grep, `:obg` vault grep | Preferred; falls back to `grep` if unavailable.                                                                                |
+| Terminal emulator        | Apps with `Terminal=true`               | Auto-detected: `foot`, `alacritty`, `kitty`, `wezterm`, `ghostty`, `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm`     |
+| `obsidian`               | `:ob` / `:obg` commands                 | Must be launchable via `xdg-open obsidian://…`                                                                                 |
+| `systemctl` / `loginctl` | Power bar                               | Standard on systemd-based distros                                                                                              |
+| window-calls extension   | Workspace bar                           | GNOME Shell extension: https://extensions.gnome.org/extension/4724/window-calls/                                               |
 
 ---
 
 ## Installation
 
-### Using Cargo (Recommended for developers)
+### Using Cargo
 
 ```bash
 git clone https://github.com/Nihmar/grunner.git
@@ -99,77 +88,60 @@ cd grunner
 cargo build --release
 ```
 
-The compiled binary will be at `target/release/grunner`. You can run it directly from there or install it system-wide:
+The binary is at `target/release/grunner`. Install system-wide:
 
 ```bash
-# Install to ~/.cargo/bin (if it's in your PATH)
 cargo install --path .
-
-# Or copy to ~/.local/bin
+# or
 cp target/release/grunner ~/.local/bin/
 ```
 
-In `assets` you can find both the icon and the `.desktop`.
+The `assets/` directory contains the `.desktop` file and icon.
 
 ### Using AUR (Arch Linux)
 
-For Arch Linux users, you can install from the AUR: [grunner-git](https://aur.archlinux.org/packages/grunner-git)
-
-Using your preferred AUR helper:
-
 ```bash
-# Using yay
 yay -S grunner-git
-```
-
-```bash
-# Using paru
+# or
 paru -S grunner-git
-```
-
-Or manually build and install from the AUR:
-
-```bash
-git clone https://aur.archlinux.org/grunner-git.git
-cd grunner-git
-makepkg -si
 ```
 
 ### Bind to a keyboard shortcut
 
-In GNOME Settings → Keyboard → Custom Shortcuts, add:
+In GNOME Settings → Keyboard → Custom Shortcuts:
 
-| Name    | Command   | Suggested shortcut              |
-| ------- | --------- | ------------------------------- |
-| grunner | `grunner` | Your choice. I like `Super + A` |
+| Name    | Command   | Suggested shortcut |
+| ------- | --------- | ------------------ |
+| grunner | `grunner` | `Super + A`        |
 
 ---
 
 ## Usage
 
-Launch `grunner`. The window appears with a search bar focused and ready for input.
+Launch `grunner`. The window appears with a search bar focused and ready.
 
 ### Keyboard shortcuts
 
-| Key                     | Action                                         |
-| ----------------------- | ---------------------------------------------- |
-| Type anything           | Filter applications (fuzzy search)             |
-| `Enter`                | Launch selected app / activate selected result |
-| `↑` / `↓`              | Move selection up / down                       |
-| `Page Up` / `Page Down`| Jump 10 items up / down                        |
-| `Escape`               | Close the launcher                             |
+| Key                        | Action                                         |
+| -------------------------- | ---------------------------------------------- |
+| Type anything              | Fuzzy-search applications                      |
+| `Enter`                    | Launch selected app / activate result          |
+| `↑` / `↓`                 | Move selection up / down                       |
+| `Page Up` / `Page Down`    | Jump 10 items                                  |
+| `Escape`                   | Close the launcher                             |
+| `Alt+1` .. `Alt+9`        | Launch pinned app by position                  |
 
 ### Command-line options
 
-| Option                   | Description                                                              |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `-h`, `--help`           | Show help message                                                        |
-| `-v`, `--version`        | Show version information                                                 |
-| `-s`, `--simple`         | Simple mode: only show app search; hide power bar and disable colon commands (`:f`, `:fg`, `:ob`, `:obg`, `:sh`) |
-| `--list-providers`       | List available GNOME Shell search providers                              |
-| `GRUNNER_SIMPLE=1`       | Environment variable to enable simple mode (recommended)                |
+| Option              | Description                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `-h`, `--help`      | Show help                                                                                       |
+| `-v`, `--version`   | Show version                                                                                    |
+| `-s`, `--simple`    | Simple mode: only app search; hide power bar and disable colon commands                         |
+| `--list-providers`  | List available GNOME Shell search providers                                                     |
+| `GRUNNER_SIMPLE=1`  | Environment variable to enable simple mode                                                      |
 
-**Note:** Due to GTK argument handling, the `-s` flag may show a warning. Use `GRUNNER_SIMPLE=1` environment variable for reliable operation.
+> **Note:** Due to GTK argument handling, the `-s` flag may show a warning. Use `GRUNNER_SIMPLE=1` for reliable operation.
 
 ---
 
@@ -177,127 +149,92 @@ Launch `grunner`. The window appears with a search bar focused and ready for inp
 
 ### Default — application search
 
-Type any text to fuzzy-search all installed applications. Results are ranked by match score. The app's name, description, and icon are displayed in each row. The search also includes results from GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching.
+Type any text to fuzzy-search installed applications. Results also include matches from GNOME Shell search providers (Files, Calendar, Contacts, etc.) for unified searching.
 
 #### Calculator fallback
 
-When you enter a mathematical expression (like `2+2`, `10*5`, `(2+3)*4`), grunner automatically evaluates it and displays the result. The result is shown with a calculator icon, and pressing Enter copies the result to the clipboard. This serves as a fallback when GNOME's calculator is blacklisted or not available as a smart provider.
+Mathematical expressions are evaluated automatically and displayed with a calculator icon. Press Enter to copy the result to clipboard.
 
-**Supported operations:**
-- Basic arithmetic: `+`, `-`, `*`, `/`, `%` (modulo)
-- Exponentiation: `^`
-- Parentheses for grouping: `(2+3)*4`
-- Unary minus: `-5 + 3`, `5 + -3`
-- Trigonometric functions: `sin(x)`, `cos(x)`, `tan(x)` (radians)
-- Square root: `sqrt(x)`
-- Mathematical constants: `pi`, `e`
+Supported operations:
 
-**Examples:**
+- `+`, `-`, `*`, `/`, `%` (modulo), `^` (exponentiation)
+- Parentheses, unary minus
+- `sin(x)`, `cos(x)`, `tan(x)` (radians), `sqrt(x)`
+- Constants: `pi`, `e`
+
 ```
 2 + 2          → 4
-10 * 5         → 50
 (2 + 3) * 4    → 20
-10 / 3         → 3.3333333333
 2 ^ 3          → 8
-sin(0)         → 0
-cos(0)         → 1
-sqrt(16)       → 4
-pi             → 3.1415926536
-e              → 2.7182818285
 sin(pi/2)      → 1
+sqrt(16)       → 4
 ```
 
 ### Colon commands
 
 Type `:` followed by a command name and an optional argument:
 
-```
-:<command> [argument]
-```
+#### `:f <pattern>` — file search
 
-#### `:f <pattern>` — file search (built-in fixed command)
-
-Searches your home directory using `plocate` if available, falling back to `find` otherwise (case-insensitive). Results are displayed with the filename as the title and the parent directory as the subtitle. Press `Enter` to open the file with `xdg-open` or, for text files, with `$EDITOR` at the matched line.
+Searches your home directory using `plocate` (falls back to `find`). Press `Enter` to open the file with `xdg-open` or `$EDITOR`.
 
 ```
 :f invoice 2024
 ```
 
-#### `:fg <pattern>` — full-text grep (built-in fixed command)
+#### `:fg <pattern>` — full-text grep
 
-Searches file contents recursively under `~` using `ripgrep` if available, falling back to `grep` otherwise. Results are displayed in `file:line:content` format with the filename as the title. Press `Enter` to open the file at the matching line in `$EDITOR`.
+Searches file contents under `~` using `ripgrep` (falls back to `grep`). Press `Enter` to open the file at the matching line in `$EDITOR`.
 
 ```
 :fg TODO fixme
 ```
 
-#### `:ob [text]` — Obsidian actions (built-in fixed command)
+#### `:ob [text]` — Obsidian actions
 
-Requires `[obsidian]` to be configured (see [Configuration](#configuration)). Displays an action bar with four buttons:
+Requires `[obsidian]` configuration. Shows four action buttons:
 
-| Button         | Action                                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------------------------- |
-| **Open Vault** | Opens the configured vault in Obsidian                                                                   |
-| **New Note**   | Creates a new timestamped note in `new_notes_folder`, optionally pre-filled with `[text]`, then opens it |
-| **Daily Note** | Opens (or creates) today's daily note in `daily_notes_folder`, optionally appending `[text]`             |
-| **Quick Note** | Appends `[text]` to the configured `quick_note` file, then opens it                                      |
+| Button         | Action                                                                          |
+| -------------- | ------------------------------------------------------------------------------- |
+| **Open Vault** | Opens the configured vault in Obsidian                                          |
+| **New Note**   | Creates a timestamped note in `new_notes_folder`, optionally pre-filled with text |
+| **Daily Note** | Opens (or creates) today's daily note, optionally appending text                |
+| **Quick Note** | Appends text to the `quick_note` file, then opens it                            |
 
-```
-:ob pick up milk
-```
+Selecting a result from the list opens that vault file directly.
 
-Selecting a result from the list opens that vault file directly in Obsidian.
+#### `:obg <pattern>` — Obsidian vault grep
 
-#### `:obg <pattern>` — Obsidian vault grep (built-in fixed command)
+Searches Markdown file contents in your vault using `rg` (falls back to `grep`). Press `Enter` to open the file at that line in Obsidian.
 
-Searches the content of all Markdown files in your vault using `rg` if available, falling back to `grep` otherwise. Results show the matching line. Press `Enter` to open the file at that line in Obsidian.
+#### `:sh [filter]` — terminal commands
 
-```
-:obg project alpha
-```
+Lists custom script commands from your configuration. Filter by name or command text. Press `Enter` to execute in a terminal.
 
-#### `:sh [filter]` — terminal commands (custom commands)
-
-Lists all custom script commands configured in your settings. Use `[filter]` to search through your commands by name or command text. Press `Enter` to execute the selected command in your terminal.
-
-```
-:sh git
-```
-
-Commands are configured in the Settings window under the **Commands** tab, or directly in the TOML config file. Each command has:
-- **Name**: Display label shown in the list
-- **Command**: Shell command to execute
-- **Working directory**: (optional) Directory to run the command in
-- **Keep terminal open**: (default: true) Whether to keep the terminal open after the command finishes
+Commands are configured in the Settings window (Commands tab) or in the TOML config. Each command has:
+- **Name** — display label
+- **Command** — shell command to execute
+- **Working directory** — optional directory
+- **Keep terminal open** — default: `true`
 
 ---
 
 ## Configuration
 
-grunner stores its configuration at `~/.config/grunner/grunner.toml`. The file is created automatically with defaults on first run. You can edit settings graphically by clicking the **Settings** button in the bottom-left of the window, which opens a settings dialog with tabs for different configuration categories (as seen in the screenshots). From the settings dialog, you can also open the configuration file directly in your default editor.
+Configuration lives at `~/.config/grunner/grunner.toml`, created automatically with defaults on first run. Edit graphically via the **Settings** button, or open the file directly from the settings dialog.
 
-**Hot reload**: Changes made in the settings window (including adding or editing terminal commands) take effect immediately after clicking Save — no restart required!
-
-All keys are optional; missing keys fall back to built-in defaults.
+**Hot reload:** changes take effect immediately after saving — no restart required.
 
 ### Full example
 
 ```toml
 [window]
-# Width and height of the launcher window in pixels.
 width  = 640
 height = 480
 
 [search]
-# Maximum number of results shown when a query is active.
 max_results = 64
-
-# Delay in milliseconds before executing a colon command after you stop typing.
-# Lower values feel more responsive; higher values reduce flicker for slow commands.
 command_debounce_ms = 300
-
-# Directories scanned for .desktop files.
-# Use ~ for the home directory. Non-existent directories are silently skipped.
 app_dirs = [
     "/usr/share/applications",
     "/usr/local/share/applications",
@@ -305,28 +242,19 @@ app_dirs = [
     "/var/lib/flatpak/exports/share/applications",
     "~/.local/share/flatpak/exports/share/applications",
 ]
-
-# List of GNOME Shell search providers to exclude.
 provider_blacklist = []
+workspace_bar_enabled = true
 
 [obsidian]
-# Absolute or ~ path to the root of your Obsidian vault.
 vault = "~/Documents/Obsidian/MyVault"
-# Subfolder inside the vault where daily notes are stored.
 daily_notes_folder = "Daily"
-# Subfolder inside the vault where new notes are created.
 new_notes_folder = "Inbox"
-# Path to the quick-note file, relative to the vault root.
 quick_note = "Quick.md"
 
-# Custom script commands for :sh mode
-# These commands will appear when you type :sh in the launcher
 [[commands]]
 name = "Update System"
 command = "sudo pacman -Syu"
-# Optional: working directory (empty = home)
-# working_dir = "~/"
-# Optional: keep terminal open after command (default: true)
+working_dir = "~/"
 keep_open = true
 
 [[commands]]
@@ -335,280 +263,219 @@ command = "git status"
 keep_open = true
 
 [theme]
-# Theme mode: system, system-light, system-dark, tokio-night, catppuccin-mocha,
-# catppuccin-latte, nord, gruvbox-dark, gruvbox-light, dracula, custom
 mode = "system"
-# Path to custom theme CSS file (only used when mode = "custom")
 # custom_theme_path = "~/.config/grunner/themes/my_theme.css"
 ```
 
 ### Configuration reference
 
-| Key                           | Type             | Default     | Description                                      |
-| ----------------------------- | ---------------- | ----------- | ------------------------------------------------ |
-| `window.width`                | integer          | `640`       | Window width in pixels                          |
-| `window.height`               | integer          | `480`       | Window height in pixels                         |
-| `search.max_results`          | integer          | `64`        | Maximum results displayed                       |
-| `search.command_debounce_ms`  | integer          | `300`       | Debounce delay for colon commands (ms)           |
-| `search.app_dirs`             | array of strings | (see above) | Directories to scan for `.desktop` files        |
-| `search.provider_blacklist`   | array of strings | `[]`        | List of GNOME Shell search providers to exclude  |
-| `search.workspace_bar_enabled`| boolean          | `true`      | Enable workspace bar (requires extension)        |
-| `obsidian.vault`              | string           | —           | Path to Obsidian vault root                     |
-| `obsidian.daily_notes_folder` | string           | —           | Daily notes subfolder                           |
-| `obsidian.new_notes_folder`   | string           | —           | New notes subfolder                             |
-| `obsidian.quick_note`         | string           | —           | Quick-note file path (relative to vault)        |
-| `commands[].name`             | string           | —           | Display name for terminal command               |
-| `commands[].command`          | string           | —           | Shell command to execute                        |
-| `commands[].working_dir`      | string (optional)| —           | Working directory for the command                |
-| `commands[].keep_open`       | boolean          | `true`      | Keep terminal open after command finishes       |
-| `theme.mode`                  | string           | `system`    | Theme mode (see Theming section)                |
-| `theme.custom_theme_path`     | string (optional)| —           | Path to custom theme CSS file                    |
+| Key                            | Type              | Default | Description                                         |
+| ------------------------------ | ----------------- | ------- | --------------------------------------------------- |
+| `window.width`                 | integer           | `640`   | Window width in pixels                              |
+| `window.height`                | integer           | `480`   | Window height in pixels                             |
+| `search.max_results`           | integer           | `64`    | Maximum results displayed                           |
+| `search.command_debounce_ms`   | integer           | `300`   | Debounce delay for colon commands (ms)              |
+| `search.app_dirs`              | array of strings  | (see above) | Directories to scan for `.desktop` files        |
+| `search.provider_blacklist`    | array of strings  | `[]`    | GNOME Shell search providers to exclude             |
+| `search.workspace_bar_enabled` | boolean           | `true`  | Enable workspace bar (requires window-calls extension) |
+| `obsidian.vault`               | string            | —       | Path to Obsidian vault root                         |
+| `obsidian.daily_notes_folder`  | string            | —       | Daily notes subfolder                               |
+| `obsidian.new_notes_folder`    | string            | —       | New notes subfolder                                 |
+| `obsidian.quick_note`          | string            | —       | Quick-note file path (relative to vault)            |
+| `commands[].name`              | string            | —       | Display name for terminal command                   |
+| `commands[].command`           | string            | —       | Shell command to execute                            |
+| `commands[].working_dir`       | string (optional)  | —      | Working directory                                   |
+| `commands[].keep_open`         | boolean           | `true`  | Keep terminal open after command finishes           |
+| `theme.mode`                   | string            | `system`| Theme mode (see Theming section)                    |
+| `theme.custom_theme_path`      | string (optional)  | —      | Path to custom theme CSS file                       |
+| `pinned_apps`                  | array of strings  | `[]`    | Desktop entry IDs of pinned (favorite) apps         |
 
-### Logging Configuration
+### Logging
 
-Grunner includes a comprehensive logging system that can be configured via environment variables. The logging system supports multiple backends (journald, syslog, file, stderr) and log levels.
-
-**Environment Variables:**
-
-```bash
-# Log destination (journal, syslog, file, stderr, none)
-export GRUNNER_LOG=journal
-
-# Log level (error, warn, info, debug, trace)
-export GRUNNER_LOG_LEVEL=info
-
-# Custom log file path (for file logging)
-export GRUNNER_LOG_FILE=~/grunner.log
-```
-
-**Log Backends:**
-
-- **journald** (default on systemd systems): Logs to systemd journal, view with `journalctl -t grunner`
-- **syslog**: Traditional syslog on non-systemd systems
-- **file**: File-based logging to `~/.cache/grunner/grunner.log` by default
-- **stderr**: Standard error output for development
-- **none**: Disable all logging
-
-For complete logging documentation, see [ERROR_LOGGING.md](docs/ERROR_LOGGING.md).
-
----
-
-## Architecture overview
-
-```
-src/
-├── main.rs                    # Entry point, GTK app setup
-├── lib.rs                     # Module exports
-├── app_mode.rs               # App mode (Normal, FileSearch, Obsidian, etc.)
-├── calculator.rs              # Math expression evaluator
-├── command_handler.rs        # Colon command parsing and routing
-├── item_activation.rs        # Item activation logic
-├── launcher.rs              # Desktop file scanner and parser
-├── utils.rs                  # Path utils, file icons, calculator result detection
-├── logging.rs               # Logging initialization (journald, syslog, file, stderr)
-│
-├── core/
-│   ├── config.rs             # TOML config loading with defaults
-│   ├── global_state.rs      # Tokio runtime, home dir, hot-reload callbacks
-│   └── theme.rs             # Theme manager and built-in themes
-│
-├── model/
-│   ├── list_model.rs        # Central search model, debounce, provider coordination
-│   └── items/               # GObject item types (AppItem, CommandItem, etc.)
-│
-├── providers/
-│   ├── mod.rs               # SearchProvider trait, AppProvider, CalculatorProvider
-│   └── dbus/                # GNOME Shell search provider integration
-│       ├── mod.rs           # Module exports
-│       ├── discovery.rs      # Provider discovery from .ini files
-│       ├── query.rs         # D-Bus query execution, result building
-│       ├── icons.rs         # Icon parsing from D-Bus variants
-│       └── types.rs         # SearchProvider, SearchResult, IconData types
-│
-├── ui/
-│   ├── window.rs            # Main window, search entry, list view
-│   ├── context_menu.rs      # Context menu helpers
-│   ├── list_factory.rs      # List item factory for GTK
-│   ├── pinned_strip.rs      # Favorites/pinned apps strip
-│   ├── power_bar.rs         # Power action bar
-│   ├── obsidian_bar.rs      # Obsidian action bar
-│   ├── workspace_bar.rs     # Workspace window bar
-│   └── style.css            # libadwaita CSS
-│
-├── actions/
-│   ├── mod.rs               # Action exports
-│   ├── launcher.rs          # App launching, terminal detection
-│   ├── power.rs             # Suspend, reboot, shutdown, logout
-│   ├── obsidian.rs          # Obsidian URI handling
-│   ├── file.rs              # File/line opening
-│   ├── settings.rs          # Settings file management
-│   └── workspace.rs         # D-Bus window operations
-│
-└── settings_window/
-    └── tabs/                # Settings dialog tabs
-```
-
-### Module responsibilities
-
-| Module | Purpose |
-|--------|---------|
-| `core/` | Config, global state (Tokio runtime), theming |
-| `model/` | GTK ListStore, debounce logic, search coordination |
-| `providers/` | Fuzzy app search, calculator, D-Bus search providers |
-| `ui/` | GTK widgets, context menus, styling |
-| `actions/` | Side effects: launching, power, workspace operations |
-| `utils/` | Clipboard, desktop file parsing, path utilities |
-
----
-
-## Testing
-
-grunner includes comprehensive test coverage for core functionality:
-
-### Unit Tests
-
-- **Calculator tests** (`calculator.rs`): 6 unit tests covering:
-  - Basic arithmetic operations (+, -, *, /)
-  - Operator precedence and parentheses
-  - Floating point calculations
-  - Invalid expression handling
-  - Unary minus and exponentiation
-  - Edge cases (modulo, negative numbers)
-
-- **Configuration tests** (`config.rs`): 8 unit tests covering:
-  - Default configuration values
-  - TOML parsing and validation
-  - Invalid value handling
-  - Workspace bar enabled by default
-
-- **Integration tests**: 4 tests covering:
-  - Configuration loading and defaults
-  - Default app directories
-  - Config path generation
-  - Workspace bar setting
-
-### Running Tests
+Configured via environment variables:
 
 ```bash
-# Run all tests (unit, integration, and doctests)
-cargo test
-
-# Run tests with output (show println! output)
-cargo test -- --nocapture
-
-# Run specific test module
-cargo test config::tests
-
-# Run integration tests only
-cargo test --tests
+GRUNNER_LOG=journal        # journal, syslog, file, stderr, none
+GRUNNER_LOG_LEVEL=info     # error, warn, info, debug, trace
+GRUNNER_LOG_FILE=~/grunner.log  # custom path (file backend)
 ```
 
-### Code Quality
+Backends:
+- **journal** (default on systemd) — view with `journalctl -t grunner`
+- **syslog** — requires `--features syslog`
+- **file** — defaults to `~/.cache/grunner/grunner.log`
+- **stderr** — standard error output
+- **none** — disabled
 
-```bash
-# Run clippy lints
-cargo clippy
-
-# Format code
-cargo fmt
-
-# Verify build
-cargo build
-cargo build --release
-```
+See [docs/ERROR_LOGGING.md](docs/ERROR_LOGGING.md) for full documentation.
 
 ---
 
 ## Theming
 
-grunner includes 10 built-in themes that you can choose from in the Settings window (Theme tab) or via configuration:
+10 built-in themes selectable in Settings → Theme or via config:
 
-### Available Themes
+| Theme                | Description                          |
+| -------------------- | ------------------------------------ |
+| `system`             | Follows system light/dark preference |
+| `system-light`       | Force light theme                    |
+| `system-dark`        | Force dark theme                     |
+| `tokio-night`        | Tokyo Night (dark)                   |
+| `catppuccin-mocha`   | Catppuccin Mocha (dark)              |
+| `catppuccin-latte`   | Catppuccin Latte (light)             |
+| `nord`               | Nord (dark)                          |
+| `gruvbox-dark`       | Gruvbox Dark                         |
+| `gruvbox-light`      | Gruvbox Light                        |
+| `dracula`            | Dracula (dark)                       |
+| `custom`             | Load from a custom CSS file          |
 
-| Theme               | Description                              |
-| ------------------ | ---------------------------------------- |
-| `system`           | Follow system light/dark preference       |
-| `system-light`     | Force light theme                        |
-| `system-dark`      | Force dark theme                         |
-| `tokio-night`     | Tokyo Night (dark)                       |
-| `catppuccin-mocha` | Catppuccin Mocha (dark)                  |
-| `catppuccin-latte` | Catppuccin Latte (light)                 |
-| `nord`            | Nord (dark)                              |
-| `gruvbox-dark`    | Gruvbox Dark                             |
-| `gruvbox-light`   | Gruvbox Light                            |
-| `dracula`         | Dracula (dark)                           |
-| `custom`          | Load from custom CSS file                |
+### Custom themes
 
-### Configuration
-
-```toml
-[theme]
-mode = "tokio-night"
-# For custom themes:
-# custom_theme_path = "~/.config/grunner/themes/my_theme.css"
-```
-
-### Creating Custom Themes
-
-You can create your own theme by writing a CSS file. Save it anywhere (e.g., `~/.config/grunner/themes/my_theme.css`) and set `theme.custom_theme_path` in your config.
-
-The easiest way to create a custom theme is to copy one of the built-in themes as a starting point. The built-in themes are located in `src/theme/` in the source code.
-
-**Required CSS Variables:**
+Set `theme.mode = "custom"` and provide a CSS file path. The CSS must define these custom properties:
 
 ```css
 :root {
-    /* Background colors */
-    --bg-primary: #1a1b26;      /* Main window background */
-    --bg-secondary: #24283b;     /* Search entry, cards */
-    --bg-tertiary: #414868;      /* Hover states, selections */
-
-    /* Text colors */
-    --text-primary: #c0caf5;     /* Main text */
-    --text-secondary: #7aa2f7;   /* Descriptions */
-    --text-muted: #565f89;       /* Disabled text */
-
-    /* Accent colors */
-    --accent: #7aa2f7;           /* Active items, buttons */
-    --accent-hover: #89b4fa;     /* Button hover */
-
-    /* UI elements */
-    --border: #3b4261;           /* Dividers, borders */
-    --selection-bg: #33467c;      /* Selected row background */
-    --selection-text: #c0caf5;   /* Selected row text */
-    --icon-default: #565f89;      /* Default icon color */
-    --icon-active: #7aa2f7;      /* Active icon color */
-    --scrollbar-bg: #1a1b26;    /* Scrollbar background */
-    --scrollbar-thumb: #3b4261; /* Scrollbar handle */
+    --bg-primary: #1a1b26;
+    --bg-secondary: #24283b;
+    --bg-tertiary: #414868;
+    --text-primary: #c0caf5;
+    --text-secondary: #7aa2f7;
+    --text-muted: #565f89;
+    --accent: #7aa2f7;
+    --accent-hover: #89b4fa;
+    --border: #3b4261;
+    --selection-bg: #33467c;
+    --selection-text: #c0caf5;
+    --icon-default: #565f89;
+    --icon-active: #7aa2f7;
+    --scrollbar-bg: #1a1b26;
+    --scrollbar-thumb: #3b4261;
 }
 ```
 
-**Note:** The Theme tab in Settings provides a preview and quick selection of built-in themes. For custom themes, you can also edit the configuration file directly.
+Built-in theme CSS files are in `src/core/theme/` and can serve as starting points.
+
+---
+
+## Architecture
+
+```
+src/
+├── main.rs                     # Entry point, CLI parsing, GTK app setup
+├── lib.rs                      # Library crate root (re-exports all modules)
+├── app_mode.rs                 # AppMode enum (Normal, FileSearch, Obsidian, etc.)
+├── calculator.rs               # Math expression tokenizer, shunting-yard evaluator
+├── command_handler.rs          # Colon command parsing and async routing
+├── item_activation.rs          # Item activation dispatch (launch, open, copy, etc.)
+├── launcher.rs                 # Desktop file scanning, caching (jwalk + rayon + bincode)
+├── logging.rs                  # Logging init (journal, syslog, file, stderr)
+├── utils.rs                    # Path expansion, icon helpers, calculator detection
+│
+├── core/
+│   ├── config.rs               # TOML config loading with defaults
+│   ├── global_state.rs         # Tokio runtime, HOME_DIR, hot-reload callbacks
+│   ├── theme.rs                # Theme manager, CSS provider, ColorScheme
+│   └── theme/                  # 9 built-in CSS theme files + themes.rs
+│
+├── model/
+│   ├── list_model.rs           # Central search model, debounce, provider coordination
+│   └── items/                  # GObject item types (AppItem, CommandItem, etc.)
+│
+├── providers/
+│   ├── mod.rs                  # SearchProvider trait, AppProvider, CalculatorProvider
+│   └── dbus/                   # GNOME Shell search provider D-Bus integration
+│       ├── discovery.rs        # Provider discovery from .ini files
+│       ├── query.rs            # D-Bus query execution, result building
+│       ├── icons.rs            # Icon parsing from D-Bus variants
+│       └── types.rs            # SearchProvider, SearchResult, IconData types
+│
+├── ui/
+│   ├── window.rs               # Main window, search entry, list view, keyboard nav
+│   ├── context_menu.rs         # Context menu helpers (copy, open, etc.)
+│   ├── list_factory.rs         # List item factory with bind strategies
+│   ├── pinned_strip.rs         # Favorites/pinned apps sidebar
+│   ├── power_bar.rs            # Power action bar (settings, suspend, reboot, etc.)
+│   ├── obsidian_bar.rs         # Obsidian action bar
+│   ├── workspace_bar.rs        # Workspace window sidebar (D-Bus)
+│   └── style.css               # Base stylesheet
+│
+├── actions/
+│   ├── mod.rs                  # Action exports, error notifications
+│   ├── launcher.rs             # App launching, terminal detection
+│   ├── power.rs                # Suspend, reboot, shutdown, logout
+│   ├── obsidian.rs             # Obsidian URI scheme handling
+│   ├── file.rs                 # File/line opening with $EDITOR
+│   ├── settings.rs             # Settings window launcher
+│   └── workspace.rs            # D-Bus window operations
+│
+├── settings_window/
+│   ├── mod.rs                  # PreferencesDialog builder
+│   ├── save.rs                 # Config serialization and save
+│   └── tabs/                   # General, Search, Theme, Commands, Obsidian, Info
+│
+└── utils/
+    ├── clipboard.rs            # Clipboard operations (text, file, content)
+    └── desktop.rs              # Desktop file metadata lookup
+```
+
+### Module responsibilities
+
+| Module          | Purpose                                                |
+| --------------- | ------------------------------------------------------ |
+| `core/`         | Config, global state (Tokio runtime), theming          |
+| `model/`        | GTK ListStore, debounce, search coordination           |
+| `providers/`    | Fuzzy app search, calculator, D-Bus search providers   |
+| `ui/`           | GTK widgets, context menus, styling                    |
+| `actions/`      | Side effects: launching, power, workspace operations   |
+| `utils/`        | Clipboard, desktop file parsing, path utilities        |
+| `settings_window/` | Settings dialog with tabbed preferences            |
+
+---
+
+## Testing
+
+### Unit tests
+
+- **Calculator** (`calculator.rs`) — arithmetic, precedence, parentheses, trig, edge cases
+- **Config** (`config.rs`) — defaults, TOML parsing, validation
+- **App mode** (`app_mode.rs`) — mode detection from prefix strings
+- **List model** (`list_model.rs`) — search coordination
+
+### Integration tests
+
+- `tests/config_integration_tests.rs` — default values, app dirs, config path, workspace bar
+
+### Running tests
+
+```bash
+cargo test                    # all tests
+cargo test -- --nocapture    # with output
+cargo test config::tests     # specific module
+cargo test --tests           # integration only
+```
+
+### Code quality
+
+```bash
+cargo clippy                  # lints
+cargo clippy -- -W clippy::pedantic  # strict lints
+cargo fmt                     # format
+cargo build --release         # optimized build
+```
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+[MIT License](LICENSE)
 
 ---
 
 ## Uninstall
 
-To completely remove grunner from your system, run the following commands:
-
 ```bash
-# Remove the .desktop file
-rm -v ~/.local/share/applications/grunner.desktop
-
-# Remove the icon
-rm -v ~/.local/share/icons/grunner.png
-
-# Remove the config file
+rm -v ~/.local/share/applications/org.nihmar.grunner.desktop
+rm -v ~/.local/share/icons/org.nihmar.grunner.png
 rm -v ~/.config/grunner/grunner.toml
-
-# Remove the cache
 rm -rf ~/.cache/grunner
 ```
-
-These commands will clean all grunner-related files, including the application integration file, icon, configuration, and cached data.

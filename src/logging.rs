@@ -2,13 +2,13 @@
 //!
 //! This module provides system-based logging that integrates with:
 //! - systemd journal (journald) - primary for Linux desktop environments
-//! - syslog - fallback for non-systemd systems
+//! - syslog - optional fallback (requires the "syslog" Cargo feature)
 //! - File-based logging - for debugging and troubleshooting
 //! - Standard error - for development environments
 
 use log::{LevelFilter, SetLoggerError};
 use simplelog::{Config as SimpleLogConfig, WriteLogger};
-use std::fs::{OpenOptions, create_dir_all};
+use std::fs::{create_dir_all, OpenOptions};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -132,10 +132,6 @@ fn load_config_from_env() -> LogConfig {
     }
 }
 
-/// Get the current log configuration
-// pub fn get_config() -> &'static LogConfig {
-//     CONFIG.get_or_init(|| load_config_from_env())
-// }
 /// Initialize journald logger
 #[cfg(feature = "journal")]
 fn init_journal_logger(level: LevelFilter) -> Result<(), SetLoggerError> {

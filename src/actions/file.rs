@@ -33,8 +33,7 @@ fn parse_file_line(line: &str) -> Option<(&str, u32)> {
 /// # Arguments
 /// * `line` - Either a file path or `<file:line>` format
 ///
-/// # Panics
-/// Panics if no default display can be obtained.
+/// If no display is available, falls back to silently ignoring clipboard copy.
 ///
 /// If the input matches `<file:line:content>` format (like grep output),
 /// opens the file at the specified line using the system EDITOR or xdg-open.
