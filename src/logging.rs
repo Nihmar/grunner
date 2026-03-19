@@ -8,7 +8,7 @@
 
 use log::{LevelFilter, SetLoggerError};
 use simplelog::{Config as SimpleLogConfig, WriteLogger};
-use std::fs::{create_dir_all, OpenOptions};
+use std::fs::{OpenOptions, create_dir_all};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 

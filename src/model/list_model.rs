@@ -352,8 +352,15 @@ impl AppListModel {
     ///
     /// This updates all configurable settings without restarting the app.
     pub fn apply_config(&self, config: &crate::core::config::Config) {
+        let old_max_results = self.max_results.get();
+
         // Update max_results
         self.max_results.set(config.max_results);
+
+        // Update max_results on providers
+        for provider in self.providers.iter() {
+            provider.set_max_results(config.max_results);
+        }
 
         // Update command debounce
         self.command_debounce_ms.set(config.command_debounce_ms);
@@ -364,8 +371,11 @@ impl AppListModel {
         // Update commands
         *self.commands.borrow_mut() = config.commands.clone();
 
-        // Repopulate if in CustomScript mode
-        if self.active_mode.get() == ActiveMode::CustomScript {
+        // Repopulate if max_results changed or in CustomScript mode
+        if old_max_results != config.max_results {
+            let query = self.current_query.borrow().clone();
+            self.populate(&query);
+        } else if self.active_mode.get() == ActiveMode::CustomScript {
             use crate::command_handler::CommandHandler;
             let query = self.current_query.borrow().clone();
             let handler = CommandHandler::new(self);

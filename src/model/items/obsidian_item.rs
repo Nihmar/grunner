@@ -6,8 +6,8 @@
 //! GTK object subclassing to make Obsidian action data accessible to GTK's
 //! property system and list views.
 
-use glib::subclass::prelude::*;
 use glib::Object;
+use glib::subclass::prelude::*;
 use std::cell::RefCell;
 
 /// Enum representing different Obsidian actions that can be performed

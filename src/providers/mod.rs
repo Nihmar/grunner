@@ -14,7 +14,7 @@ use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use gtk4::glib;
 use gtk4::prelude::Cast;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 /// Trait representing a search provider that can return results as GTK objects
@@ -30,6 +30,9 @@ pub trait SearchProvider {
     /// # Returns
     /// A vector of `glib::Object` instances (AppItem, CommandItem, or SearchResultItem)
     fn search(&self, query: &str) -> Vec<glib::Object>;
+
+    /// Update the maximum number of results to return
+    fn set_max_results(&self, _max: usize) {}
 }
 
 /// Trait representing a command provider that can return commands
@@ -53,7 +56,7 @@ pub trait CommandProvider {
 
 pub struct AppProvider {
     all_apps: Rc<RefCell<Vec<DesktopApp>>>,
-    max_results: usize,
+    max_results: Cell<usize>,
     fuzzy_matcher: Rc<SkimMatcherV2>,
 }
 
@@ -61,7 +64,7 @@ impl AppProvider {
     pub fn new(all_apps: Rc<RefCell<Vec<DesktopApp>>>, max_results: usize) -> Self {
         Self {
             all_apps,
-            max_results,
+            max_results: Cell::new(max_results),
             fuzzy_matcher: Rc::new(SkimMatcherV2::default()),
         }
     }
@@ -128,13 +131,14 @@ impl SearchProvider for AppProvider {
             return vec![];
         }
 
+        let max = self.max_results.get();
         let results: Vec<glib::Object> = if query.is_empty() {
             apps.iter()
-                .take(self.max_results)
+                .take(max)
                 .map(|app| AppItem::new(app).upcast::<glib::Object>())
                 .collect()
         } else {
-            let matched_apps = self.search_apps_optimized(query, &apps, self.max_results);
+            let matched_apps = self.search_apps_optimized(query, &apps, max);
             matched_apps
                 .into_iter()
                 .map(|app| AppItem::new(app).upcast::<glib::Object>())
@@ -142,6 +146,10 @@ impl SearchProvider for AppProvider {
         };
 
         results
+    }
+
+    fn set_max_results(&self, max: usize) {
+        self.max_results.set(max);
     }
 }
 

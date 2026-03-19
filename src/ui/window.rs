@@ -22,8 +22,9 @@ use crate::launcher;
 use crate::model::items::{AppItem, CommandItem};
 use crate::model::list_model::AppListModel;
 use crate::ui::context_menu::{
-    add_copy_content_button, add_copy_file_button, add_copy_text_button, add_menu_button,
-    add_open_in_file_manager_button, add_open_with_default_app_button, is_text_file, MenuContext,
+    MenuContext, add_copy_content_button, add_copy_file_button, add_copy_text_button,
+    add_menu_button, add_open_in_file_manager_button, add_open_with_default_app_button,
+    is_text_file,
 };
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{

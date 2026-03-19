@@ -5,7 +5,9 @@ use crate::core::config;
 use crate::launcher::DesktopApp;
 use glib::clone;
 use gtk4::prelude::*;
-use gtk4::{Align, Box as GtkBox, Button, EventControllerMotion, GestureClick, Image, Orientation, Overlay};
+use gtk4::{
+    Align, Box as GtkBox, Button, EventControllerMotion, GestureClick, Image, Orientation, Overlay,
+};
 use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
