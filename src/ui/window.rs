@@ -72,10 +72,8 @@ fn poll_apps(
     model: AppListModel,
     all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pinned_strip: GtkBox,
-    pinned_separator: GtkBox,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: ApplicationWindow,
-    entry: Entry,
 ) {
     match rx.try_recv() {
         Ok(apps) => {
@@ -94,11 +92,8 @@ fn poll_apps(
                 &window,
                 &pinned_apps,
                 &all_apps,
-                &pinned_strip,
-                &pinned_separator,
-                &entry,
             );
-            update_strip_visibility(&pinned_strip, &pinned_separator, &pinned, true);
+            update_strip_visibility(&pinned_strip, &pinned, true);
 
             model.set_apps(apps);
         }
@@ -106,16 +101,7 @@ fn poll_apps(
             // No data yet - reschedule polling on next idle
             trace!("Application loading still in progress");
             glib::idle_add_local_once(move || {
-                poll_apps(
-                    rx,
-                    model,
-                    all_apps,
-                    pinned_strip,
-                    pinned_separator,
-                    pinned_apps,
-                    window,
-                    entry,
-                )
+                poll_apps(rx, model, all_apps, pinned_strip, pinned_apps, window)
             });
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -260,6 +246,50 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
     Some(sidebar_wrapper)
 }
 
+/// Build the right sidebar containing pinned apps (favourites)
+fn build_right_sidebar(pinned_strip: &GtkBox) -> GtkBox {
+    // ── Sidebar hover wrapper ────────────────────────────────────
+    // HBox that contains revealer + edge trigger. The EventControllerMotion
+    // is attached to this wrapper: enter → opens, leave → closes.
+    let sidebar_wrapper = GtkBox::new(Orientation::Horizontal, 0);
+
+    // ── Revealer that slides the pinned bar in from the right ────
+    let sidebar_revealer = Revealer::builder()
+        .transition_type(RevealerTransitionType::SlideLeft)
+        .transition_duration(180)
+        .reveal_child(false)
+        .build();
+
+    sidebar_revealer.set_child(Some(pinned_strip));
+    sidebar_wrapper.append(&sidebar_revealer);
+
+    // ── Edge trigger on the right edge ───────────────────────────
+    let edge_trigger = GtkBox::new(Orientation::Vertical, 0);
+    edge_trigger.add_css_class("edge-trigger");
+    edge_trigger.set_can_focus(false);
+    sidebar_wrapper.append(&edge_trigger);
+
+    // ── Hover: opens/closes on mouse enter/leave ─────────────────
+    let motion = EventControllerMotion::new();
+    motion.connect_enter(clone!(
+        #[weak]
+        sidebar_revealer,
+        move |_, _, _| {
+            sidebar_revealer.set_reveal_child(true);
+        }
+    ));
+    motion.connect_leave(clone!(
+        #[weak]
+        sidebar_revealer,
+        move |_| {
+            sidebar_revealer.set_reveal_child(false);
+        }
+    ));
+    sidebar_wrapper.add_controller(motion);
+
+    sidebar_wrapper
+}
+
 /// Build the main layout: search entry, pinned strip, results list, and action bars
 fn build_main_layout(
     window: &ApplicationWindow,
@@ -272,7 +302,6 @@ fn build_main_layout(
     ListView,
     Option<GtkBox>,
     Image,
-    GtkBox,
     GtkBox,
     ToastOverlay,
 ) {
@@ -308,10 +337,8 @@ fn build_main_layout(
     entry_box.append(entry);
     content.append(&entry_box);
 
-    // --- Pinned Apps Strip ---
-    let (pinned_strip, pinned_separator) = build_pinned_strip();
-    content.append(&pinned_strip);
-    content.append(&pinned_separator);
+    // --- Pinned Apps Strip (built as right sidebar) ---
+    let pinned_strip = build_pinned_strip();
 
     // --- Action Bars and Results List ---
     // Build Obsidian action bar (shown when in Obsidian mode)
@@ -343,12 +370,16 @@ fn build_main_layout(
         .build();
 
     // Assemble all UI components in order:
-    //   search entry → workspace bar → results → obsidian bar → power bar
+    //   search entry → results → obsidian bar → power bar
     content.append(&scrolled);
     content.append(&obsidian_bar);
     if let Some(ref pb) = power_bar {
         entry_box.append(pb);
     }
+
+    // Build right sidebar for pinned apps
+    let right_sidebar = build_right_sidebar(&pinned_strip);
+    root.append(&right_sidebar);
 
     // Set root container as window content, wrapped in toast overlay
     let toast_overlay = ToastOverlay::new();
@@ -361,7 +392,6 @@ fn build_main_layout(
         Some(obsidian_bar),
         command_icon,
         pinned_strip,
-        pinned_separator,
         toast_overlay,
     )
 }
@@ -410,7 +440,6 @@ fn connect_window_signals(
 /// Pinned apps UI state
 struct PinnedUiState {
     strip: GtkBox,
-    separator: GtkBox,
     apps: Rc<RefCell<Vec<String>>>,
 }
 
@@ -426,7 +455,6 @@ fn connect_search_signals(
 ) {
     // Handle text changes in search entry (main search functionality)
     let pinned_strip = pinned.strip.clone();
-    let pinned_separator = pinned.separator.clone();
     let pinned_apps_clone = pinned.apps.clone();
     entry.connect_changed(clone!(
         #[strong]
@@ -458,7 +486,7 @@ fn connect_search_signals(
 
             // Update pinned strip visibility (hide when typing)
             let pinned = pinned_apps_clone.borrow();
-            update_strip_visibility(&pinned_strip, &pinned_separator, &pinned, text.is_empty());
+            update_strip_visibility(&pinned_strip, &pinned, text.is_empty());
 
             // Schedule the expensive store rebuild with debounce for default search
             model.schedule_populate(&text);
@@ -502,7 +530,6 @@ fn setup_list_context_menu(
     pinned_apps: Rc<RefCell<Vec<String>>>,
     all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pinned_strip: GtkBox,
-    pinned_separator: GtkBox,
     toast_overlay: ToastOverlay,
 ) {
     let right_click = GestureClick::new();
@@ -524,8 +551,6 @@ fn setup_list_context_menu(
         all_apps,
         #[strong]
         pinned_strip,
-        #[strong]
-        pinned_separator,
         #[strong]
         toast_overlay,
         move |_gesture, _n_press, _click_x, click_y| {
@@ -596,7 +621,6 @@ fn setup_list_context_menu(
                         &pinned_apps,
                         &all_apps,
                         &pinned_strip,
-                        &pinned_separator,
                         &toast_overlay,
                     );
                 }
@@ -625,7 +649,6 @@ fn build_normal_context_menu(
     pinned_apps: &Rc<RefCell<Vec<String>>>,
     all_apps: &Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pinned_strip: &GtkBox,
-    pinned_separator: &GtkBox,
     toast_overlay: &ToastOverlay,
 ) {
     let ctx = MenuContext {
@@ -666,7 +689,6 @@ fn build_normal_context_menu(
         let did = desktop_id_opt.clone();
         let p_apps = pinned_apps.clone();
         let p_strip = pinned_strip.clone();
-        let p_sep = pinned_separator.clone();
         let p_all = all_apps.clone();
         let win_ref = window.clone();
         let weak = weak_popover.clone();
@@ -676,14 +698,7 @@ fn build_normal_context_menu(
                 info!("Removed from Favorites: {id}");
             }
             crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(
-                &p_strip,
-                &p_sep,
-                &p_apps,
-                &p_all,
-                &win_ref,
-                &entry_for_btns,
-            );
+            crate::ui::pinned_strip::refresh_pinned_strip(&p_strip, &p_apps, &p_all, &win_ref);
             if let Some(p) = weak.upgrade() {
                 p.popdown();
             }
@@ -693,7 +708,6 @@ fn build_normal_context_menu(
         let did = desktop_id_opt.clone();
         let p_apps = pinned_apps.clone();
         let p_strip = pinned_strip.clone();
-        let p_sep = pinned_separator.clone();
         let p_all = all_apps.clone();
         let win_ref = window.clone();
         let weak = weak_popover.clone();
@@ -724,9 +738,7 @@ fn build_normal_context_menu(
             }
             drop(pinned);
             crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(
-                &p_strip, &p_sep, &p_apps, &p_all, &win_ref, &entry_add,
-            );
+            crate::ui::pinned_strip::refresh_pinned_strip(&p_strip, &p_apps, &p_all, &win_ref);
             if let Some(p) = weak.upgrade() {
                 p.popdown();
             }
@@ -879,16 +891,13 @@ fn build_shell_context_menu(
 }
 
 /// Start background loading of desktop applications
-#[allow(clippy::too_many_arguments)]
 fn start_background_loading(
     cfg: &Config,
     model: &AppListModel,
     all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pinned_strip: GtkBox,
-    pinned_separator: GtkBox,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: &ApplicationWindow,
-    entry: Entry,
 ) {
     let dirs = cfg.expanded_app_dirs();
     let model_poll = model.clone();
@@ -905,10 +914,8 @@ fn start_background_loading(
             model_poll,
             all_apps,
             pinned_strip,
-            pinned_separator,
             pinned_apps,
             win_clone,
-            entry,
         )
     });
 }
@@ -1068,6 +1075,16 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // 3. Window Creation
     let window = create_window(app, cfg);
 
+    // Register window resizer for live settings changes
+    let window_for_resize = window.downgrade();
+    global_state::set_window_resizer(move |width, height| {
+        if let Some(win) = window_for_resize.upgrade() {
+            win.set_resizable(true);
+            win.set_default_size(width, height);
+            win.set_resizable(false);
+        }
+    });
+
     // 4. Main Layout Construction
     // Main search entry field
     let entry = Entry::builder()
@@ -1076,15 +1093,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .build();
     entry.add_css_class("search-entry");
 
-    let (
-        _root,
-        list_view,
-        obsidian_bar,
-        command_icon,
-        pinned_strip,
-        pinned_separator,
-        toast_overlay,
-    ) = build_main_layout(&window, &entry, &model, cfg, &display);
+    let (_root, list_view, obsidian_bar, command_icon, pinned_strip, toast_overlay) =
+        build_main_layout(&window, &entry, &model, cfg, &display);
 
     // Display the window
     window.present();
@@ -1113,7 +1123,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // 5.3 Search entry signals
     let pinned_ui = PinnedUiState {
         strip: pinned_strip.clone(),
-        separator: pinned_separator.clone(),
         apps: pinned_apps.clone(),
     };
     if let Some(ref obsidian_bar) = obsidian_bar {
@@ -1151,19 +1160,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         pinned_apps.clone(),
         all_apps.clone(),
         pinned_strip.clone(),
-        pinned_separator.clone(),
         toast_overlay,
     );
 
     // 6. Background Application Loading
-    start_background_loading(
-        cfg,
-        &model,
-        all_apps,
-        pinned_strip,
-        pinned_separator,
-        pinned_apps,
-        &window,
-        entry,
-    );
+    start_background_loading(cfg, &model, all_apps, pinned_strip, pinned_apps, &window);
 }

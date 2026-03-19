@@ -135,6 +135,8 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
                     info!("Configuration saved successfully");
                     global_state::reload_config(&config_rc.borrow());
                     global_state::reload_theme(&config_rc.borrow());
+                    let cfg = config_rc.borrow();
+                    global_state::resize_window(cfg.window_width, cfg.window_height);
                     let toast = Toast::builder().title("Settings saved").timeout(2).build();
                     overlay.add_toast(toast);
                     glib::timeout_add_local_once(

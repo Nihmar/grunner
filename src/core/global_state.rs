@@ -84,6 +84,31 @@ pub fn reload_theme(config: &Config) {
     });
 }
 
+// ─── Window Resizer ──────────────────────────────────────────────────────────
+
+type WindowResizer = Box<dyn Fn(i32, i32)>;
+
+thread_local! {
+    static WINDOW_RESIZER: RefCell<Option<WindowResizer>> = RefCell::new(None);
+}
+
+pub fn set_window_resizer<F>(resizer: F)
+where
+    F: Fn(i32, i32) + 'static,
+{
+    WINDOW_RESIZER.with(|r| {
+        *r.borrow_mut() = Some(Box::new(resizer));
+    });
+}
+
+pub fn resize_window(width: i32, height: i32) {
+    WINDOW_RESIZER.with(|r| {
+        if let Some(resizer) = r.borrow().as_ref() {
+            resizer(width, height);
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

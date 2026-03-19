@@ -5,28 +5,32 @@ use crate::core::config;
 use crate::launcher::DesktopApp;
 use glib::clone;
 use gtk4::prelude::*;
-use gtk4::{Align, Box as GtkBox, Button, Entry, GestureClick, Image, Orientation, Popover};
+use gtk4::{Align, Box as GtkBox, Button, EventControllerMotion, Image, Orientation, Overlay};
 use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Build the pinned apps strip container and separator
-pub fn build_pinned_strip() -> (GtkBox, GtkBox) {
-    let strip = GtkBox::new(Orientation::Horizontal, 4);
-    strip.set_halign(Align::Center);
+/// Build the pinned apps strip container (vertical layout for right sidebar)
+pub fn build_pinned_strip() -> GtkBox {
+    let strip = GtkBox::new(Orientation::Vertical, 6);
+    strip.set_valign(Align::Start);
     strip.add_css_class("pinned-strip");
     strip.set_visible(false);
+    strip
+}
 
-    let separator = GtkBox::new(Orientation::Horizontal, 0);
-    separator.set_hexpand(true);
-    separator.add_css_class("pinned-separator");
-    separator.set_visible(false);
-
-    (strip, separator)
+fn build_remove_badge() -> Button {
+    let badge = Button::builder()
+        .icon_name("list-remove-symbolic")
+        .halign(Align::End)
+        .valign(Align::Start)
+        .build();
+    badge.add_css_class("pinned-remove-badge");
+    badge.set_visible(false);
+    badge
 }
 
 /// Update the pinned strip buttons based on current config and loaded apps
-#[allow(clippy::too_many_arguments)]
 pub fn update_pinned_strip(
     strip: &GtkBox,
     pinned_apps: &[String],
@@ -34,9 +38,6 @@ pub fn update_pinned_strip(
     window: &libadwaita::ApplicationWindow,
     pinned_apps_ref: &Rc<RefCell<Vec<String>>>,
     all_apps_ref: &Rc<RefCell<Vec<DesktopApp>>>,
-    pinned_strip_ref: &GtkBox,
-    pinned_separator_ref: &GtkBox,
-    entry: &Entry,
 ) {
     while let Some(child) = strip.first_child() {
         strip.remove(&child);
@@ -75,130 +76,49 @@ pub fn update_pinned_strip(
                 win_click.hide();
             });
 
-            // Right-click: show popover with Open / Remove buttons
-            let did = desktop_id.clone();
-            let app_name = app.name.clone();
-            let app_exec = app.exec.clone();
-            let app_terminal = app.terminal;
-            let win_ctx = window.clone();
-            let p_apps = pinned_apps_ref.clone();
-            let p_all = all_apps_ref.clone();
-            let p_strip = pinned_strip_ref.clone();
-            let p_sep = pinned_separator_ref.clone();
-            let entry_ctx = entry.clone();
+            // Overlay with remove badge (appears on hover)
+            let overlay = Overlay::new();
+            overlay.set_child(Some(&btn));
 
-            let right_click = GestureClick::new();
-            right_click.set_button(3);
-            right_click.connect_pressed(clone!(
+            let remove_badge = build_remove_badge();
+            overlay.add_overlay(&remove_badge);
+
+            let motion = EventControllerMotion::new();
+            motion.connect_enter(clone!(
                 #[weak]
-                btn,
-                move |_gesture, _n_press, _x, _y| {
-                    let popover = build_pinned_popover(
-                        &btn,
-                        &did,
-                        &app_name,
-                        &app_exec,
-                        app_terminal,
-                        &win_ctx,
-                        &p_apps,
-                        &p_all,
-                        &p_strip,
-                        &p_sep,
-                        &entry_ctx,
-                    );
-                    popover.popup();
+                remove_badge,
+                move |_, _, _| {
+                    remove_badge.set_visible(true);
                 }
             ));
-            btn.add_controller(right_click);
+            motion.connect_leave(clone!(
+                #[weak]
+                remove_badge,
+                move |_| {
+                    remove_badge.set_visible(false);
+                }
+            ));
+            overlay.add_controller(motion);
 
-            strip.append(&btn);
+            let did = desktop_id.clone();
+            let app_name = app.name.clone();
+            let p_apps = pinned_apps_ref.clone();
+            let p_all = all_apps_ref.clone();
+            let p_strip = strip.clone();
+            let win_remove = window.clone();
+            remove_badge.connect_clicked(move |_| {
+                {
+                    let mut pinned = p_apps.borrow_mut();
+                    pinned.retain(|d| d != &did);
+                    info!("Removed from Favorites: {app_name}");
+                }
+                save_pinned_apps(&p_apps.borrow());
+                refresh_pinned_strip(&p_strip, &p_apps, &p_all, &win_remove);
+            });
+
+            strip.append(&overlay);
         }
     }
-}
-
-/// Build a popover with Open and Remove buttons for a pinned app
-#[allow(clippy::too_many_arguments)]
-fn build_pinned_popover(
-    parent: &Button,
-    desktop_id: &str,
-    app_name: &str,
-    exec: &str,
-    terminal: bool,
-    window: &libadwaita::ApplicationWindow,
-    pinned_apps: &Rc<RefCell<Vec<String>>>,
-    all_apps: &Rc<RefCell<Vec<DesktopApp>>>,
-    pinned_strip: &GtkBox,
-    pinned_separator: &GtkBox,
-    entry: &Entry,
-) -> Popover {
-    let popover = Popover::new();
-    popover.set_parent(parent);
-    popover.set_has_arrow(true);
-    let popover_ref = RefCell::new(Some(popover.clone()));
-
-    let vbox = GtkBox::new(Orientation::Vertical, 0);
-    vbox.add_css_class("pinned-popover-menu");
-
-    // Open button
-    let open_btn = Button::new();
-    open_btn.set_label("Open");
-    open_btn.add_css_class("flat");
-    open_btn.set_hexpand(true);
-    open_btn.set_halign(Align::Fill);
-    let exec_open = exec.to_string();
-    let win_open = window.clone();
-    open_btn.connect_clicked(move |_| {
-        info!("Launching pinned app from menu: {exec_open}");
-        launch_app(&exec_open, terminal, None);
-        win_open.hide();
-    });
-    vbox.append(&open_btn);
-
-    // Remove button
-    let remove_btn = Button::new();
-    remove_btn.set_label("Remove from Favorites");
-    remove_btn.add_css_class("flat");
-    remove_btn.set_hexpand(true);
-    remove_btn.set_halign(Align::Fill);
-    let did_remove = desktop_id.to_string();
-    let name_remove = app_name.to_string();
-    let p_apps = pinned_apps.clone();
-    let p_all = all_apps.clone();
-    let p_strip = pinned_strip.clone();
-    let p_sep = pinned_separator.clone();
-    let win_remove = window.clone();
-    let p_ref = popover_ref.clone();
-    let entry_remove = entry.clone();
-    remove_btn.connect_clicked(move |_| {
-        {
-            let mut pinned = p_apps.borrow_mut();
-            pinned.retain(|d| d != &did_remove);
-            info!("Removed from Favorites: {name_remove}");
-        }
-        save_pinned_apps(&p_apps.borrow());
-        refresh_pinned_strip(
-            &p_strip,
-            &p_sep,
-            &p_apps,
-            &p_all,
-            &win_remove,
-            &entry_remove,
-        );
-        if let Some(p) = p_ref.borrow().as_ref() {
-            p.popdown();
-        }
-        entry_remove.grab_focus();
-    });
-    vbox.append(&remove_btn);
-
-    popover.set_child(Some(&vbox));
-
-    let entry_closed = entry.clone();
-    popover.connect_closed(move |_| {
-        entry_closed.grab_focus();
-    });
-
-    popover
 }
 
 /// Launch the N-th pinned app (0-indexed, for Alt+1..Alt+9)
@@ -218,15 +138,9 @@ pub fn launch_pinned_by_index(
 }
 
 /// Update strip visibility based on pinned apps and search query
-pub fn update_strip_visibility(
-    strip: &GtkBox,
-    separator: &GtkBox,
-    pinned_apps: &[String],
-    query_is_empty: bool,
-) {
+pub fn update_strip_visibility(strip: &GtkBox, pinned_apps: &[String], query_is_empty: bool) {
     let visible = !pinned_apps.is_empty() && query_is_empty;
     strip.set_visible(visible);
-    separator.set_visible(visible);
 }
 
 /// Save pinned apps list to the config file on disk
@@ -241,24 +155,12 @@ pub fn save_pinned_apps(pinned_apps: &[String]) {
 /// Refresh the pinned strip after add/remove — rebuilds buttons from current state
 pub fn refresh_pinned_strip(
     strip: &GtkBox,
-    separator: &GtkBox,
     pinned_apps: &Rc<RefCell<Vec<String>>>,
     all_apps: &Rc<RefCell<Vec<DesktopApp>>>,
     window: &libadwaita::ApplicationWindow,
-    entry: &Entry,
 ) {
     let pinned = pinned_apps.borrow();
     let apps = all_apps.borrow();
-    update_pinned_strip(
-        strip,
-        &pinned,
-        &apps,
-        window,
-        pinned_apps,
-        all_apps,
-        strip,
-        separator,
-        entry,
-    );
-    update_strip_visibility(strip, separator, &pinned, true);
+    update_pinned_strip(strip, &pinned, &apps, window, pinned_apps, all_apps);
+    update_strip_visibility(strip, &pinned, true);
 }
