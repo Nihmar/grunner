@@ -5,7 +5,7 @@ use crate::core::config;
 use crate::launcher::DesktopApp;
 use glib::clone;
 use gtk4::prelude::*;
-use gtk4::{Align, Box as GtkBox, Button, EventControllerMotion, Image, Orientation, Overlay};
+use gtk4::{Align, Box as GtkBox, Button, EventControllerMotion, GestureClick, Image, Orientation, Overlay};
 use log::{error, info};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -37,7 +37,7 @@ pub fn update_pinned_strip(
     loaded_apps: &[DesktopApp],
     window: &libadwaita::ApplicationWindow,
     pinned_apps_ref: &Rc<RefCell<Vec<String>>>,
-    all_apps_ref: &Rc<RefCell<Vec<DesktopApp>>>,
+    _all_apps_ref: &Rc<RefCell<Vec<DesktopApp>>>,
 ) {
     while let Some(child) = strip.first_child() {
         strip.remove(&child);
@@ -66,6 +66,13 @@ pub fn update_pinned_strip(
             btn.set_child(Some(&icon));
             btn.set_tooltip_text(Some(&app.name));
 
+            // Overlay with remove badge (appears on hover)
+            let overlay = Overlay::new();
+            overlay.set_child(Some(&btn));
+
+            let remove_badge = build_remove_badge();
+            overlay.add_overlay(&remove_badge);
+
             // Left-click: launch app and hide window
             let exec = app.exec.clone();
             let terminal = app.terminal;
@@ -75,13 +82,6 @@ pub fn update_pinned_strip(
                 launch_app(&exec, terminal, None);
                 win_click.hide();
             });
-
-            // Overlay with remove badge (appears on hover)
-            let overlay = Overlay::new();
-            overlay.set_child(Some(&btn));
-
-            let remove_badge = build_remove_badge();
-            overlay.add_overlay(&remove_badge);
 
             let motion = EventControllerMotion::new();
             motion.connect_enter(clone!(
@@ -103,18 +103,24 @@ pub fn update_pinned_strip(
             let did = desktop_id.clone();
             let app_name = app.name.clone();
             let p_apps = pinned_apps_ref.clone();
-            let p_all = all_apps_ref.clone();
             let p_strip = strip.clone();
-            let win_remove = window.clone();
-            remove_badge.connect_clicked(move |_| {
+            let overlay_clone = overlay.clone();
+
+            let badge_click = GestureClick::new();
+            badge_click.set_button(1);
+            badge_click.set_propagation_phase(gtk4::PropagationPhase::Capture);
+            badge_click.connect_pressed(move |ctrl, _n_press, _, _| {
+                ctrl.set_propagation_limit(gtk4::PropagationLimit::SameNative);
                 {
                     let mut pinned = p_apps.borrow_mut();
                     pinned.retain(|d| d != &did);
                     info!("Removed from Favorites: {app_name}");
                 }
                 save_pinned_apps(&p_apps.borrow());
-                refresh_pinned_strip(&p_strip, &p_apps, &p_all, &win_remove);
+                p_strip.remove(&overlay_clone);
+                update_strip_visibility(&p_strip, &p_apps.borrow(), true);
             });
+            remove_badge.add_controller(badge_click);
 
             strip.append(&overlay);
         }
@@ -158,9 +164,10 @@ pub fn refresh_pinned_strip(
     pinned_apps: &Rc<RefCell<Vec<String>>>,
     all_apps: &Rc<RefCell<Vec<DesktopApp>>>,
     window: &libadwaita::ApplicationWindow,
+    query_is_empty: bool,
 ) {
     let pinned = pinned_apps.borrow();
     let apps = all_apps.borrow();
     update_pinned_strip(strip, &pinned, &apps, window, pinned_apps, all_apps);
-    update_strip_visibility(strip, &pinned, true);
+    update_strip_visibility(strip, &pinned, query_is_empty);
 }

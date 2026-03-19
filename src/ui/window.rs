@@ -22,9 +22,8 @@ use crate::launcher;
 use crate::model::items::{AppItem, CommandItem};
 use crate::model::list_model::AppListModel;
 use crate::ui::context_menu::{
-    MenuContext, add_copy_content_button, add_copy_file_button, add_copy_text_button,
-    add_menu_button, add_open_in_file_manager_button, add_open_with_default_app_button,
-    is_text_file,
+    add_copy_content_button, add_copy_file_button, add_copy_text_button, add_menu_button,
+    add_open_in_file_manager_button, add_open_with_default_app_button, is_text_file, MenuContext,
 };
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
@@ -698,7 +697,13 @@ fn build_normal_context_menu(
                 info!("Removed from Favorites: {id}");
             }
             crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(&p_strip, &p_apps, &p_all, &win_ref);
+            crate::ui::pinned_strip::refresh_pinned_strip(
+                &p_strip,
+                &p_apps,
+                &p_all,
+                &win_ref,
+                entry_for_btns.text().is_empty(),
+            );
             if let Some(p) = weak.upgrade() {
                 p.popdown();
             }
@@ -738,7 +743,13 @@ fn build_normal_context_menu(
             }
             drop(pinned);
             crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(&p_strip, &p_apps, &p_all, &win_ref);
+            crate::ui::pinned_strip::refresh_pinned_strip(
+                &p_strip,
+                &p_apps,
+                &p_all,
+                &win_ref,
+                entry_add.text().is_empty(),
+            );
             if let Some(p) = weak.upgrade() {
                 p.popdown();
             }
@@ -1093,8 +1104,40 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         .build();
     entry.add_css_class("search-entry");
 
-    let (_root, list_view, obsidian_bar, command_icon, pinned_strip, toast_overlay) =
+    let (root, list_view, obsidian_bar, command_icon, pinned_strip, toast_overlay) =
         build_main_layout(&window, &entry, &model, cfg, &display);
+
+    // Enable window dragging on background click
+    let click = GestureClick::new();
+    click.set_button(1); // left click only
+    click.set_propagation_phase(gtk4::PropagationPhase::Bubble);
+    click.connect_pressed(clone!(
+        #[weak]
+        root,
+        #[weak]
+        window,
+        move |gesture, _n_press, x, y| {
+            // Only start move if click landed on the root box itself
+            let Some(target) = gesture.widget() else {
+                return;
+            };
+            if target != root {
+                return;
+            }
+            let Some(surface) = window.surface() else {
+                return;
+            };
+            let Some(toplevel) = surface.downcast_ref::<gdk::Toplevel>() else {
+                return;
+            };
+            let Some(device) = gesture.device() else {
+                return;
+            };
+            let button = gesture.current_button() as i32;
+            toplevel.begin_move(&device, button, x, y, gdk::CURRENT_TIME);
+        }
+    ));
+    root.add_controller(click);
 
     // Display the window
     window.present();
