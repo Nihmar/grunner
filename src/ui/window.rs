@@ -86,6 +86,7 @@ fn poll_apps(
                 &apps,
                 &window,
                 &pinned_apps,
+                &all_apps,
                 &pinned_strip,
                 &pinned_separator,
             );
@@ -501,7 +502,7 @@ fn setup_list_context_menu(
         pinned_strip,
         #[strong]
         pinned_separator,
-        move |_gesture, x, y, _state| {
+        move |_gesture, _n_press, click_x, click_y| {
             let pos = model.selection.selected();
             if pos == gtk4::INVALID_LIST_POSITION {
                 return;
@@ -530,8 +531,9 @@ fn setup_list_context_menu(
 
             // Build a popover with action buttons
             let popover = Popover::new();
-            popover.set_parent(&list_view);
             popover.set_has_arrow(true);
+            let weak_popover = glib::WeakRef::<Popover>::new();
+            weak_popover.set(Some(&popover));
 
             let vbox = GtkBox::new(Orientation::Vertical, 0);
             vbox.add_css_class("context-menu-box");
@@ -557,6 +559,7 @@ fn setup_list_context_menu(
                 let p_sep = pinned_separator.clone();
                 let p_all = all_apps.clone();
                 let win_ref = window.clone();
+                let p_ref = weak_popover.clone();
                 btn.connect_clicked(move |_| {
                     if let Some(ref id) = did {
                         p_apps.borrow_mut().retain(|d| d != id);
@@ -566,6 +569,9 @@ fn setup_list_context_menu(
                     crate::ui::pinned_strip::refresh_pinned_strip(
                         &p_strip, &p_sep, &p_apps, &p_all, &win_ref,
                     );
+                    if let Some(p) = p_ref.upgrade() {
+                        p.popdown();
+                    }
                 });
                 vbox.append(&btn);
             } else {
@@ -576,6 +582,7 @@ fn setup_list_context_menu(
                 let p_sep = pinned_separator.clone();
                 let p_all = all_apps.clone();
                 let win_ref = window.clone();
+                let p_ref = weak_popover.clone();
                 btn.connect_clicked(move |_| {
                     if let Some(ref id) = did {
                         let mut pinned = p_apps.borrow_mut();
@@ -588,6 +595,9 @@ fn setup_list_context_menu(
                         crate::ui::pinned_strip::refresh_pinned_strip(
                             &p_strip, &p_sep, &p_apps, &p_all, &win_ref,
                         );
+                    }
+                    if let Some(p) = p_ref.upgrade() {
+                        p.popdown();
                     }
                 });
                 vbox.append(&btn);
@@ -613,6 +623,7 @@ fn setup_list_context_menu(
             if obj.downcast_ref::<AppItem>().is_some() {
                 let btn = make_menu_button("Open File Location");
                 let obj_path = obj.clone();
+                let p_ref = weak_popover.clone();
                 btn.connect_clicked(move |_| {
                     if let Some(app_item) = obj_path.downcast_ref::<AppItem>() {
                         let exec = app_item.exec();
@@ -625,6 +636,9 @@ fn setup_list_context_menu(
                             }
                         }
                     }
+                    if let Some(p) = p_ref.upgrade() {
+                        p.popdown();
+                    }
                 });
                 vbox.append(&btn);
             }
@@ -633,6 +647,7 @@ fn setup_list_context_menu(
             if obj.downcast_ref::<AppItem>().is_some() {
                 let btn = make_menu_button("Copy Command");
                 let obj_copy = obj.clone();
+                let p_ref = weak_popover.clone();
                 btn.connect_clicked(move |_| {
                     if let Some(app_item) = obj_copy.downcast_ref::<AppItem>() {
                         let exec = app_item.exec();
@@ -641,21 +656,19 @@ fn setup_list_context_menu(
                             info!("Copied command: {exec}");
                         }
                     }
+                    if let Some(p) = p_ref.upgrade() {
+                        p.popdown();
+                    }
                 });
                 vbox.append(&btn);
             }
 
             popover.set_child(Some(&vbox));
 
-            // Reparent the popover to the widget at the click location
-            // so it appears right at the clicked row, not at some random spot
-            #[allow(clippy::unnecessary_cast)]
-            let target = list_view.pick(x as f64, y as f64, gtk4::PickFlags::DEFAULT);
-            if let Some(ref w) = target {
-                popover.set_parent(w);
-            } else {
-                popover.set_parent(&list_view);
-            }
+            // Parent to list_view and anchor the popover at the click coordinates
+            popover.set_parent(&list_view);
+            let rect = gdk::Rectangle::new(click_x as i32, click_y as i32, 1, 1);
+            popover.set_pointing_to(Some(&rect));
             popover.popup();
         }
     ));

@@ -26,12 +26,14 @@ pub fn build_pinned_strip() -> (GtkBox, GtkBox) {
 }
 
 /// Update the pinned strip buttons based on current config and loaded apps
+#[allow(clippy::too_many_arguments)]
 pub fn update_pinned_strip(
     strip: &GtkBox,
     pinned_apps: &[String],
     loaded_apps: &[DesktopApp],
     window: &libadwaita::ApplicationWindow,
     pinned_apps_ref: &Rc<RefCell<Vec<String>>>,
+    all_apps_ref: &Rc<RefCell<Vec<DesktopApp>>>,
     pinned_strip_ref: &GtkBox,
     pinned_separator_ref: &GtkBox,
 ) {
@@ -79,6 +81,7 @@ pub fn update_pinned_strip(
             let app_terminal = app.terminal;
             let win_ctx = window.clone();
             let p_apps = pinned_apps_ref.clone();
+            let p_all = all_apps_ref.clone();
             let p_strip = pinned_strip_ref.clone();
             let p_sep = pinned_separator_ref.clone();
 
@@ -87,7 +90,7 @@ pub fn update_pinned_strip(
             right_click.connect_pressed(clone!(
                 #[weak]
                 btn,
-                move |_gesture, _x, _y, _state| {
+                move |_gesture, _n_press, _x, _y| {
                     let popover = build_pinned_popover(
                         &btn,
                         &did,
@@ -96,6 +99,7 @@ pub fn update_pinned_strip(
                         app_terminal,
                         &win_ctx,
                         &p_apps,
+                        &p_all,
                         &p_strip,
                         &p_sep,
                     );
@@ -119,12 +123,14 @@ fn build_pinned_popover(
     terminal: bool,
     window: &libadwaita::ApplicationWindow,
     pinned_apps: &Rc<RefCell<Vec<String>>>,
+    all_apps: &Rc<RefCell<Vec<DesktopApp>>>,
     pinned_strip: &GtkBox,
     pinned_separator: &GtkBox,
 ) -> Popover {
     let popover = Popover::new();
     popover.set_parent(parent);
     popover.set_has_arrow(true);
+    let popover_ref = RefCell::new(Some(popover.clone()));
 
     let vbox = GtkBox::new(Orientation::Vertical, 0);
     vbox.add_css_class("pinned-popover-menu");
@@ -153,8 +159,11 @@ fn build_pinned_popover(
     let did_remove = desktop_id.to_string();
     let name_remove = app_name.to_string();
     let p_apps = pinned_apps.clone();
+    let p_all = all_apps.clone();
     let p_strip = pinned_strip.clone();
     let p_sep = pinned_separator.clone();
+    let win_remove = window.clone();
+    let p_ref = popover_ref.clone();
     remove_btn.connect_clicked(move |_| {
         {
             let mut pinned = p_apps.borrow_mut();
@@ -162,9 +171,10 @@ fn build_pinned_popover(
             info!("Removed from Favorites: {name_remove}");
         }
         save_pinned_apps(&p_apps.borrow());
-        let is_empty = p_apps.borrow().is_empty();
-        p_strip.set_visible(!is_empty);
-        p_sep.set_visible(!is_empty);
+        refresh_pinned_strip(&p_strip, &p_sep, &p_apps, &p_all, &win_remove);
+        if let Some(p) = p_ref.borrow().as_ref() {
+            p.popdown();
+        }
     });
     vbox.append(&remove_btn);
 
@@ -219,6 +229,15 @@ pub fn refresh_pinned_strip(
 ) {
     let pinned = pinned_apps.borrow();
     let apps = all_apps.borrow();
-    update_pinned_strip(strip, &pinned, &apps, window, pinned_apps, strip, separator);
+    update_pinned_strip(
+        strip,
+        &pinned,
+        &apps,
+        window,
+        pinned_apps,
+        all_apps,
+        strip,
+        separator,
+    );
     update_strip_visibility(strip, separator, &pinned, true);
 }
