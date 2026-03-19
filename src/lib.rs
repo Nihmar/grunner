@@ -21,6 +21,7 @@ pub mod model {
 pub mod providers;
 pub mod settings_window;
 pub mod ui {
+    pub mod context_menu;
     pub mod list_factory;
     pub mod obsidian_bar;
     pub mod pinned_strip;

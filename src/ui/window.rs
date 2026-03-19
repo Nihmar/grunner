@@ -21,6 +21,11 @@ use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::items::{AppItem, CommandItem};
 use crate::model::list_model::AppListModel;
+use crate::ui::context_menu::{
+    MenuContext, add_copy_content_button, add_copy_file_button, add_copy_text_button,
+    add_menu_button, add_open_in_file_manager_button, add_open_with_default_app_button,
+    is_text_file,
+};
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
     build_pinned_strip, launch_pinned_by_index, update_pinned_strip, update_strip_visibility,
@@ -31,10 +36,9 @@ use glib::clone;
 
 use gtk4::gdk;
 use gtk4::gdk::Key;
-use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, CssProvider, Entry, EventControllerKey, EventControllerMotion,
+    Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, EventControllerMotion,
     GestureClick, Image, ListView, Orientation, Popover, Revealer, RevealerTransitionType,
     ScrolledWindow,
 };
@@ -624,6 +628,11 @@ fn build_normal_context_menu(
     pinned_separator: &GtkBox,
     toast_overlay: &ToastOverlay,
 ) {
+    let ctx = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
     // Determine if this app is pinned
     let (desktop_id_opt, is_pinned) = if let Some(app_item) = obj.downcast_ref::<AppItem>() {
         let exec = app_item.exec();
@@ -642,29 +651,26 @@ fn build_normal_context_menu(
     };
 
     // Open
-    let open_btn = make_menu_button("Open");
     let model_open = model.clone();
     let mode_open = mode;
     let win_open = window.clone();
     let obj_open = obj.clone();
-    open_btn.connect_clicked(move |_| {
+    add_menu_button(&ctx, "Open", move || {
         activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
         win_open.hide();
     });
-    vbox.append(&open_btn);
 
     // Add / Remove from Favorites
     let entry_for_btns = entry.clone();
     if is_pinned {
-        let btn = make_menu_button("Remove from Favorites");
         let did = desktop_id_opt.clone();
         let p_apps = pinned_apps.clone();
         let p_strip = pinned_strip.clone();
         let p_sep = pinned_separator.clone();
         let p_all = all_apps.clone();
         let win_ref = window.clone();
-        let p_ref = weak_popover.clone();
-        btn.connect_clicked(move |_| {
+        let weak = weak_popover.clone();
+        add_menu_button(&ctx, "Remove from Favorites", move || {
             if let Some(ref id) = did {
                 p_apps.borrow_mut().retain(|d| d != id);
                 info!("Removed from Favorites: {id}");
@@ -678,32 +684,30 @@ fn build_normal_context_menu(
                 &win_ref,
                 &entry_for_btns,
             );
-            if let Some(p) = p_ref.upgrade() {
+            if let Some(p) = weak.upgrade() {
                 p.popdown();
             }
             entry_for_btns.grab_focus();
         });
-        vbox.append(&btn);
     } else {
-        let btn = make_menu_button("Add to Favorites");
         let did = desktop_id_opt.clone();
         let p_apps = pinned_apps.clone();
         let p_strip = pinned_strip.clone();
         let p_sep = pinned_separator.clone();
         let p_all = all_apps.clone();
         let win_ref = window.clone();
-        let p_ref = weak_popover.clone();
+        let weak = weak_popover.clone();
         let toast_ref = toast_overlay.clone();
         let entry_add = entry_for_btns.clone();
-        btn.connect_clicked(move |_| {
+        add_menu_button(&ctx, "Add to Favorites", move || {
             let Some(ref id) = did else {
-                if let Some(p) = p_ref.upgrade() {
+                if let Some(p) = weak.upgrade() {
                     p.popdown();
                 }
                 return;
             };
             if p_apps.borrow().len() >= 9 {
-                if let Some(p) = p_ref.upgrade() {
+                if let Some(p) = weak.upgrade() {
                     p.popdown();
                 }
                 let toast = Toast::builder()
@@ -723,12 +727,11 @@ fn build_normal_context_menu(
             crate::ui::pinned_strip::refresh_pinned_strip(
                 &p_strip, &p_sep, &p_apps, &p_all, &win_ref, &entry_add,
             );
-            if let Some(p) = p_ref.upgrade() {
+            if let Some(p) = weak.upgrade() {
                 p.popdown();
             }
             entry_add.grab_focus();
         });
-        vbox.append(&btn);
     }
 }
 
@@ -746,74 +749,34 @@ fn build_obsidian_context_menu(
         None => return,
     };
 
+    let ctx = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
     let path = cmd_item.line();
-    let p_ref = weak_popover.clone();
 
     // Open in Obsidian
-    let open_btn = make_menu_button("Open in Obsidian");
     let obj_open = obj.clone();
     let model_open = model.clone();
     let mode_open = mode;
     let win_open = window.clone();
-    open_btn.connect_clicked(move |_| {
+    add_menu_button(&ctx, "Open in Obsidian", move || {
         activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
         win_open.hide();
     });
-    vbox.append(&open_btn);
 
     // Copy note path
-    let btn_copy_path = make_menu_button("Copy note path");
-    let path_for_copy = path.clone();
-    btn_copy_path.connect_clicked(move |_| {
-        copy_text_to_clipboard(&path_for_copy);
-        if let Some(p) = p_ref.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_copy_path);
+    add_copy_text_button(&ctx, "Copy note path", &path);
 
     // Copy note content
-    let btn_copy_content = make_menu_button("Copy note content");
-    let path_for_content = path.clone();
-    let p_ref2 = weak_popover.clone();
-    btn_copy_content.connect_clicked(move |_| {
-        match std::fs::read_to_string(&path_for_content) {
-            Ok(content) => {
-                copy_text_to_clipboard(&content);
-            }
-            Err(e) => {
-                error!("Failed to read note file: {e}");
-            }
-        }
-        if let Some(p) = p_ref2.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_copy_content);
+    add_copy_content_button(&ctx, "Copy note content", &path);
 
     // Open in text editor
-    let btn_editor = make_menu_button("Open in text editor");
-    let path_for_editor = path.clone();
-    let p_ref3 = weak_popover.clone();
-    btn_editor.connect_clicked(move |_| {
-        open_with_default_app(&path_for_editor);
-        if let Some(p) = p_ref3.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_editor);
+    add_open_with_default_app_button(&ctx, "Open in text editor", &path);
 
     // Show in file manager
-    let btn_manager = make_menu_button("Show in file manager");
-    let path_for_manager = path.clone();
-    let p_ref4 = weak_popover.clone();
-    btn_manager.connect_clicked(move |_| {
-        open_in_file_manager(&path_for_manager);
-        if let Some(p) = p_ref4.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_manager);
+    add_open_in_file_manager_button(&ctx, "Show in file manager", &path);
 }
 
 fn build_file_search_context_menu(
@@ -829,14 +792,18 @@ fn build_file_search_context_menu(
         None => return,
     };
 
+    let ctx = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
     let path = cmd_item.line();
 
     // Open
-    let open_btn = make_menu_button("Open");
     let obj_open = obj.clone();
     let model_open = model.clone();
     let win_open = window.clone();
-    open_btn.connect_clicked(move |_| {
+    add_menu_button(&ctx, "Open", move || {
         activate_item(
             &obj_open,
             &model_open,
@@ -845,64 +812,20 @@ fn build_file_search_context_menu(
         );
         win_open.hide();
     });
-    vbox.append(&open_btn);
 
     // Copy path
-    let btn_copy_path = make_menu_button("Copy path");
-    let path_for_copy = path.clone();
-    let p_ref2 = weak_popover.clone();
-    btn_copy_path.connect_clicked(move |_| {
-        copy_text_to_clipboard(&path_for_copy);
-        if let Some(p) = p_ref2.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_copy_path);
+    add_copy_text_button(&ctx, "Copy path", &path);
 
     // Copy content (only for text files)
     if is_text_file(&path) {
-        let btn_copy_content = make_menu_button("Copy content");
-        let path_for_content = path.clone();
-        let p_ref3 = weak_popover.clone();
-        btn_copy_content.connect_clicked(move |_| {
-            match std::fs::read_to_string(&path_for_content) {
-                Ok(content) => {
-                    copy_text_to_clipboard(&content);
-                }
-                Err(e) => {
-                    error!("Failed to read file: {e}");
-                }
-            }
-            if let Some(p) = p_ref3.upgrade() {
-                p.popdown();
-            }
-        });
-        vbox.append(&btn_copy_content);
+        add_copy_content_button(&ctx, "Copy content", &path);
     }
 
     // Copy file (as GFile for file manager paste)
-    let btn_copy_file = make_menu_button("Copy file");
-    let path_for_copy_file = path.clone();
-    let p_ref4 = weak_popover.clone();
-    btn_copy_file.connect_clicked(move |_| {
-        copy_file_to_clipboard(&path_for_copy_file);
-        if let Some(p) = p_ref4.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_copy_file);
+    add_copy_file_button(&ctx, "Copy file", &path);
 
     // Show in file manager
-    let btn_manager = make_menu_button("Show in file manager");
-    let path_for_manager = path.clone();
-    let p_ref5 = weak_popover.clone();
-    btn_manager.connect_clicked(move |_| {
-        open_in_file_manager(&path_for_manager);
-        if let Some(p) = p_ref5.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_manager);
+    add_open_in_file_manager_button(&ctx, "Show in file manager", &path);
 }
 
 fn build_shell_context_menu(
@@ -918,6 +841,11 @@ fn build_shell_context_menu(
         None => return,
     };
 
+    let ctx = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
     let line = cmd_item.line();
     let command = if let Some((_, cmd)) = line.split_once(" | ") {
         cmd.trim().to_string()
@@ -928,11 +856,10 @@ fn build_shell_context_menu(
     };
 
     // Run
-    let run_btn = make_menu_button("Run");
     let obj_run = obj.clone();
     let model_run = model.clone();
     let win_run = window.clone();
-    run_btn.connect_clicked(move |_| {
+    add_menu_button(&ctx, "Run", move || {
         activate_item(
             &obj_run,
             &model_run,
@@ -941,87 +868,13 @@ fn build_shell_context_menu(
         );
         win_run.hide();
     });
-    vbox.append(&run_btn);
 
     // Copy command
-    let btn_copy_cmd = make_menu_button("Copy command");
-    let cmd_for_copy = command.clone();
-    let p_ref1 = weak_popover.clone();
-    btn_copy_cmd.connect_clicked(move |_| {
-        copy_text_to_clipboard(&cmd_for_copy);
-        if let Some(p) = p_ref1.upgrade() {
-            p.popdown();
-        }
-    });
-    vbox.append(&btn_copy_cmd);
+    add_copy_text_button(&ctx, "Copy command", &command);
 
     // Copy working directory (only if set)
     if let Some(working_dir) = cmd_item.working_dir() {
-        let btn_copy_wd = make_menu_button("Copy working directory");
-        let wd_for_copy = working_dir.clone();
-        let p_ref2 = weak_popover.clone();
-        btn_copy_wd.connect_clicked(move |_| {
-            copy_text_to_clipboard(&wd_for_copy);
-            if let Some(p) = p_ref2.upgrade() {
-                p.popdown();
-            }
-        });
-        vbox.append(&btn_copy_wd);
-    }
-}
-
-/// Create a flat menu button for context menus
-fn make_menu_button(label: &str) -> Button {
-    let btn = Button::with_label(label);
-    btn.add_css_class("flat");
-    btn.add_css_class("context-menu-item");
-    btn.set_halign(Align::Fill);
-    btn.set_hexpand(true);
-    btn
-}
-
-fn copy_text_to_clipboard(text: &str) {
-    if let Some(display) = gdk::Display::default() {
-        let clipboard = display.clipboard();
-        clipboard.set_text(text);
-    }
-}
-
-fn copy_file_to_clipboard(path: &str) {
-    if let Some(display) = gdk::Display::default() {
-        let file = gio::File::for_path(path);
-        let value = file.to_value();
-        let content_provider = gdk::ContentProvider::for_value(&value);
-        let clipboard = display.clipboard();
-        let _ = clipboard.set_content(Some(&content_provider));
-    }
-}
-
-fn is_text_file(path: &str) -> bool {
-    let (mime_str, _) = gio::content_type_guess(Some(path), None);
-    mime_str.starts_with("text/")
-        || mime_str == "application/x-shellscript"
-        || mime_str == "application/json"
-        || mime_str == "application/xml"
-        || mime_str == "application/javascript"
-        || mime_str.ends_with("+xml")
-        || mime_str.ends_with("+json")
-}
-
-fn open_in_file_manager(path: &str) {
-    let parent = std::path::Path::new(path)
-        .parent()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.to_string());
-
-    if let Err(e) = std::process::Command::new("xdg-open").arg(&parent).spawn() {
-        error!("Failed to open file manager: {e}");
-    }
-}
-
-fn open_with_default_app(path: &str) {
-    if let Err(e) = std::process::Command::new("xdg-open").arg(path).spawn() {
-        error!("Failed to open file with default app: {e}");
+        add_copy_text_button(&ctx, "Copy working directory", &working_dir);
     }
 }
 
