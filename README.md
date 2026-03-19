@@ -8,17 +8,22 @@ A fast, keyboard-driven application launcher for GNOME and other Linux desktops,
 
 ## Gallery
 
-|                                                                                                    |                                                                                                             |
-| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Main window** — fuzzy application search                                                         | ![Main view](screenshots/main_view.png)                                                                     |
-| **Application filtering**                                                                          | ![App filter](screenshots/app_filter.png)                                                                   |
-| **File search** (`:f`)                                                                             | ![Locate](screenshots/locate.png)                                                                           |
-| **Full-text grep** (`:fg`)                                                                         | ![Ripgrep](screenshots/ripgrep.png)                                                                         |
-| **Obsidian actions** (`:ob`) — vault, new note, daily note, quick note                             | ![Obsidian](screenshots/obsidian.png)                                                                       |
-| **Obsidian file search** (`:ob` with file list)                                                    | ![Obsidian locate](screenshots/obsidian_locate.png)                                                         |
-| **Obsidian vault grep** (`:obg`)                                                                   | ![Obsidian ripgrep](screenshots/obsidian_ripgrep.png)                                                       |
-| **GNOME Shell search providers** — files, calendar, contacts, etc.                                | ![Smart provider 1](screenshots/smart_provider_1.png) ![Smart provider 2](screenshots/smart_provider_2.png) |
-| **Settings** — Info, General, Search, Obsidian tabs                                                | ![Settings 1](screenshots/settings_1.png) ![Settings 2](screenshots/settings_2.png) ![Settings 3](screenshots/settings_3.png) ![Settings 4](screenshots/settings_4.png) |
+| Screenshot | Description |
+| ---------- | ----------- |
+| ![App filter](screenshots/app_filter.png) | **Application search** — fuzzy-match installed apps |
+| ![File search](screenshots/file_search.png) | **File search** (`:f`) — locate files via `plocate` |
+| ![File grep](screenshots/file_grep_search.png) | **Full-text grep** (`:fg`) — search file contents via `ripgrep` |
+| ![Obsidian](screenshots/obsidian.png) | **Obsidian actions** (`:ob`) — vault, new note, daily note, quick note |
+| ![Obsidian grep](screenshots/obsidian_grep.png) | **Obsidian vault grep** (`:obg`) — search vault file contents |
+| ![Favourites](screenshots/favourites.png) | **Pinned apps** — sidebar favourites with `Alt+1..9` shortcuts |
+| ![Workspace bar](screenshots/workspace.png) | **Workspace bar** — open windows on the current workspace |
+| ![Settings — Info](screenshots/settings_01_info.png) | **Settings** — Info tab |
+| ![Settings — General](screenshots/settings_02_general.png) | **Settings** — General tab (window size, workspace bar toggle) |
+| ![Settings — Search](screenshots/settings_03_search.png) | **Settings** — Search tab (app dirs, debounce, provider blacklist) |
+| ![Settings — Theme (list)](screenshots/settings_04_01_theme.png) | **Settings** — Theme tab (built-in theme selection) |
+| ![Settings — Theme (custom)](screenshots/settings_04_02_theme.png) | **Settings** — Theme tab (custom CSS editor) |
+| ![Settings — Commands](screenshots/settings_05_commands.png) | **Settings** — Commands tab (custom shell commands) |
+| ![Settings — Obsidian](screenshots/settings_06_obsidian.png) | **Settings** — Obsidian tab (vault paths, daily/quick notes) |
 
 ---
 
