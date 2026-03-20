@@ -32,6 +32,7 @@ A fast, keyboard-driven application launcher for GNOME and other Linux desktops,
 ## Features
 
 - **Fuzzy application search** — searches all installed `.desktop` applications with fuzzy matching (powered by `skim`)
+- **App list cache** — `.desktop` files are scanned once with `jwalk` + `rayon` and cached as binary (`~/.cache/grunner/apps.bin`). The cache is automatically invalidated and rebuilt when application directories change
 - **Calculator fallback** — automatically evaluates mathematical expressions; press Enter to copy the result to clipboard
 - **Colon commands** — built-in commands for file search (`:f`), full-text grep (`:fg`), and Obsidian integration (`:ob`, `:obg`)
 - **Terminal commands (`:sh`)** — run custom shell commands from the launcher; configure in settings or TOML config
@@ -232,6 +233,8 @@ Configuration lives at `~/.config/grunner/grunner.toml`, created automatically w
 
 **Hot reload:** changes take effect immediately after saving — no restart required.
 
+**Self-healing config:** if a section contains invalid values (e.g. wrong type, legacy syntax), grunner replaces only that section with its defaults on load. All other sections are left untouched, preserving your customizations.
+
 ### Full example
 
 ```toml
@@ -379,7 +382,7 @@ src/
 ├── utils.rs                    # Path expansion, icon helpers, calculator detection
 │
 ├── core/
-│   ├── config.rs               # TOML config loading with defaults
+│   ├── config.rs               # TOML config loading with per-section error recovery
 │   ├── global_state.rs         # Tokio runtime, HOME_DIR, hot-reload callbacks
 │   ├── theme.rs                # Theme manager, CSS provider, ColorScheme
 │   └── theme/                  # 9 built-in CSS theme files + themes.rs
@@ -444,7 +447,7 @@ src/
 ### Unit tests
 
 - **Calculator** (`calculator.rs`) — arithmetic, precedence, parentheses, trig, edge cases
-- **Config** (`config.rs`) — defaults, TOML parsing, validation
+- **Config** (`config.rs`) — defaults, TOML parsing, validation, per-section error recovery
 - **App mode** (`app_mode.rs`) — mode detection from prefix strings
 - **List model** (`list_model.rs`) — search coordination
 
