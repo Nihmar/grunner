@@ -141,3 +141,100 @@ pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+
+    // ── which tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_which_finds_sh() {
+        // `sh` should exist on any Unix system
+        let result = which("sh");
+        assert!(result.is_some());
+        assert!(result.unwrap().ends_with("sh"));
+    }
+
+    #[test]
+    fn test_which_nonexistent() {
+        let result = which("nonexistent_binary_xyz_12345_grunner_test");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_which_empty_string() {
+        // Empty program name: would look for a file named "" in PATH dirs
+        let result = which("");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_which_finds_ls() {
+        let result = which("ls");
+        assert!(result.is_some());
+    }
+
+    // ── is_executable tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_is_executable_with_executable_file() {
+        let dir = std::env::temp_dir().join("grunner_test_executable");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("test_exec");
+
+        {
+            let mut f = fs::File::create(&path).unwrap();
+            f.write_all(b"#!/bin/sh\nexit 0\n").unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&path, perms).unwrap();
+        }
+
+        assert!(is_executable(&path));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_executable_without_execute_bit() {
+        let dir = std::env::temp_dir().join("grunner_test_noexec");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("test_noexec");
+
+        {
+            let mut f = fs::File::create(&path).unwrap();
+            f.write_all(b"not executable").unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&path).unwrap().permissions();
+            perms.set_mode(0o644);
+            fs::set_permissions(&path, perms).unwrap();
+        }
+
+        assert!(!is_executable(&path));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_executable_nonexistent() {
+        assert!(!is_executable(std::path::Path::new("/nonexistent/file")));
+    }
+
+    #[test]
+    fn test_is_executable_directory() {
+        // Directories should not be considered executable
+        assert!(!is_executable(std::path::Path::new("/tmp")));
+    }
+}

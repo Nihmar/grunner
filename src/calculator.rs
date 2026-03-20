@@ -531,4 +531,87 @@ mod tests {
         // Test sqrt of negative number (should fail)
         assert_eq!(evaluate("sqrt(-1)"), None);
     }
+
+    #[test]
+    fn test_division_by_zero() {
+        assert_eq!(evaluate("10 / 0"), None);
+        assert_eq!(evaluate("5 / (2 - 2)"), None);
+    }
+
+    #[test]
+    fn test_mismatched_parentheses() {
+        // Unclosed left paren is rejected
+        assert_eq!(evaluate("(2 + 3"), None);
+        // Extra right paren is silently accepted (lenient)
+        assert_eq!(evaluate("2 + 3)"), Some("5".to_string()));
+    }
+
+    #[test]
+    fn test_nested_parens() {
+        assert_eq!(evaluate("(2 + 3)"), Some("5".to_string()));
+        assert_eq!(evaluate("((2 + 3))"), Some("5".to_string()));
+        assert_eq!(evaluate("((2 + 3) * (4 - 1))"), Some("15".to_string()));
+    }
+
+    #[test]
+    fn test_nested_functions() {
+        assert_eq!(evaluate("sin(cos(0))"), Some("0.8414709848".to_string()));
+        assert_eq!(evaluate("sqrt(sqrt(16))"), Some("2".to_string()));
+    }
+
+    #[test]
+    fn test_whitespace_only() {
+        assert_eq!(evaluate("   "), None);
+    }
+
+    #[test]
+    fn test_unknown_identifier() {
+        assert_eq!(evaluate("xyz"), None);
+        assert_eq!(evaluate("foo + bar"), None);
+    }
+
+    #[test]
+    fn test_negative_in_function() {
+        assert_eq!(evaluate("sqrt(-4 + 4)"), Some("0".to_string()));
+    }
+
+    #[test]
+    fn test_exponentiation_chain() {
+        assert_eq!(evaluate("2 ^ 2 ^ 3"), Some("256".to_string()));
+    }
+
+    #[test]
+    fn test_modulo_operations() {
+        assert_eq!(evaluate("17 % 5"), Some("2".to_string()));
+        assert_eq!(evaluate("100 % 7"), Some("2".to_string()));
+    }
+
+    #[test]
+    fn test_large_number() {
+        assert_eq!(
+            evaluate("1000000 * 1000000"),
+            Some("1000000000000".to_string())
+        );
+    }
+
+    #[test]
+    fn test_float_precision() {
+        assert_eq!(evaluate("0.1 + 0.2"), Some("0.3".to_string()));
+    }
+
+    #[test]
+    fn test_unary_minus_complex() {
+        assert_eq!(evaluate("-(3 + 2)"), Some("-5".to_string()));
+    }
+
+    #[test]
+    fn test_pi_and_e_in_expression() {
+        assert_eq!(evaluate("pi + e"), Some("5.859874482".to_string()));
+    }
+
+    #[test]
+    fn test_multiple_operators_fail() {
+        assert_eq!(evaluate("2 + + 3"), None);
+        assert_eq!(evaluate("2 * / 3"), None);
+    }
 }

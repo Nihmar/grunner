@@ -893,4 +893,97 @@ mod tests {
 
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn test_config_to_toml_round_trip() {
+        let mut config = Config::default();
+        config.window_width = 1024;
+        config.window_height = 768;
+        config.max_results = 128;
+        config.command_debounce_ms = 500;
+        config.workspace_bar_enabled = false;
+        config.pinned_apps = vec!["firefox.desktop".into()];
+
+        let toml_str = config_to_toml(&config);
+        let (parsed, failed, _table) = apply_toml(&toml_str);
+
+        assert!(failed.is_empty());
+        assert_eq!(parsed.window_width, 1024);
+        assert_eq!(parsed.window_height, 768);
+        assert_eq!(parsed.max_results, 128);
+        assert_eq!(parsed.command_debounce_ms, 500);
+        assert!(!parsed.workspace_bar_enabled);
+        assert_eq!(parsed.pinned_apps, vec!["firefox.desktop"]);
+    }
+
+    #[test]
+    fn test_apply_toml_empty_string() {
+        let (config, failed, _table) = apply_toml("");
+        // Should return defaults, no failures
+        assert!(failed.is_empty());
+        assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
+        assert_eq!(config.window_height, DEFAULT_WINDOW_HEIGHT);
+    }
+
+    #[test]
+    fn test_apply_toml_theme_settings() {
+        let toml = r#"
+            [theme]
+            mode = "system-dark"
+            custom_theme_path = "~/my_theme.css"
+        "#;
+        let (config, failed, _table) = apply_toml(toml);
+        assert!(failed.is_empty());
+        assert_eq!(config.theme, ThemeMode::SystemDark);
+        assert_eq!(config.custom_theme_path, Some("~/my_theme.css".to_string()));
+    }
+
+    #[test]
+    fn test_apply_toml_provider_blacklist() {
+        let toml = r#"
+            [search]
+            provider_blacklist = ["org.gnome.Calculator", "org.gnome.Calendar"]
+        "#;
+        let (config, failed, _table) = apply_toml(toml);
+        assert!(failed.is_empty());
+        assert_eq!(config.search_provider_blacklist.len(), 2);
+        assert_eq!(config.search_provider_blacklist[0], "org.gnome.Calculator");
+    }
+
+    #[test]
+    fn test_apply_toml_obsidian_config() {
+        let toml = r#"
+            [obsidian]
+            vault = "~/vault"
+            daily_notes_folder = "Daily"
+            new_notes_folder = "Inbox"
+            quick_note = "Quick.md"
+        "#;
+        let (config, failed, _table) = apply_toml(toml);
+        assert!(failed.is_empty());
+        let obs = config.obsidian.unwrap();
+        assert_eq!(obs.vault, "~/vault");
+        assert_eq!(obs.daily_notes_folder, "Daily");
+        assert_eq!(obs.new_notes_folder, "Inbox");
+        assert_eq!(obs.quick_note, "Quick.md");
+    }
+
+    #[test]
+    fn test_patch_failed_sections_preserves_valid() {
+        let toml = r#"
+            [window]
+            width = "bad"
+
+            [search]
+            max_results = 42
+        "#;
+        let (_cfg, failed, table) = apply_toml(toml);
+        assert!(failed.contains(&"window".to_string()));
+
+        let patched = patch_failed_sections(table, &failed);
+        let (re_parsed, re_failed, _table) = apply_toml(&patched);
+        assert!(re_failed.is_empty());
+        assert_eq!(re_parsed.window_width, DEFAULT_WINDOW_WIDTH);
+        assert_eq!(re_parsed.max_results, 42);
+    }
 }

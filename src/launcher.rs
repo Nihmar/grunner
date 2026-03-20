@@ -336,7 +336,7 @@ pub fn load_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
 /// # Returns
 /// `Some(DesktopApp)` if the file is a valid, displayable application,
 /// `None` if it's not an application or should be hidden.
-fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
+pub(crate) fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     // Read file content
     trace!("Parsing desktop file: {}", path.display());
     let content = fs::read_to_string(path).ok()?;
@@ -487,4 +487,215 @@ pub fn clean_exec(exec: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    // ── clean_exec tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_clean_exec_no_codes() {
+        assert_eq!(clean_exec("firefox"), "firefox");
+    }
+
+    #[test]
+    fn test_clean_exec_with_file_code() {
+        assert_eq!(clean_exec("firefox %f"), "firefox");
+    }
+
+    #[test]
+    fn test_clean_exec_with_url_code() {
+        assert_eq!(clean_exec("gedit %U"), "gedit");
+    }
+
+    #[test]
+    fn test_clean_exec_multiple_codes() {
+        assert_eq!(clean_exec("app %f %u %i %c"), "app");
+    }
+
+    #[test]
+    fn test_clean_exec_all_codes() {
+        assert_eq!(
+            clean_exec("cmd %f %F %u %U %d %D %n %N %i %c %k %v %m"),
+            "cmd"
+        );
+    }
+
+    #[test]
+    fn test_clean_exec_only_codes() {
+        assert_eq!(clean_exec("%f"), "");
+    }
+
+    #[test]
+    fn test_clean_exec_empty() {
+        assert_eq!(clean_exec(""), "");
+    }
+
+    #[test]
+    fn test_clean_exec_no_codes_passthrough() {
+        assert_eq!(clean_exec("no-codes-here"), "no-codes-here");
+    }
+
+    #[test]
+    fn test_clean_exec_trims_extra_spaces() {
+        assert_eq!(clean_exec("firefox  %f"), "firefox");
+    }
+
+    #[test]
+    fn test_clean_exec_command_with_args() {
+        assert_eq!(clean_exec("python3 -m myapp %u"), "python3 -m myapp");
+    }
+
+    // ── parse_desktop_file tests ──────────────────────────────────────
+
+    fn write_temp_desktop(dir: &Path, name: &str, content: &str) -> PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn test_parse_valid_desktop_file() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_valid");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "test-app.desktop",
+            "[Desktop Entry]\nType=Application\nName=Test App\nExec=test-app %f\nIcon=test-icon\nComment=A test application\n",
+        );
+
+        let app = parse_desktop_file(&path).unwrap();
+        assert_eq!(app.name, "Test App");
+        assert_eq!(app.exec, "test-app %f");
+        assert_eq!(app.icon, "test-icon");
+        assert_eq!(app.description, "A test application");
+        assert!(!app.terminal);
+        assert_eq!(app.desktop_id, "test-app");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_link_type() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_link");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "link.desktop",
+            "[Desktop Entry]\nType=Link\nName=Link\nURL=http://example.com\n",
+        );
+
+        assert!(parse_desktop_file(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_no_display() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_nodisplay");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "hidden.desktop",
+            "[Desktop Entry]\nType=Application\nName=Hidden\nExec=hidden\nNoDisplay=true\n",
+        );
+
+        assert!(parse_desktop_file(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_hidden() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_hidden");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "hidden2.desktop",
+            "[Desktop Entry]\nType=Application\nName=Hidden2\nExec=hidden2\nHidden=true\n",
+        );
+
+        assert!(parse_desktop_file(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_missing_name() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_noname");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "noname.desktop",
+            "[Desktop Entry]\nType=Application\nExec=noname\n",
+        );
+
+        assert!(parse_desktop_file(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_missing_exec() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_noexec");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "noexec.desktop",
+            "[Desktop Entry]\nType=Application\nName=NoExec\n",
+        );
+
+        assert!(parse_desktop_file(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_terminal_true() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_terminal");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "term.desktop",
+            "[Desktop Entry]\nType=Application\nName=Terminal App\nExec=term-app\nTerminal=true\n",
+        );
+
+        let app = parse_desktop_file(&path).unwrap();
+        assert!(app.terminal);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_multiple_sections() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_multi");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "multi.desktop",
+            "[Desktop Entry]\nType=Application\nName=Multi\nExec=multi\n\n[Another Section]\nFoo=bar\n",
+        );
+
+        let app = parse_desktop_file(&path).unwrap();
+        assert_eq!(app.name, "Multi");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_desktop_file_nonexistent() {
+        let path = Path::new("/nonexistent/path/app.desktop");
+        assert!(parse_desktop_file(path).is_none());
+    }
+
+    #[test]
+    fn test_parse_desktop_file_desktop_id_with_slashes() {
+        let dir = std::env::temp_dir().join("grunner_test_desktop_slashes");
+        let _ = fs::create_dir_all(&dir);
+        let path = write_temp_desktop(
+            &dir,
+            "org.example.App.desktop",
+            "[Desktop Entry]\nType=Application\nName=Example\nExec=example\n",
+        );
+
+        let app = parse_desktop_file(&path).unwrap();
+        assert_eq!(app.desktop_id, "org.example.App");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

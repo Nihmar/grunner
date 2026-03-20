@@ -152,3 +152,138 @@ pub fn get_file_icon(file_path: &str) -> gio::Icon {
     let (ctype, _) = gio::content_type_guess(Some(file_path), None::<&[u8]>);
     gio::content_type_get_icon(&ctype)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // ── expand_home tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_expand_home_tilde_slash() {
+        let home = get_home_dir();
+        let result = expand_home("~/Documents");
+        assert_eq!(result, PathBuf::from(home).join("Documents"));
+    }
+
+    #[test]
+    fn test_expand_home_bare_tilde() {
+        let home = get_home_dir();
+        let result = expand_home("~");
+        assert_eq!(result, PathBuf::from(home));
+    }
+
+    #[test]
+    fn test_expand_home_absolute_path() {
+        let result = expand_home("/etc/fstab");
+        assert_eq!(result, PathBuf::from("/etc/fstab"));
+    }
+
+    #[test]
+    fn test_expand_home_relative_path() {
+        let result = expand_home("some/relative/path");
+        assert_eq!(result, PathBuf::from("some/relative/path"));
+    }
+
+    #[test]
+    fn test_expand_home_empty_string() {
+        let result = expand_home("");
+        assert_eq!(result, PathBuf::from(""));
+    }
+
+    #[test]
+    fn test_expand_home_tilde_slash_empty() {
+        let home = get_home_dir();
+        let result = expand_home("~/");
+        assert_eq!(result, PathBuf::from(home));
+    }
+
+    // ── contract_home tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_contract_home_under_home() {
+        let home = get_home_dir();
+        let path = Path::new(home).join("Documents");
+        let result = contract_home(&path);
+        assert_eq!(result, "~/Documents");
+    }
+
+    #[test]
+    fn test_contract_home_exact_home() {
+        let home = get_home_dir();
+        let path = Path::new(home);
+        let result = contract_home(path);
+        assert_eq!(result, "~");
+    }
+
+    #[test]
+    fn test_contract_home_outside_home() {
+        let result = contract_home(Path::new("/etc/fstab"));
+        assert_eq!(result, "/etc/fstab");
+    }
+
+    #[test]
+    fn test_contract_home_root() {
+        let result = contract_home(Path::new("/"));
+        assert_eq!(result, "/");
+    }
+
+    #[test]
+    fn test_expand_contract_roundtrip() {
+        let original = "~/Documents/test.txt";
+        let expanded = expand_home(original);
+        let contracted = contract_home(&expanded);
+        assert_eq!(contracted, original);
+    }
+
+    #[test]
+    fn test_contract_home_nested() {
+        let home = get_home_dir();
+        let path = Path::new(home).join("a/b/c/d.txt");
+        let result = contract_home(&path);
+        assert_eq!(result, "~/a/b/c/d.txt");
+    }
+
+    // ── is_calculator_result tests ────────────────────────────────────
+
+    #[test]
+    fn test_is_calculator_result_valid() {
+        assert!(is_calculator_result("2 + 2 = 4"));
+    }
+
+    #[test]
+    fn test_is_calculator_result_no_equals() {
+        assert!(!is_calculator_result("2 + 2"));
+    }
+
+    #[test]
+    fn test_is_calculator_result_multiple_equals() {
+        assert!(!is_calculator_result("a = b = c"));
+    }
+
+    #[test]
+    fn test_is_calculator_result_empty_expr() {
+        assert!(!is_calculator_result(" = 5"));
+    }
+
+    #[test]
+    fn test_is_calculator_result_no_digits_in_result() {
+        assert!(!is_calculator_result("2 + 2 = abc"));
+    }
+
+    #[test]
+    fn test_is_calculator_result_float() {
+        assert!(is_calculator_result("10 / 3 = 3.33"));
+    }
+
+    #[test]
+    fn test_is_calculator_result_with_functions() {
+        assert!(is_calculator_result("sin(0) = 0"));
+    }
+
+    #[test]
+    fn test_is_calculator_result_negative() {
+        assert!(is_calculator_result("-5 + 3 = -2"));
+    }
+}

@@ -155,4 +155,59 @@ mod tests {
         assert!(!AppMode::FileSearch.show_obsidian_bar());
         assert!(!AppMode::Normal.show_obsidian_bar());
     }
+
+    #[test]
+    fn test_app_mode_from_text_obg_with_arg() {
+        assert_eq!(
+            AppMode::from_text(":obg search term"),
+            AppMode::ObsidianGrep
+        );
+    }
+
+    #[test]
+    fn test_app_mode_from_text_ob_with_arg() {
+        assert_eq!(AppMode::from_text(":ob something"), AppMode::Obsidian);
+    }
+
+    #[test]
+    fn test_app_mode_from_text_f_with_arg() {
+        assert_eq!(AppMode::from_text(":f filename"), AppMode::FileSearch);
+    }
+
+    #[test]
+    fn test_app_mode_from_text_partial_prefix() {
+        // Just ":o" should be Normal (not enough for :ob)
+        assert_eq!(AppMode::from_text(":o"), AppMode::Normal);
+    }
+
+    #[test]
+    fn test_app_mode_from_text_case_sensitive() {
+        // Commands are case-sensitive
+        assert_eq!(AppMode::from_text(":OB"), AppMode::Normal);
+        assert_eq!(AppMode::from_text(":F"), AppMode::Normal);
+    }
+
+    #[test]
+    fn test_app_mode_from_text_whitespace() {
+        assert_eq!(AppMode::from_text("   "), AppMode::Normal);
+    }
+
+    #[test]
+    fn test_app_mode_icon_name_empty_obsidian() {
+        assert_eq!(AppMode::Obsidian.icon_name(""), Some(""));
+        assert_eq!(AppMode::ObsidianGrep.icon_name(""), Some(""));
+    }
+
+    #[test]
+    fn test_app_mode_icon_name_all_variants() {
+        let icon = "my-icon";
+        assert_eq!(AppMode::FileSearch.icon_name(icon), Some("text-x-generic"));
+        assert_eq!(AppMode::Obsidian.icon_name(icon), Some(icon));
+        assert_eq!(AppMode::ObsidianGrep.icon_name(icon), Some(icon));
+        assert_eq!(
+            AppMode::CustomScript.icon_name(icon),
+            Some("utilities-terminal")
+        );
+        assert_eq!(AppMode::Normal.icon_name(icon), None);
+    }
 }

@@ -444,12 +444,24 @@ src/
 
 ## Testing
 
+The project has **135 tests** (126 unit + 4 integration + 5 doc-tests) covering all non-visual logic.
+
 ### Unit tests
 
-- **Calculator** (`calculator.rs`) — arithmetic, precedence, parentheses, trig, edge cases
-- **Config** (`config.rs`) — defaults, TOML parsing, validation, per-section error recovery
-- **App mode** (`app_mode.rs`) — mode detection from prefix strings
-- **List model** (`list_model.rs`) — search coordination
+| Module | What's tested | Count |
+|---|---|---|
+| `calculator.rs` | arithmetic, precedence, parens, trig, functions, division by zero, precision, edge cases | 18 |
+| `core/config.rs` | defaults, TOML parsing per section, invalid types, legacy format, round-trip, auto-patch | 24 |
+| `launcher.rs` | `clean_exec()` field-code stripping, `parse_desktop_file()` with valid/hidden/missing fields | 20 |
+| `actions/file.rs` | `parse_file_line()` grep-pattern parsing (valid, invalid, edge cases) | 10 |
+| `actions/launcher.rs` | `which()` PATH lookup, `is_executable()` permission checks | 8 |
+| `logging.rs` | `parse_log_level()`, `parse_log_destination()` case-insensitive mapping, Display trait | 18 |
+| `utils.rs` | `expand_home()`, `contract_home()` round-trip, `is_calculator_result()` format detection | 14 |
+| `command_handler.rs` | `parse_colon_command()` name/arg splitting, trim behavior | 8 |
+| `app_mode.rs` | mode detection, icon mapping, case sensitivity, partial prefixes | 14 |
+| `settings_window/save.rs` | `config_to_toml` output validation, section presence | 3 |
+| `model/list_model.rs` | calculator result detection | 1 |
+| `core/global_state.rs` | home dir resolution | 1 |
 
 ### Integration tests
 

@@ -23,7 +23,7 @@ use std::path::PathBuf;
 /// - `":f foo"` → `("f", "foo")`
 /// - `":ob"` → `("ob", "")`
 /// - `":obg pattern"` → `("obg", "pattern")`
-fn parse_colon_command(query: &str) -> (&str, &str) {
+pub(crate) fn parse_colon_command(query: &str) -> (&str, &str) {
     let rest = &query[1..];
     match rest.split_once(' ') {
         Some((cmd, arg)) => (cmd, arg.trim()),
@@ -225,5 +225,55 @@ impl<'a> CommandHandler<'a> {
         self.model
             .selection
             .set_selected(gtk4::INVALID_LIST_POSITION);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_colon_command_with_arg() {
+        assert_eq!(parse_colon_command(":f foo"), ("f", "foo"));
+    }
+
+    #[test]
+    fn test_parse_colon_command_no_arg() {
+        assert_eq!(parse_colon_command(":ob"), ("ob", ""));
+    }
+
+    #[test]
+    fn test_parse_colon_command_obg_with_arg() {
+        assert_eq!(parse_colon_command(":obg pattern"), ("obg", "pattern"));
+    }
+
+    #[test]
+    fn test_parse_colon_command_sh_with_arg() {
+        assert_eq!(parse_colon_command(":sh ls -la"), ("sh", "ls -la"));
+    }
+
+    #[test]
+    fn test_parse_colon_command_trims_leading_arg_space() {
+        // split_once gives ("f", " foo"), then trim() → "foo"
+        assert_eq!(parse_colon_command(":f  foo"), ("f", "foo"));
+    }
+
+    #[test]
+    fn test_parse_colon_command_arg_trims_trailing_spaces() {
+        // split_once gives ("f", "foo  "), then trim() → "foo"
+        assert_eq!(parse_colon_command(":f foo  "), ("f", "foo"));
+    }
+
+    #[test]
+    fn test_parse_colon_command_fg() {
+        assert_eq!(
+            parse_colon_command(":fg search term"),
+            ("fg", "search term")
+        );
+    }
+
+    #[test]
+    fn test_parse_colon_command_single_char() {
+        assert_eq!(parse_colon_command(":x"), ("x", ""));
     }
 }

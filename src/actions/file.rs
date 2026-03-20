@@ -6,7 +6,7 @@ use std::path::Path;
 ///
 /// Returns (`file_path`, `line_number`) if the input matches "path:line:" format
 /// where `line_number` is a positive integer.
-fn parse_file_line(line: &str) -> Option<(&str, u32)> {
+pub(crate) fn parse_file_line(line: &str) -> Option<(&str, u32)> {
     // Find the first colon that separates file path from line number
     // We look for pattern: file_path:line_number:rest
     // file_path cannot contain colon on Unix systems
@@ -79,5 +79,71 @@ pub fn open_file_or_line(line: &str) {
         warn!("Path does not exist, copying to clipboard: {line}");
         copy_text(line);
         info!("Copied text to clipboard: {line}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_file_line_valid() {
+        let result = parse_file_line("/path/to/file.rs:42:some content");
+        assert_eq!(result, Some(("/path/to/file.rs", 42)));
+    }
+
+    #[test]
+    fn test_parse_file_line_minimal() {
+        let result = parse_file_line("/path/file.md:1:x");
+        assert_eq!(result, Some(("/path/file.md", 1)));
+    }
+
+    #[test]
+    fn test_parse_file_line_no_third_part() {
+        // Requires 3 parts (file:line:content)
+        let result = parse_file_line("/path/to/file.rs:42");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_file_line_zero_line() {
+        let result = parse_file_line("/path/file.rs:0:content");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_file_line_non_numeric_line() {
+        let result = parse_file_line("/path/file.rs:abc:content");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_file_line_empty_file() {
+        let result = parse_file_line(":42:content");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_file_line_no_colons() {
+        let result = parse_file_line("just-a-string");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_file_line_empty_line_num() {
+        let result = parse_file_line("file::content");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_file_line_large_line() {
+        let result = parse_file_line("/file:999999:content");
+        assert_eq!(result, Some(("/file", 999_999)));
+    }
+
+    #[test]
+    fn test_parse_file_line_empty_content() {
+        let result = parse_file_line("/file:10:");
+        assert_eq!(result, Some(("/file", 10)));
     }
 }
