@@ -178,6 +178,24 @@ sin(pi/2)      → 1
 sqrt(16)       → 4
 ```
 
+#### Pinned apps (favourites)
+
+The right sidebar displays your pinned apps as a vertical strip. Hover over the right edge to reveal it, or use `Alt+1` through `Alt+9` to launch apps by position.
+
+**Adding apps:** Right-click any app in the search results and select "Add to Favourites". Maximum 9 apps can be pinned.
+
+**Removing apps:** Hover over a pinned app to reveal the remove button (×), or right-click the app and select "Remove from Favourites".
+
+**Reordering:** Drag and drop pinned apps to reorder them. The sidebar is hidden when there are no pinned apps.
+
+**Configuration:** Pinned apps can be set in the TOML config:
+
+```toml
+pinned_apps = ["firefox.desktop", "org.gnome.Terminal.desktop"]
+```
+
+Desktop entry IDs can be found in the `.desktop` files under `app_dirs` (typically `/usr/share/applications`).
+
 ### Colon commands
 
 Type `:` followed by a command name and an optional argument:
@@ -445,7 +463,7 @@ src/
 
 ## Testing
 
-The project has **135 tests** (126 unit + 4 integration + 5 doc-tests) covering all non-visual logic.
+The project has **148 tests** (139 unit + 4 integration + 5 doc-tests) covering all non-visual logic.
 
 ### Unit tests
 
@@ -463,6 +481,7 @@ The project has **135 tests** (126 unit + 4 integration + 5 doc-tests) covering 
 | `settings_window/save.rs` | `config_to_toml` output validation, section presence | 3 |
 | `model/list_model.rs` | calculator result detection | 1 |
 | `core/global_state.rs` | home dir resolution | 1 |
+| `ui/pinned_strip.rs` | add/remove/reorder pinned apps, limit checks, drag-drop logic | 13 |
 
 ### Integration tests
 
