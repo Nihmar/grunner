@@ -95,7 +95,7 @@ pub fn build_power_bar(
             window,
             #[weak]
             entry,
-            #[weak]
+            #[strong]
             callbacks,
             move |_| {
                 // Open settings dialog — do NOT close the window here.
