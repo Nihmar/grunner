@@ -1,189 +1,135 @@
 # Agent Guidelines for grunner
 
-This document provides guidelines for AI agents working on the grunner codebase. It covers build commands, linting, testing, code style, and other conventions.
+This document provides guidelines for AI agents working on the grunner codebase.
 
 ## Build Commands
 
 ```bash
-# Build debug version
-cargo build
-
-# Build release version (optimized)
-cargo build --release
-
-# Run the application (debug)
-cargo run
-
-# Run the application (release)
-cargo run --release
+cargo build                  # debug build
+cargo build --release        # optimised release build
+cargo run                    # run debug
+cargo run --release          # run release
 ```
 
-The compiled binary will be at `target/debug/grunner` or `target/release/grunner`.
+Binary: `target/debug/grunner` or `target/release/grunner`.
 
 ## Linting & Formatting
 
 ```bash
-# Format code with rustfmt
-cargo fmt
-
-# Run clippy lints
-cargo clippy
-
-# Run clippy with stricter checks
-cargo clippy -- -W clippy::pedantic
+cargo fmt                                    # format code
+cargo clippy                                 # standard lints
+cargo clippy -- -W clippy::pedantic          # strict lints
 ```
 
-- Always run `cargo fmt` before committing to ensure consistent formatting.
-- Address all clippy warnings; the project aims for zero warnings.
+- Always run `cargo fmt` before committing.
+- The project targets zero clippy warnings.
 
 ## Testing
 
 ```bash
-# Run all tests
-cargo test
-
-# Run tests with output (show println! output)
-cargo test -- --nocapture
-
-# Run a specific test (partial name match)
-cargo test test_function_name
-
-# Run tests in a specific module
-cargo test module_name::
-
-# Run integration tests
-cargo test --tests
+cargo test                           # all tests (unit + integration + doctests)
+cargo test -- --nocapture            # show println! output
+cargo test test_function_name        # single test by partial name
+cargo test module_name::             # all tests in a module
+cargo test --tests                   # integration tests only
+cargo test -p grunner --lib          # library unit tests only
 ```
 
-**Note:** Tests that require a display can be run with `export DISPLAY=:0` (or appropriate display).
+> **Note:** Tests needing a display: `export DISPLAY=:0` (or appropriate display).
 
-## Code Style Guidelines
+## Code Style
 
 ### Formatting
-- Use `cargo fmt` to enforce standard Rust style.
-- Maximum line length: 100 characters (rustfmt default).
-- Use spaces (4 spaces per indent).
+- `cargo fmt` enforces standard Rust style (4-space indent, 100-char lines).
 
 ### Naming Conventions
-- **Variables and functions:** `snake_case`
-- **Types and structs:** `PascalCase`
-- **Constants and static variables:** `SCREAMING_SNAKE_CASE`
-- **Enum variants:** `PascalCase`
-- **Module names:** `snake_case`
+- Variables / functions: `snake_case`
+- Types / structs: `PascalCase`
+- Constants / statics: `SCREAMING_SNAKE_CASE`
+- Enum variants: `PascalCase`
+- Modules: `snake_case`
 
-### Imports Ordering
-Organize imports in the following order, separated by a blank line:
+### Imports
+Organize in this order, separated by a blank line:
 1. Standard library (`std`, `core`, `alloc`)
 2. External crates (`gtk4`, `libadwaita`, `serde`, etc.)
 3. Internal modules (`crate::...`)
 
-Example:
 ```rust
 use std::path::PathBuf;
-use std::env;
 
 use gtk4::prelude::*;
 use libadwaita::Application;
 use log::{debug, error, info};
 
+use crate::core::config::Config;
 use crate::utils::expand_home;
-use crate::config::Config;
 ```
 
-For GTK/libadwaita code, prefer `use gtk4::prelude::*` and `use libadwaita::prelude::*` to bring in common trait methods.
+For GTK/libadwaita, always import `gtk4::prelude::*` and `libadwaita::prelude::*`.
 
 ### Error Handling
 - Use `Result<T, E>` for fallible operations.
 - Prefer `match` on `Result`/`Option` over `unwrap()`/`expect()` in production code.
-- Log errors using the `log` macros (`error!`, `warn!`, `debug!`, `info!`).
-- For user‑facing errors, display a descriptive message via the UI.
-- When a function can’t proceed, log the error and return a default/safe value (see `config::load()` for an example).
+- Log errors with `log` macros (`error!`, `warn!`); show user-facing errors via the UI.
+- When a function can't proceed, log the error and return a safe default (see `config::load()`).
 
 ### Logging
-The project uses the `log` crate with `simplelog` backend. Use the following macros:
+The project uses `log` + `simplelog`. Use `debug!`, `info!`, `warn!`, `error!`, `trace!`.
 
-```rust
-use log::{debug, error, info, trace, warn};
-
-debug!("Loading configuration from {:?}", path);
-info!("Application started");
-warn!("Fallback to default value");
-error!("Failed to read file: {}", e);
-```
-
-Logging can be configured via environment variables:
 ```bash
-GRUNNER_LOG=journal cargo run      # log to systemd journal
-GRUNNER_LOG=file cargo run         # log to file (default: ~/.cache/grunner/grunner.log)
-GRUNNER_LOG=stderr cargo run       # log to stderr
-GRUNNER_LOG=off cargo run          # disable logging
+GRUNNER_LOG=journal cargo run     # systemd journal
+GRUNNER_LOG=file cargo run        # ~/.cache/grunner/grunner.log (default)
+GRUNNER_LOG=stderr cargo run      # stderr
+GRUNNER_LOG=off cargo run         # disabled
 ```
 
 ### Async Programming
-- The project uses `tokio` and `futures` for asynchronous operations.
-- Mark async functions with `async fn`.
-- Use `.await` directly; avoid manual `poll` unless necessary.
-- For D‑Bus communication, see `search_provider.rs` and `workspace_bar.rs` for examples.
+- Uses `tokio` and `futures`; mark async functions with `async fn`, use `.await` directly.
+- For D-Bus, see `providers/dbus/query.rs` and `actions/workspace.rs`.
 
 ### Documentation
-- Document public APIs with Rustdoc (`///` comments).
-- Include examples, arguments, return values, and error conditions.
-- Use `//!` for module‑level documentation.
-- Keep comments concise and up‑to‑date.
+- Public APIs: `///` Rustdoc with args, returns, errors.
+- Module-level: `//!`.
+- Keep comments concise and current.
 
 ### Pattern Matching
-- Prefer `match` over `if let` when handling multiple variants.
-- Use `if let` for single-case extraction.
+- Prefer `match` for multiple variants; `if let` for single-case extraction.
 - Use `unwrap_or`, `unwrap_or_else`, `map`, `and_then` where appropriate.
 
 ### GObject/GTK4 Patterns
 - Use `glib::clone!` macro for closure captures in signals.
 - Use `imp()` pattern for GObject properties: `self.imp().property.borrow()`.
-- Use `#[glib::object_subclass]` + `ObjectImpl` + `glib::wrapper!` for new GObject types (see `model/items/` and `core/callbacks.rs` for examples).
-- For custom signals, define them in `ObjectImpl::signals()` using `Signal::builder("name").build()`.
-- Emit signals with `self.emit_by_name::<()>("signal-name", &[])`.
-- Prefer builder pattern for constructing GTK widgets: `Widget::builder().property(value).build()`.
-- Use `prelude::*` imports for GTK trait methods.
+- New GObject types: `#[glib::object_subclass]` + `ObjectImpl` + `glib::wrapper!` (see `model/items/` and `core/callbacks.rs`).
+- Custom signals: define in `ObjectImpl::signals()` via `Signal::builder("name").build()`.
+- Emit with `self.emit_by_name::<()>("signal-name", &[])`.
+- Prefer builder pattern: `Widget::builder().property(value).build()`.
+- Always import `prelude::*` for GTK trait methods.
 
 ### Constants & Configuration
-- Define constants in the appropriate module (e.g., `config.rs`).
-- Use `const` for compile‑time constants, `static` for mutable global state (rare).
-- Configuration is loaded from `~/.config/grunner/grunner.toml`; see `config::load()`.
+- `const` for compile-time constants; `static` for lazy-init (`OnceLock`).
+- Config lives at `~/.config/grunner/grunner.toml`; see `core::config::load()`.
 
 ## Commit Message Format
 
-Follow the conventional commit style: `<type>(<scope>): <subject>` with optional body and footer.
+Conventional commits: `<type>(<scope>): <subject>`
 
-### Types & Scopes
+| Type       | Scope examples                         |
+|------------|----------------------------------------|
+| `feat`     | `ui`, `search`, `launcher`, `obsidian` |
+| `fix`      | `power`, `settings`, `config`          |
+| `docs`     | `misc`                                 |
+| `refactor` | —                                      |
+| `perf`     | —                                      |
+| `test`     | —                                      |
+| `chore`    | —                                      |
 
-| Type      | Description                          | Common Scopes                          |
-|-----------|--------------------------------------|----------------------------------------|
-| `feat`    | New feature                          | `ui`, `search`, `launcher`, `obsidian` |
-| `fix`     | Bug fix                              | `power`, `settings`, `config`, `logging` |
-| `docs`    | Documentation only changes           | `misc`                                 |
-| `style`   | Formatting changes                   |                                        |
-| `refactor`| Code refactoring                     |                                        |
-| `perf`    | Performance improvements             |                                        |
-| `test`    | Adding tests                         |                                        |
-| `chore`   | Maintenance tasks                    |                                        |
-
-**Commit Best Practices:**
-- Use present tense, imperative mood ("add" not "added")
-- Keep subject under 72 characters, capitalize first letter
-- Reference issues and PRs where possible
+- Present tense, imperative mood ("add" not "added")
+- Subject under 72 chars, capitalize first letter
 
 ## Additional Notes
 
-- The application is a GTK4/libadwaita GUI program; UI changes must respect GNOME HIG.
-- Configuration is stored as TOML; changes to `config.rs` should maintain backward compatibility.
-- Logging is essential for debugging; include appropriate `debug!`/`info!` statements in new code.
-- No Cursor or Copilot‑specific rules are present in the repository.
-
-## Runtime Dependencies
-
-### GNOME Shell Extensions
-
-- **window-calls** (required for workspace bar feature): https://extensions.gnome.org/extension/4724/window-calls/
-
-  This extension provides D-Bus access to window information on Wayland. Without it, the workspace bar will not display open windows.
-
+- GTK4/libadwaita GUI app — respect GNOME HIG for UI changes.
+- Config is TOML; changes to `config.rs` must maintain backward compatibility.
+- No Cursor or Copilot-specific rules in the repository.
+- **Runtime dependency:** workspace bar requires [window-calls](https://extensions.gnome.org/extension/4724/window-calls/) GNOME Shell extension for D-Bus window info on Wayland.
