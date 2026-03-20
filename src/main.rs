@@ -3,6 +3,7 @@ mod app_mode;
 mod calculator;
 mod command_handler;
 mod core {
+    pub mod callbacks;
     pub mod config;
     pub mod global_state;
     pub mod theme;

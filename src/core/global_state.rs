@@ -1,10 +1,10 @@
 //! Centralized global state management
 //!
-//! This module provides a single location for all global state variables
-//! using thread-local storage to avoid Sync requirements.
+//! This module provides a single location for global state variables
+//! using `OnceLock` for lazy initialisation (HOME directory, Tokio runtime).
+//!
+//! Settings hot-reload callbacks have moved to `core::callbacks` (GObject signals).
 
-use crate::core::config::Config;
-use std::cell::RefCell;
 use std::sync::OnceLock;
 
 // ─── HOME Directory ──────────────────────────────────────────────────────────
@@ -32,81 +32,6 @@ pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
             .build()
             .expect("[global_state] failed to build tokio runtime")
     })
-}
-
-// ─── Config Hot-Reload ──────────────────────────────────────────────────────
-
-type ConfigReloader = Box<dyn Fn(&Config)>;
-
-thread_local! {
-    static CONFIG_RELOADER: RefCell<Option<ConfigReloader>> = RefCell::new(None);
-}
-
-pub fn set_config_reloader<F>(reloader: F)
-where
-    F: Fn(&Config) + 'static,
-{
-    CONFIG_RELOADER.with(|r| {
-        *r.borrow_mut() = Some(Box::new(reloader));
-    });
-}
-
-pub fn reload_config(config: &Config) {
-    CONFIG_RELOADER.with(|r| {
-        if let Some(reloader) = r.borrow().as_ref() {
-            reloader(config);
-        }
-    });
-}
-
-// ─── Theme Reloader ─────────────────────────────────────────────────────────
-
-type ThemeReloader = Box<dyn Fn(&Config)>;
-
-thread_local! {
-    static THEME_RELOADER: RefCell<Option<ThemeReloader>> = RefCell::new(None);
-}
-
-pub fn set_theme_reloader<F>(reloader: F)
-where
-    F: Fn(&Config) + 'static,
-{
-    THEME_RELOADER.with(|r| {
-        *r.borrow_mut() = Some(Box::new(reloader));
-    });
-}
-
-pub fn reload_theme(config: &Config) {
-    THEME_RELOADER.with(|r| {
-        if let Some(reloader) = r.borrow().as_ref() {
-            reloader(config);
-        }
-    });
-}
-
-// ─── Window Resizer ──────────────────────────────────────────────────────────
-
-type WindowResizer = Box<dyn Fn(i32, i32)>;
-
-thread_local! {
-    static WINDOW_RESIZER: RefCell<Option<WindowResizer>> = RefCell::new(None);
-}
-
-pub fn set_window_resizer<F>(resizer: F)
-where
-    F: Fn(i32, i32) + 'static,
-{
-    WINDOW_RESIZER.with(|r| {
-        *r.borrow_mut() = Some(Box::new(resizer));
-    });
-}
-
-pub fn resize_window(width: i32, height: i32) {
-    WINDOW_RESIZER.with(|r| {
-        if let Some(resizer) = r.borrow().as_ref() {
-            resizer(width, height);
-        }
-    });
 }
 
 #[cfg(test)]

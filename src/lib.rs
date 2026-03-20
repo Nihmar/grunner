@@ -8,6 +8,7 @@ pub mod app_mode;
 pub mod calculator;
 pub mod command_handler;
 pub mod core {
+    pub mod callbacks;
     pub mod config;
     pub mod global_state;
     pub mod theme;

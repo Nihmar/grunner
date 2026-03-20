@@ -12,8 +12,8 @@
 pub(crate) mod save;
 pub mod tabs;
 
+use crate::core::callbacks::AppCallbacks;
 use crate::core::config;
-use crate::core::global_state;
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use libadwaita::{PreferencesDialog, Toast, ToastOverlay};
@@ -31,7 +31,11 @@ use std::rc::Rc;
 /// # Arguments
 /// * `parent` - The parent window to attach the settings dialog to
 /// * `entry`  - The search entry to refocus when the dialog is dismissed
-pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4::Entry) {
+pub fn open_settings_window(
+    parent: &libadwaita::ApplicationWindow,
+    entry: &gtk4::Entry,
+    callbacks: &AppCallbacks,
+) {
     // Load current configuration
     let config = config::load();
 
@@ -118,6 +122,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
         let window = window.downgrade();
         let overlay = overlay.downgrade();
         let config_rc = Rc::clone(&config_rc);
+        let callbacks = callbacks.clone();
         move |_| {
             if let Some(window) = window.upgrade()
                 && let Some(overlay) = overlay.upgrade()
@@ -131,10 +136,9 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
                     overlay.add_toast(toast);
                 } else {
                     info!("Configuration saved successfully");
-                    global_state::reload_config(&config_rc.borrow());
-                    global_state::reload_theme(&config_rc.borrow());
-                    let cfg = config_rc.borrow();
-                    global_state::resize_window(cfg.window_width, cfg.window_height);
+                    callbacks.emit_config_changed();
+                    callbacks.emit_theme_changed();
+                    callbacks.emit_window_resized();
                     let toast = Toast::builder().title("Settings saved").timeout(2).build();
                     overlay.add_toast(toast);
                     glib::timeout_add_local_once(

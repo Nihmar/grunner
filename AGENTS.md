@@ -139,7 +139,9 @@ GRUNNER_LOG=off cargo run          # disable logging
 ### GObject/GTK4 Patterns
 - Use `glib::clone!` macro for closure captures in signals.
 - Use `imp()` pattern for GObject properties: `self.imp().property.borrow()`.
-- Use `#[derive(glib::GObject)]` for new GObject types.
+- Use `#[glib::object_subclass]` + `ObjectImpl` + `glib::wrapper!` for new GObject types (see `model/items/` and `core/callbacks.rs` for examples).
+- For custom signals, define them in `ObjectImpl::signals()` using `Signal::builder("name").build()`.
+- Emit signals with `self.emit_by_name::<()>("signal-name", &[])`.
 - Prefer builder pattern for constructing GTK widgets: `Widget::builder().property(value).build()`.
 - Use `prelude::*` imports for GTK trait methods.
 

@@ -15,12 +15,12 @@
 //! - Background application loading with threading
 
 use crate::app_mode::AppMode;
+use crate::core::callbacks::AppCallbacks;
 use crate::core::config::Config;
-use crate::core::global_state;
 use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::list_model::AppListModel;
-use crate::ui::context_menu::{WindowCtx, setup_list_context_menu};
+use crate::ui::context_menu::{setup_list_context_menu, WindowCtx};
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
     build_pinned_strip, launch_pinned_by_index, update_pinned_strip, update_strip_visibility,
@@ -122,36 +122,18 @@ fn setup_css(cfg: &Config, display: &gdk::Display) {
     // Apply theme based on configuration
     let theme_manager = crate::core::theme::ThemeManager::new();
     theme_manager.apply(cfg.theme, cfg.custom_theme_path.as_deref(), display);
-
-    // Register theme reloader for hot-reload from settings
-    let display_for_theme = display.clone();
-    global_state::set_theme_reloader(move |config| {
-        theme_manager.apply(
-            config.theme,
-            config.custom_theme_path.as_deref(),
-            &display_for_theme,
-        );
-    });
 }
 
-/// Initialize the data model and register config reloader
+/// Initialize the data model
 fn setup_model(cfg: &Config) -> AppListModel {
-    let model = AppListModel::new(
+    AppListModel::new(
         cfg.max_results,
         cfg.obsidian.clone(),
         cfg.command_debounce_ms,
         cfg.search_provider_blacklist.clone(),
         cfg.commands.clone(),
         cfg.disable_modes,
-    );
-
-    // Register config reloader for hot-reload from settings
-    let model_for_reloader = model.clone();
-    global_state::set_config_reloader(move |config| {
-        model_for_reloader.apply_config(config);
-    });
-
-    model
+    )
 }
 
 /// Create the main application window
@@ -288,6 +270,7 @@ fn build_main_layout(
     model: &AppListModel,
     cfg: &Config,
     display: &gdk::Display,
+    callbacks: &AppCallbacks,
 ) -> (
     GtkBox,
     ListView,
@@ -343,7 +326,7 @@ fn build_main_layout(
     let power_bar = if cfg.disable_modes {
         None
     } else {
-        Some(build_power_bar(window, entry, &icon_theme))
+        Some(build_power_bar(window, entry, &icon_theme, callbacks))
     };
 
     // Create list view factory for rendering result items
@@ -694,17 +677,41 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // 3. Window Creation
     let window = create_window(app, cfg);
 
-    // Register window resizer for live settings changes
-    let window_for_resize = window.downgrade();
-    global_state::set_window_resizer(move |width, height| {
-        if let Some(win) = window_for_resize.upgrade() {
-            win.set_resizable(true);
-            win.set_default_size(width, height);
-            win.set_resizable(false);
+    // 4. AppCallbacks for settings hot-reload
+    let callbacks = AppCallbacks::new();
+
+    callbacks.connect_config_changed(clone!(
+        #[strong]
+        model,
+        move |_| {
+            let config = crate::core::config::load();
+            model.apply_config(&config);
         }
+    ));
+
+    let display_for_theme = display.clone();
+    callbacks.connect_theme_changed(move |_| {
+        let config = crate::core::config::load();
+        let theme_manager = crate::core::theme::ThemeManager::new();
+        theme_manager.apply(
+            config.theme,
+            config.custom_theme_path.as_deref(),
+            &display_for_theme,
+        );
     });
 
-    // 4. Main Layout Construction
+    callbacks.connect_window_resized(clone!(
+        #[weak]
+        window,
+        move |_| {
+            let config = crate::core::config::load();
+            window.set_resizable(true);
+            window.set_default_size(config.window_width, config.window_height);
+            window.set_resizable(false);
+        }
+    ));
+
+    // 5. Main Layout Construction
     // Main search entry field
     let entry = Entry::builder()
         .placeholder_text("Search applications…")
@@ -713,7 +720,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry.add_css_class("search-entry");
 
     let (root, list_view, obsidian_bar, command_icon, pinned_strip, toast_overlay) =
-        build_main_layout(&window, &entry, &model, cfg, &display);
+        build_main_layout(&window, &entry, &model, cfg, &display, &callbacks);
 
     // Enable window dragging on background click
     let click = GestureClick::new();

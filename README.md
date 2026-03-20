@@ -383,7 +383,8 @@ src/
 │
 ├── core/
 │   ├── config.rs               # TOML config loading with per-section error recovery
-│   ├── global_state.rs         # Tokio runtime, HOME_DIR, hot-reload callbacks
+│   ├── global_state.rs         # Tokio runtime, HOME_DIR (OnceLock)
+│   ├── callbacks.rs            # AppCallbacks GObject: settings hot-reload signals
 │   ├── theme.rs                # Theme manager, CSS provider, ColorScheme
 │   └── theme/                  # 9 built-in CSS theme files + themes.rs
 │
@@ -432,7 +433,7 @@ src/
 
 | Module          | Purpose                                                |
 | --------------- | ------------------------------------------------------ |
-| `core/`         | Config, global state (Tokio runtime), theming          |
+| `core/`         | Config, global state (Tokio runtime), callbacks, theming |
 | `model/`        | GTK ListStore, debounce, search coordination           |
 | `providers/`    | Fuzzy app search, calculator, D-Bus search providers   |
 | `ui/`           | GTK widgets, context menus, styling                    |

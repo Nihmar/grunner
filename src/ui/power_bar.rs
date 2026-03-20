@@ -9,6 +9,7 @@
 //! activation, while settings access is immediate.
 
 use crate::actions::{open_settings, power_action};
+use crate::core::callbacks::AppCallbacks;
 use glib::clone;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, Entry, Image, Orientation};
@@ -74,6 +75,7 @@ pub fn build_power_bar(
     window: &ApplicationWindow,
     entry: &Entry,
     icon_theme: &gtk4::IconTheme,
+    callbacks: &AppCallbacks,
 ) -> GtkBox {
     // Create the main horizontal container for the power bar
     let power_bar = GtkBox::new(Orientation::Horizontal, 0);
@@ -93,12 +95,14 @@ pub fn build_power_bar(
             window,
             #[weak]
             entry,
+            #[weak]
+            callbacks,
             move |_| {
                 // Open settings dialog — do NOT close the window here.
                 // PreferencesDialog is parented to the main window; closing the parent
                 // before the dialog renders destroys it immediately.
                 // Pass entry so focus returns to the search bar on dialog close.
-                open_settings(&window, &entry);
+                open_settings(&window, &entry, &callbacks);
             }
         ));
         power_bar.append(&btn);
