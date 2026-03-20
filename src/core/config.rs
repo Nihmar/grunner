@@ -119,7 +119,7 @@ fn default_keep_open() -> bool {
 /// This struct holds all configurable application settings.
 /// It provides sensible defaults for all fields and can be
 /// customized via the TOML configuration file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Config {
     /// Window width in pixels
     pub window_width: i32,
@@ -189,57 +189,28 @@ impl Default for Config {
     }
 }
 
-/// Internal TOML configuration structure for deserialization
-///
-/// This struct mirrors the structure of the TOML configuration file.
-/// It uses Option types for all fields to support partial configuration.
-#[derive(Deserialize, Serialize, Default)]
-struct TomlConfig {
-    /// Window-related settings
-    window: Option<WindowConfig>,
-    /// Search-related settings
-    search: Option<SearchConfig>,
-    /// Obsidian integration settings
-    obsidian: Option<ObsidianConfig>,
-    /// Custom script commands
-    commands: Option<Vec<CommandConfig>>,
-    /// Theme settings
-    theme: Option<ThemeConfig>,
-}
+// ── Per-section structs used during TOML parsing ──────────────────────────
 
-/// Theme configuration section in TOML
-#[derive(Deserialize, Serialize)]
-struct ThemeConfig {
-    /// Theme mode selection
-    mode: Option<ThemeMode>,
-    /// Path to custom theme file
-    custom_theme_path: Option<String>,
-}
-
-/// Window configuration section in TOML
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct WindowConfig {
-    /// Optional window width override
     width: Option<i32>,
-    /// Optional window height override
     height: Option<i32>,
 }
 
-/// Search configuration section in TOML
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct SearchConfig {
-    /// Optional maximum results limit
     max_results: Option<usize>,
-    /// Optional list of application directories
     app_dirs: Option<Vec<String>>,
-    /// Optional command debounce time
     command_debounce_ms: Option<u32>,
-    /// Optional search provider blacklist
     provider_blacklist: Option<Vec<String>>,
-    /// Optional workspace bar enabled flag (default: true)
     workspace_bar_enabled: Option<bool>,
-    /// Optional list of pinned (favorite) application IDs
     pinned_apps: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct ThemeConfig {
+    mode: Option<ThemeMode>,
+    custom_theme_path: Option<String>,
 }
 
 /// Get the path to the user's configuration file
@@ -314,101 +285,208 @@ pub fn load() -> Config {
 
     // Parse TOML and apply to default configuration
     debug!("Parsing configuration TOML ({} bytes)", content.len());
-    apply_toml(&content)
-}
+    let (cfg, failed) = apply_toml(&content);
 
-/// Parse TOML content and apply it to the default configuration
-///
-/// # Arguments
-/// * `content` - TOML configuration string to parse
-///
-/// # Returns
-/// `Config` struct with TOML settings applied on top of defaults
-///
-/// # Notes
-/// - Invalid TOML syntax falls back to defaults with an error message
-/// - Individual setting parse errors are ignored (that setting keeps its default)
-fn apply_toml(content: &str) -> Config {
-    let mut cfg = Config::default();
-
-    // Parse TOML content
-    let toml_cfg: TomlConfig = match toml::from_str(content) {
-        Ok(c) => {
-            debug!("Successfully parsed configuration TOML");
-            c
-        }
-        Err(e) => {
-            // Failed to parse config
-            error!("Failed to parse configuration TOML: {e}");
-            return cfg;
-        }
-    };
-
-    // Apply window settings if present
-    if let Some(window) = toml_cfg.window {
-        if let Some(w) = window.width.filter(|&v| v > 0) {
-            debug!("Setting window width to {w}");
-            cfg.window_width = w;
-        }
-        if let Some(h) = window.height.filter(|&v| v > 0) {
-            debug!("Setting window height to {h}");
-            cfg.window_height = h;
-        }
-    }
-
-    // Apply search settings if present
-    if let Some(search) = toml_cfg.search {
-        if let Some(m) = search.max_results.filter(|&v| v > 0) {
-            debug!("Setting max_results to {m}");
-            cfg.max_results = m;
-        }
-        if let Some(dirs) = search.app_dirs {
-            debug!("Setting app_dirs to {dirs:?}");
-            cfg.app_dirs = dirs;
-        }
-        if let Some(debounce) = search.command_debounce_ms {
-            debug!("Setting command_debounce_ms to {debounce}");
-            cfg.command_debounce_ms = debounce;
-        }
-        if let Some(blacklist) = search.provider_blacklist {
-            debug!("Setting search_provider_blacklist to {blacklist:?}");
-            cfg.search_provider_blacklist = blacklist;
-        }
-        if let Some(enabled) = search.workspace_bar_enabled {
-            debug!("Setting workspace_bar_enabled to {enabled}");
-            cfg.workspace_bar_enabled = enabled;
-        }
-        if let Some(pinned) = search.pinned_apps {
-            debug!("Setting pinned_apps to {pinned:?}");
-            cfg.pinned_apps = pinned;
-        }
-    }
-
-    // Apply Obsidian settings if present
-    if let Some(obs) = toml_cfg.obsidian {
-        debug!("Setting Obsidian configuration");
-        cfg.obsidian = Some(obs);
-    }
-
-    // Apply custom script commands if present
-    if let Some(cmds) = toml_cfg.commands {
-        debug!("Setting custom script commands: {} commands", cmds.len());
-        cfg.commands = cmds;
-    }
-
-    // Apply theme settings if present
-    if let Some(theme) = toml_cfg.theme {
-        if let Some(mode) = theme.mode {
-            debug!("Setting theme mode to {:?}", mode);
-            cfg.theme = mode;
-        }
-        if let Some(path) = theme.custom_theme_path {
-            debug!("Setting custom theme path to {}", path);
-            cfg.custom_theme_path = Some(path);
+    // If sections were malformed, rewrite the config with defaults for those sections
+    if !failed.is_empty() {
+        warn!(
+            "Config sections failed to parse ({}), falling back to defaults: {}",
+            path.display(),
+            failed.join(", ")
+        );
+        let corrected = config_to_toml(&cfg);
+        if std::fs::write(&path, &corrected).is_ok() {
+            info!("Rewrote config file with corrected defaults at {}", path.display());
         }
     }
 
     cfg
+}
+
+/// Parse TOML content and apply it to the default configuration
+///
+/// Each top-level section is deserialized independently so that a malformed
+/// section (e.g. legacy `commands = []` instead of `[[commands]]`) does not
+/// prevent the rest of the config from loading.
+///
+/// # Returns
+/// A tuple of `(Config, Vec<String>)` where the second element lists the
+/// names of sections that failed to parse and were left at their defaults.
+fn apply_toml(content: &str) -> (Config, Vec<String>) {
+    let mut cfg = Config::default();
+    let mut failed: Vec<String> = Vec::new();
+
+    let full: toml::Value = match toml::from_str(content) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Failed to parse TOML syntax: {e}");
+            return (cfg, failed);
+        }
+    };
+
+    let table = match full {
+        toml::Value::Table(t) => t,
+        _ => return (cfg, failed),
+    };
+
+    // [window]
+    if let Some(val) = table.get("window") {
+        match parse_section::<WindowConfig>(val) {
+            Some(window) => {
+                if let Some(w) = window.width.filter(|&v| v > 0) {
+                    debug!("Setting window width to {w}");
+                    cfg.window_width = w;
+                }
+                if let Some(h) = window.height.filter(|&v| v > 0) {
+                    debug!("Setting window height to {h}");
+                    cfg.window_height = h;
+                }
+            }
+            None => failed.push("window".to_string()),
+        }
+    }
+
+    // [search]
+    if let Some(val) = table.get("search") {
+        match parse_section::<SearchConfig>(val) {
+            Some(search) => {
+                if let Some(m) = search.max_results.filter(|&v| v > 0) {
+                    debug!("Setting max_results to {m}");
+                    cfg.max_results = m;
+                }
+                if let Some(dirs) = search.app_dirs {
+                    debug!("Setting app_dirs to {dirs:?}");
+                    cfg.app_dirs = dirs;
+                }
+                if let Some(debounce) = search.command_debounce_ms {
+                    debug!("Setting command_debounce_ms to {debounce}");
+                    cfg.command_debounce_ms = debounce;
+                }
+                if let Some(blacklist) = search.provider_blacklist {
+                    debug!("Setting search_provider_blacklist to {blacklist:?}");
+                    cfg.search_provider_blacklist = blacklist;
+                }
+                if let Some(enabled) = search.workspace_bar_enabled {
+                    debug!("Setting workspace_bar_enabled to {enabled}");
+                    cfg.workspace_bar_enabled = enabled;
+                }
+                if let Some(pinned) = search.pinned_apps {
+                    debug!("Setting pinned_apps to {pinned:?}");
+                    cfg.pinned_apps = pinned;
+                }
+            }
+            None => failed.push("search".to_string()),
+        }
+    }
+
+    // [obsidian]
+    if let Some(val) = table.get("obsidian") {
+        match parse_section::<ObsidianConfig>(val) {
+            Some(obs) => {
+                debug!("Setting Obsidian configuration");
+                cfg.obsidian = Some(obs);
+            }
+            None => failed.push("obsidian".to_string()),
+        }
+    }
+
+    // [[commands]]
+    if let Some(val) = table.get("commands") {
+        match parse_section::<Vec<CommandConfig>>(val) {
+            Some(cmds) => {
+                debug!("Setting custom script commands: {} commands", cmds.len());
+                cfg.commands = cmds;
+            }
+            None => failed.push("commands".to_string()),
+        }
+    }
+
+    // [theme]
+    if let Some(val) = table.get("theme") {
+        match parse_section::<ThemeConfig>(val) {
+            Some(theme) => {
+                if let Some(mode) = theme.mode {
+                    debug!("Setting theme mode to {:?}", mode);
+                    cfg.theme = mode;
+                }
+                if let Some(path) = theme.custom_theme_path {
+                    debug!("Setting custom theme path to {}", path);
+                    cfg.custom_theme_path = Some(path);
+                }
+            }
+            None => failed.push("theme".to_string()),
+        }
+    }
+
+    (cfg, failed)
+}
+
+/// Try to deserialize a `toml::Value` into `T`, logging a warning on failure.
+fn parse_section<T: serde::de::DeserializeOwned>(val: &toml::Value) -> Option<T> {
+    match val.clone().try_into::<T>() {
+        Ok(v) => Some(v),
+        Err(e) => {
+            warn!("Failed to parse config section: {e}");
+            None
+        }
+    }
+}
+
+/// Serialize a `Config` back to TOML, matching the file layout.
+///
+/// `None` fields are omitted so the file stays clean.
+pub fn config_to_toml(config: &Config) -> String {
+    #[derive(Serialize)]
+    struct TomlConfig<'a> {
+        window: WindowConfig,
+        search: SearchConfig<'a>,
+        obsidian: Option<&'a ObsidianConfig>,
+        commands: &'a [CommandConfig],
+        theme: ThemeConfig,
+    }
+    #[derive(Serialize)]
+    struct WindowConfig {
+        width: i32,
+        height: i32,
+    }
+    #[derive(Serialize)]
+    struct SearchConfig<'a> {
+        max_results: usize,
+        app_dirs: &'a [String],
+        command_debounce_ms: u32,
+        provider_blacklist: &'a [String],
+        workspace_bar_enabled: bool,
+        pinned_apps: &'a [String],
+    }
+    #[derive(Serialize)]
+    struct ThemeConfig {
+        mode: ThemeMode,
+        custom_theme_path: Option<String>,
+    }
+
+    let tc = TomlConfig {
+        window: WindowConfig {
+            width: config.window_width,
+            height: config.window_height,
+        },
+        search: SearchConfig {
+            max_results: config.max_results,
+            app_dirs: &config.app_dirs,
+            command_debounce_ms: config.command_debounce_ms,
+            provider_blacklist: &config.search_provider_blacklist,
+            workspace_bar_enabled: config.workspace_bar_enabled,
+            pinned_apps: &config.pinned_apps,
+        },
+        obsidian: config.obsidian.as_ref(),
+        commands: &config.commands,
+        theme: ThemeConfig {
+            mode: config.theme,
+            custom_theme_path: config.custom_theme_path.clone(),
+        },
+    };
+
+    toml::to_string_pretty(&tc)
+        .expect("config serialization should never fail")
 }
 
 /// Generate default TOML configuration content
@@ -549,16 +627,18 @@ mod tests {
             [search]
             workspace_bar_enabled = true
         "#;
-        let config = apply_toml(toml);
+        let (config, failed) = apply_toml(toml);
         assert!(config.workspace_bar_enabled);
+        assert!(failed.is_empty());
 
         // Test disabling workspace bar
         let toml = r#"
             [search]
             workspace_bar_enabled = false
         "#;
-        let config = apply_toml(toml);
+        let (config, failed) = apply_toml(toml);
         assert!(!config.workspace_bar_enabled);
+        assert!(failed.is_empty());
     }
 
     #[test]
@@ -568,9 +648,10 @@ mod tests {
             width = 800
             height = 600
         "#;
-        let config = apply_toml(toml);
+        let (config, failed) = apply_toml(toml);
         assert_eq!(config.window_width, 800);
         assert_eq!(config.window_height, 600);
+        assert!(failed.is_empty());
     }
 
     #[test]
@@ -580,9 +661,10 @@ mod tests {
             max_results = 100
             command_debounce_ms = 500
         "#;
-        let config = apply_toml(toml);
+        let (config, failed) = apply_toml(toml);
         assert_eq!(config.max_results, 100);
         assert_eq!(config.command_debounce_ms, 500);
+        assert!(failed.is_empty());
     }
 
     #[test]
@@ -592,7 +674,7 @@ mod tests {
             [window]
             width = -100
         "#;
-        let config = apply_toml(toml);
+        let (config, _failed) = apply_toml(toml);
         assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
 
         // Zero max_results should be ignored
@@ -600,7 +682,7 @@ mod tests {
             [search]
             max_results = 0
         "#;
-        let config = apply_toml(toml);
+        let (config, _failed) = apply_toml(toml);
         assert_eq!(config.max_results, DEFAULT_MAX_RESULTS);
     }
 
@@ -624,9 +706,10 @@ mod tests {
             width = 800
             height = 600
         "#;
-        let config = apply_toml(toml);
+        let (config, failed) = apply_toml(toml);
         assert!(config.commands.is_empty());
         assert_eq!(config.commands.len(), 0);
+        assert!(failed.is_empty());
     }
 
     #[test]
@@ -637,10 +720,11 @@ mod tests {
             name = "Test Command"
             command = "echo test"
         "#;
-        let config = apply_toml(toml);
+        let (config, failed) = apply_toml(toml);
         assert_eq!(config.commands.len(), 1);
         assert_eq!(config.commands[0].name, "Test Command");
         assert_eq!(config.commands[0].command, "echo test");
+        assert!(failed.is_empty());
     }
 
     #[test]
@@ -656,9 +740,124 @@ mod tests {
             [search]
             pinned_apps = ["firefox.desktop", "org.gnome.Terminal.desktop"]
         "#;
-        let config = apply_toml(toml);
+        let (config, failed) = apply_toml(toml);
         assert_eq!(config.pinned_apps.len(), 2);
         assert_eq!(config.pinned_apps[0], "firefox.desktop");
         assert_eq!(config.pinned_apps[1], "org.gnome.Terminal.desktop");
+        assert!(failed.is_empty());
+    }
+
+    #[test]
+    fn test_apply_toml_legacy_commands_incompatible() {
+        // Old format: `commands = [1, 2, 3]` at top level — values are not tables.
+        // The section fails to parse, but the rest of the config is fine.
+        let toml = r#"
+            commands = [1, 2, 3]
+
+            [window]
+            width = 800
+        "#;
+        let (config, failed) = apply_toml(toml);
+        assert_eq!(config.window_width, 800);
+        assert!(config.commands.is_empty());
+        assert!(failed.contains(&"commands".to_string()));
+    }
+
+    #[test]
+    fn test_apply_toml_wrong_type_in_section() {
+        // width is a string instead of int
+        let toml = r#"
+            [window]
+            width = "not a number"
+        "#;
+        let (config, failed) = apply_toml(toml);
+        assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
+        assert!(failed.contains(&"window".to_string()));
+
+        // valid sections alongside invalid ones still load
+        let toml = r#"
+            [window]
+            width = "not a number"
+
+            [search]
+            max_results = 50
+        "#;
+        let (config, failed) = apply_toml(toml);
+        assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
+        assert_eq!(config.max_results, 50);
+        assert_eq!(config.command_debounce_ms, DEFAULT_COMMAND_DEBOUNCE_MS);
+        assert!(failed.contains(&"window".to_string()));
+        assert!(!failed.contains(&"search".to_string()));
+    }
+
+    #[test]
+    fn test_apply_toml_multiple_invalid_sections() {
+        let toml = r#"
+            [window]
+            width = "bad"
+
+            [obsidian]
+            vault = 42
+
+            [[commands]]
+            name = "Good"
+            command = "echo ok"
+        "#;
+        let (config, failed) = apply_toml(toml);
+        assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
+        assert!(config.obsidian.is_some()); // default, not the invalid one
+        assert_eq!(config.commands.len(), 1);
+        assert_eq!(config.commands[0].name, "Good");
+        assert!(failed.contains(&"window".to_string()));
+        assert!(failed.contains(&"obsidian".to_string()));
+        assert!(!failed.contains(&"commands".to_string()));
+    }
+
+    #[test]
+    fn test_apply_toml_auto_corrects_and_saves() {
+        use std::fs;
+
+        let dir = std::env::temp_dir().join("grunner_test_autosave");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("grunner.toml");
+
+        // Write a config with a malformed commands section (values, not tables)
+        let bad_toml = r#"
+            commands = [1, 2, 3]
+
+            [window]
+            width = 900
+            height = 500
+
+            [search]
+            max_results = 25
+        "#;
+        fs::write(&path, bad_toml).unwrap();
+
+        // Simulate what load() does
+        let content = fs::read_to_string(&path).unwrap();
+        let (cfg, failed) = apply_toml(&content);
+
+        assert_eq!(cfg.window_width, 900);
+        assert_eq!(cfg.max_results, 25);
+        assert!(cfg.commands.is_empty());
+        assert!(failed.contains(&"commands".to_string()));
+
+        // Rewrite corrected config
+        let corrected = config_to_toml(&cfg);
+        fs::write(&path, &corrected).unwrap();
+
+        // Re-read and verify it parses cleanly now
+        let content2 = fs::read_to_string(&path).unwrap();
+        let (cfg2, failed2) = apply_toml(&content2);
+        assert!(failed2.is_empty());
+        assert_eq!(cfg2.window_width, 900);
+        assert_eq!(cfg2.max_results, 25);
+        assert_eq!(cfg2.window_height, 500);
+
+        // Verify the corrected file re-parses cleanly
+        assert!(!corrected.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
