@@ -1,7 +1,7 @@
 //! Obsidian tab — vault path (with folder-picker), daily notes folder,
 //! new notes folder, and quick-note file.
 //!
-//! This tab is only appended when `config.obsidian` is `Some`.
+//! This tab is always visible since `config.obsidian` defaults to `Some(ObsidianConfig::default())`.
 
 use super::make_tab_page;
 use crate::core::config::Config;
@@ -16,8 +16,8 @@ use std::rc::Rc;
 /// Append the "Obsidian" tab to `notebook`.
 ///
 /// # Panics
-/// Assumes `config_rc.borrow().obsidian` is `Some` — the caller in
-/// `mod.rs` guards this with an `if config_rc.borrow().obsidian.is_some()` check.
+/// Assumes `config_rc.borrow().obsidian` is `Some` — this is always the case
+/// since `Config::default()` initializes it to `Some(ObsidianConfig::default())`.
 pub fn build_tab(
     notebook: &gtk4::Notebook,
     config_rc: &Rc<RefCell<Config>>,

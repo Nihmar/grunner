@@ -91,9 +91,7 @@ pub fn open_settings_window(parent: &libadwaita::ApplicationWindow, entry: &gtk4
     tabs::search::build_tab(&notebook, &config_rc);
     tabs::theme::build_tab(&notebook, &config_rc);
     tabs::commands::build_tab(&notebook, &config_rc);
-    if config_rc.borrow().obsidian.is_some() {
-        tabs::obsidian::build_tab(&notebook, &config_rc, parent);
-    }
+    tabs::obsidian::build_tab(&notebook, &config_rc, parent);
 
     // --- Save and Cancel Buttons ---
     let action_bar = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
