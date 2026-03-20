@@ -317,13 +317,13 @@ fn shunting_yard(tokens: &[Token]) -> Result<Vec<Token>, String> {
                             stack.pop();
                             break;
                         }
-                        output.push(stack.pop().unwrap());
+                        output.push(stack.pop().expect("stack invariant: guarded by stack.last()"));
                     }
                     // If the top of the stack is a function, pop it to output
                     if let Some(&t) = stack.last()
                         && let Token::Function(_) = t
                     {
-                        output.push(stack.pop().unwrap());
+                        output.push(stack.pop().expect("stack invariant: guarded by stack.last()"));
                     }
                 } else {
                     // Operator
@@ -335,7 +335,7 @@ fn shunting_yard(tokens: &[Token]) -> Result<Vec<Token>, String> {
                                     || (stack_op.precedence() == op.precedence()
                                         && op.is_left_associative()))
                             {
-                                output.push(stack.pop().unwrap());
+                                output.push(stack.pop().expect("stack invariant: guarded by stack.last()"));
                             } else {
                                 break;
                             }
@@ -374,7 +374,7 @@ fn evaluate_rpn(rpn: &[Token]) -> Result<f64, String> {
                 if stack.is_empty() {
                     return Err("Insufficient operands for function".to_string());
                 }
-                let a = stack.pop().unwrap();
+                let a = stack.pop().expect("stack invariant: guarded by is_empty check");
                 let result = match func {
                     FunctionType::Sin => a.sin(),
                     FunctionType::Cos => a.cos(),
@@ -393,14 +393,14 @@ fn evaluate_rpn(rpn: &[Token]) -> Result<f64, String> {
                     if stack.is_empty() {
                         return Err("Insufficient operands for unary minus".to_string());
                     }
-                    let a = stack.pop().unwrap();
+                    let a = stack.pop().expect("stack invariant: guarded by is_empty check");
                     stack.push(-a);
                 } else {
                     if stack.len() < 2 {
                         return Err("Insufficient operands".to_string());
                     }
-                    let b = stack.pop().unwrap();
-                    let a = stack.pop().unwrap();
+                    let b = stack.pop().expect("stack invariant: guarded by len < 2 check");
+                    let a = stack.pop().expect("stack invariant: guarded by len < 2 check");
                     let result = match op {
                         Operator::Add => a + b,
                         Operator::Subtract => a - b,
