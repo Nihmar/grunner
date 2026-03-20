@@ -38,6 +38,7 @@ pub struct WindowCtx {
     pub all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pub pinned_strip: GtkBox,
     pub toast_overlay: ToastOverlay,
+    pub dragging: Rc<Cell<bool>>,
 }
 
 /// Create a flat menu button with standard CSS classes
@@ -289,6 +290,7 @@ fn build_normal_context_menu(
         let p_all = ctx.all_apps.clone();
         let win_ref = ctx.window.clone();
         let weak = weak_popover.clone();
+        let dragging_ref = ctx.dragging.clone();
         add_menu_button(&ctx_menu, "Remove from Favorites", move || {
             if let Some(ref id) = did {
                 p_apps.borrow_mut().retain(|d| d != id);
@@ -301,6 +303,7 @@ fn build_normal_context_menu(
                 &p_all,
                 &win_ref,
                 entry_for_btns.text().is_empty(),
+                &dragging_ref,
             );
             if let Some(p) = weak.upgrade() {
                 p.popdown();
@@ -316,6 +319,7 @@ fn build_normal_context_menu(
         let weak = weak_popover.clone();
         let toast_ref = ctx.toast_overlay.clone();
         let entry_add = entry_for_btns.clone();
+        let dragging_ref = ctx.dragging.clone();
         add_menu_button(&ctx_menu, "Add to Favorites", move || {
             let Some(ref id) = did else {
                 if let Some(p) = weak.upgrade() {
@@ -347,6 +351,7 @@ fn build_normal_context_menu(
                 &p_all,
                 &win_ref,
                 entry_add.text().is_empty(),
+                &dragging_ref,
             );
             if let Some(p) = weak.upgrade() {
                 p.popdown();

@@ -483,6 +483,17 @@ notebook.pill-tabs > stack {
     );
 }
 
+/* ── Pinned drag-and-drop reordering ─────────────────────────── */
+.pinned-overlay.drag-source {
+    opacity: 0.4;
+}
+
+.pinned-overlay.drag-target {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+    border-radius: calc(var(--window-radius, 12px) - 4px);
+}
+
 /* ── Pinned remove badge (hover) ──────────────────────────────── */
 .pinned-remove-badge {
     min-width: 18px;

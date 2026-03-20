@@ -13,8 +13,8 @@
 //! `config::load()`.
 
 use glib::prelude::ObjectExt;
-use glib::subclass::prelude::*;
 use glib::subclass::Signal;
+use glib::subclass::prelude::*;
 use std::sync::OnceLock;
 
 mod imp {

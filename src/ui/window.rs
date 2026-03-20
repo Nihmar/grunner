@@ -20,7 +20,7 @@ use crate::core::config::Config;
 use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::list_model::AppListModel;
-use crate::ui::context_menu::{setup_list_context_menu, WindowCtx};
+use crate::ui::context_menu::{WindowCtx, setup_list_context_menu};
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
     build_pinned_strip, launch_pinned_by_index, update_pinned_strip, update_strip_visibility,
@@ -67,6 +67,7 @@ fn poll_apps(
     pinned_strip: GtkBox,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: ApplicationWindow,
+    dragging: Rc<Cell<bool>>,
 ) {
     match rx.try_recv() {
         Ok(apps) => {
@@ -85,6 +86,7 @@ fn poll_apps(
                 &window,
                 &pinned_apps,
                 &all_apps,
+                &dragging,
             );
             update_strip_visibility(&pinned_strip, &pinned, true);
 
@@ -94,7 +96,15 @@ fn poll_apps(
             // No data yet - reschedule polling on next idle
             trace!("Application loading still in progress");
             glib::idle_add_local_once(move || {
-                poll_apps(rx, model, all_apps, pinned_strip, pinned_apps, window)
+                poll_apps(
+                    rx,
+                    model,
+                    all_apps,
+                    pinned_strip,
+                    pinned_apps,
+                    window,
+                    dragging,
+                )
             });
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -220,7 +230,7 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
 }
 
 /// Build the right sidebar containing pinned apps (favourites)
-fn build_right_sidebar(pinned_strip: &GtkBox) -> GtkBox {
+fn build_right_sidebar(pinned_strip: &GtkBox, dragging: &Rc<Cell<bool>>) -> GtkBox {
     // ── Sidebar hover wrapper ────────────────────────────────────
     // HBox that contains revealer + edge trigger. The EventControllerMotion
     // is attached to this wrapper: enter → opens, leave → closes.
@@ -251,11 +261,14 @@ fn build_right_sidebar(pinned_strip: &GtkBox) -> GtkBox {
             sidebar_revealer.set_reveal_child(true);
         }
     ));
+    let dragging_leave = dragging.clone();
     motion.connect_leave(clone!(
         #[weak]
         sidebar_revealer,
         move |_| {
-            sidebar_revealer.set_reveal_child(false);
+            if !dragging_leave.get() {
+                sidebar_revealer.set_reveal_child(false);
+            }
         }
     ));
     sidebar_wrapper.add_controller(motion);
@@ -271,6 +284,7 @@ fn build_main_layout(
     cfg: &Config,
     display: &gdk::Display,
     callbacks: &AppCallbacks,
+    dragging: &Rc<Cell<bool>>,
 ) -> (
     GtkBox,
     ListView,
@@ -352,7 +366,7 @@ fn build_main_layout(
     }
 
     // Build right sidebar for pinned apps
-    let right_sidebar = build_right_sidebar(&pinned_strip);
+    let right_sidebar = build_right_sidebar(&pinned_strip, dragging);
     root.append(&right_sidebar);
 
     // Set root container as window content, wrapped in toast overlay
@@ -501,6 +515,7 @@ fn start_background_loading(
     pinned_strip: GtkBox,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: &ApplicationWindow,
+    dragging: Rc<Cell<bool>>,
 ) {
     let dirs = cfg.expanded_app_dirs();
     let model_poll = model.clone();
@@ -519,6 +534,7 @@ fn start_background_loading(
             pinned_strip,
             pinned_apps,
             win_clone,
+            dragging,
         )
     });
 }
@@ -673,6 +689,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // Shared state for loaded apps and pinned apps
     let all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>> = Rc::new(RefCell::new(Vec::new()));
     let pinned_apps: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(cfg.pinned_apps.clone()));
+    let dragging: Rc<Cell<bool>> = Rc::new(Cell::new(false));
 
     // 3. Window Creation
     let window = create_window(app, cfg);
@@ -720,7 +737,9 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     entry.add_css_class("search-entry");
 
     let (root, list_view, obsidian_bar, command_icon, pinned_strip, toast_overlay) =
-        build_main_layout(&window, &entry, &model, cfg, &display, &callbacks);
+        build_main_layout(
+            &window, &entry, &model, cfg, &display, &callbacks, &dragging,
+        );
 
     // Enable window dragging on background click
     let click = GestureClick::new();
@@ -758,6 +777,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         all_apps: all_apps.clone(),
         pinned_strip: pinned_strip.clone(),
         toast_overlay: toast_overlay.clone(),
+        dragging: dragging.clone(),
     };
 
     // 5. Connect Signals
@@ -815,5 +835,13 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     setup_list_context_menu(&list_view, &ctx);
 
     // 6. Background Application Loading
-    start_background_loading(cfg, &model, all_apps, pinned_strip, pinned_apps, &window);
+    start_background_loading(
+        cfg,
+        &model,
+        all_apps,
+        pinned_strip,
+        pinned_apps,
+        &window,
+        dragging,
+    );
 }
