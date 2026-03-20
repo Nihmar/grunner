@@ -552,7 +552,7 @@ max_results = {max}
 
 # Delay in milliseconds before executing a colon command (e.g. :ob, :obg, :f, :fg) after you stop typing.
 # Lower values feel more responsive but may cause flickering if your command is very fast.
-command_debounce_ms = 300
+command_debounce_ms = {debounce}
 
 # Directories scanned for .desktop files.
 # Use ~ for the home directory. Directories that do not exist are skipped.
@@ -602,6 +602,7 @@ mode = "system"
         width = DEFAULT_WINDOW_WIDTH,
         height = DEFAULT_WINDOW_HEIGHT,
         max = DEFAULT_MAX_RESULTS,
+        debounce = DEFAULT_COMMAND_DEBOUNCE_MS,
         dirs = dirs,
     )
 }
