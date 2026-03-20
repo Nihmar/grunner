@@ -11,7 +11,7 @@ use gtk4::gdk;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, GestureClick, Orientation, Popover};
 use libadwaita::{ApplicationWindow, Toast, ToastOverlay};
-use log::{error, info};
+use log::error;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -20,6 +20,10 @@ use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::items::{AppItem, CommandItem};
 use crate::model::list_model::AppListModel;
+use crate::ui::pinned_strip::{
+    MAX_PINNED_APPS, add_pinned_app, can_add_pinned_app, refresh_pinned_strip, remove_pinned_app,
+    save_pinned_apps,
+};
 
 /// Shared state for building a context menu
 pub struct MenuContext {
@@ -291,13 +295,12 @@ fn build_normal_context_menu(
         let win_ref = ctx.window.clone();
         let weak = weak_popover.clone();
         let dragging_ref = ctx.dragging.clone();
-        add_menu_button(&ctx_menu, "Remove from Favorites", move || {
+        add_menu_button(&ctx_menu, "Remove from Favourites", move || {
             if let Some(ref id) = did {
-                p_apps.borrow_mut().retain(|d| d != id);
-                info!("Removed from Favorites: {id}");
+                remove_pinned_app(&p_apps, id);
+                save_pinned_apps(&p_apps.borrow());
             }
-            crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(
+            refresh_pinned_strip(
                 &p_strip,
                 &p_apps,
                 &p_all,
@@ -320,32 +323,28 @@ fn build_normal_context_menu(
         let toast_ref = ctx.toast_overlay.clone();
         let entry_add = entry_for_btns.clone();
         let dragging_ref = ctx.dragging.clone();
-        add_menu_button(&ctx_menu, "Add to Favorites", move || {
+        add_menu_button(&ctx_menu, "Add to Favourites", move || {
             let Some(ref id) = did else {
                 if let Some(p) = weak.upgrade() {
                     p.popdown();
                 }
                 return;
             };
-            if p_apps.borrow().len() >= 9 {
+            if !can_add_pinned_app(&p_apps.borrow()) {
                 if let Some(p) = weak.upgrade() {
                     p.popdown();
                 }
                 let toast = Toast::builder()
-                    .title("Maximum 9 favourites reached")
+                    .title(format!("Maximum {MAX_PINNED_APPS} favourites reached"))
                     .timeout(2)
                     .build();
                 toast_ref.add_toast(toast);
                 return;
             }
-            let mut pinned = p_apps.borrow_mut();
-            if !pinned.contains(id) {
-                pinned.push(id.clone());
-                info!("Added to Favorites: {id}");
+            if add_pinned_app(&p_apps, id).is_ok() {
+                save_pinned_apps(&p_apps.borrow());
             }
-            drop(pinned);
-            crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(
+            refresh_pinned_strip(
                 &p_strip,
                 &p_apps,
                 &p_all,

@@ -230,7 +230,11 @@ fn build_sidebar(window: &ApplicationWindow, cfg: &Config) -> Option<GtkBox> {
 }
 
 /// Build the right sidebar containing pinned apps (favourites)
-fn build_right_sidebar(pinned_strip: &GtkBox, dragging: &Rc<Cell<bool>>) -> GtkBox {
+fn build_right_sidebar(
+    pinned_strip: &GtkBox,
+    pinned_apps: &Rc<RefCell<Vec<String>>>,
+    dragging: &Rc<Cell<bool>>,
+) -> GtkBox {
     // ── Sidebar hover wrapper ────────────────────────────────────
     // HBox that contains revealer + edge trigger. The EventControllerMotion
     // is attached to this wrapper: enter → opens, leave → closes.
@@ -254,11 +258,14 @@ fn build_right_sidebar(pinned_strip: &GtkBox, dragging: &Rc<Cell<bool>>) -> GtkB
 
     // ── Hover: opens/closes on mouse enter/leave ─────────────────
     let motion = EventControllerMotion::new();
+    let p_apps_enter = pinned_apps.clone();
     motion.connect_enter(clone!(
         #[weak]
         sidebar_revealer,
         move |_, _, _| {
-            sidebar_revealer.set_reveal_child(true);
+            if !p_apps_enter.borrow().is_empty() {
+                sidebar_revealer.set_reveal_child(true);
+            }
         }
     ));
     let dragging_leave = dragging.clone();
@@ -284,6 +291,7 @@ fn build_main_layout(
     cfg: &Config,
     display: &gdk::Display,
     callbacks: &AppCallbacks,
+    pinned_apps: &Rc<RefCell<Vec<String>>>,
     dragging: &Rc<Cell<bool>>,
 ) -> (
     GtkBox,
@@ -366,7 +374,7 @@ fn build_main_layout(
     }
 
     // Build right sidebar for pinned apps
-    let right_sidebar = build_right_sidebar(&pinned_strip, dragging);
+    let right_sidebar = build_right_sidebar(&pinned_strip, &pinned_apps, dragging);
     root.append(&right_sidebar);
 
     // Set root container as window content, wrapped in toast overlay
@@ -738,7 +746,14 @@ pub fn build_ui(app: &Application, cfg: &Config) {
 
     let (root, list_view, obsidian_bar, command_icon, pinned_strip, toast_overlay) =
         build_main_layout(
-            &window, &entry, &model, cfg, &display, &callbacks, &dragging,
+            &window,
+            &entry,
+            &model,
+            cfg,
+            &display,
+            &callbacks,
+            &pinned_apps,
+            &dragging,
         );
 
     // Enable window dragging on background click

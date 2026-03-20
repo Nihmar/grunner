@@ -13,6 +13,60 @@ use log::{error, info};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+pub const MAX_PINNED_APPS: usize = 9;
+
+/// Add an app to pinned apps, returns true if added
+pub fn add_pinned_app(
+    pinned_apps: &Rc<RefCell<Vec<String>>>,
+    desktop_id: &str,
+) -> Result<bool, &'static str> {
+    let mut pinned = pinned_apps.borrow_mut();
+    if pinned.len() >= MAX_PINNED_APPS {
+        return Err("Maximum pinned apps reached");
+    }
+    let desktop_string = desktop_id.to_string();
+    if pinned.contains(&desktop_string) {
+        return Ok(false);
+    }
+    pinned.push(desktop_string);
+    info!("Added to Favorites: {desktop_id}");
+    Ok(true)
+}
+
+/// Remove an app from pinned apps, returns true if actually removed
+pub fn remove_pinned_app(pinned_apps: &Rc<RefCell<Vec<String>>>, desktop_id: &str) -> bool {
+    let mut pinned = pinned_apps.borrow_mut();
+    let len_before = pinned.len();
+    pinned.retain(|d| d != desktop_id);
+    let removed = pinned.len() < len_before;
+    if removed {
+        info!("Removed from Favorites: {desktop_id}");
+    }
+    removed
+}
+
+/// Check if pinned apps limit is reached
+#[must_use]
+pub fn can_add_pinned_app(pinned_apps: &[String]) -> bool {
+    pinned_apps.len() < MAX_PINNED_APPS
+}
+
+/// Reorder pinned apps: move item from source_idx to target_idx
+/// Returns the final position where the item was inserted
+pub fn reorder_pinned_apps(pinned_apps: &mut Vec<String>, source_idx: usize, target_idx: usize) -> usize {
+    if source_idx == target_idx {
+        return source_idx;
+    }
+    let item = pinned_apps.remove(source_idx);
+    let insert_pos = if target_idx > source_idx {
+        target_idx
+    } else {
+        target_idx
+    };
+    pinned_apps.insert(insert_pos, item);
+    insert_pos
+}
+
 /// Build the pinned apps strip container (vertical layout for right sidebar)
 pub fn build_pinned_strip() -> GtkBox {
     let strip = GtkBox::new(Orientation::Vertical, 6);
@@ -125,7 +179,7 @@ fn setup_drag_and_drop(
     let p_apps = pinned_apps_ref.clone();
     let src_id_drop = drag_source_id.clone();
     let strip_drop = strip.clone();
-    drop_target.connect_accept(move |dt, _| {
+    drop_target.connect_accept(move |_dt, _| {
         let source_id = src_id_drop.borrow().clone();
 
         let Some(source_desktop_id) = source_id else {
@@ -145,9 +199,7 @@ fn setup_drag_and_drop(
             return false;
         };
 
-        let item = pinned.remove(s);
-        let insert_pos = t;
-        pinned.insert(insert_pos, item);
+        let insert_pos = reorder_pinned_apps(&mut pinned, s, t);
         info!("Reordered Favorites: moved {source_desktop_id} to position {insert_pos}");
         drop(pinned);
 
@@ -172,7 +224,6 @@ fn setup_drag_and_drop(
         save_pinned_apps(&p_apps.borrow());
 
         info!("Favorites reordered successfully");
-        let _ = dt;
         true
     });
 
@@ -189,6 +240,10 @@ pub fn update_pinned_strip(
     _all_apps_ref: &Rc<RefCell<Vec<DesktopApp>>>,
     dragging: &Rc<Cell<bool>>,
 ) {
+    if dragging.get() {
+        return;
+    }
+
     while let Some(child) = strip.first_child() {
         strip.remove(&child);
     }
@@ -342,4 +397,105 @@ pub fn refresh_pinned_strip(
         dragging,
     );
     update_strip_visibility(strip, &pinned, query_is_empty);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_max_pinned_apps_constant() {
+        assert_eq!(MAX_PINNED_APPS, 9);
+    }
+
+    #[test]
+    fn test_reorder_pinned_apps_forward() {
+        let mut apps = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let pos = reorder_pinned_apps(&mut apps, 0, 2);
+        assert_eq!(apps, vec!["b".to_string(), "c".to_string(), "a".to_string()]);
+        assert_eq!(pos, 2);
+    }
+
+    #[test]
+    fn test_reorder_pinned_apps_backward() {
+        let mut apps = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let pos = reorder_pinned_apps(&mut apps, 2, 0);
+        assert_eq!(apps, vec!["c".to_string(), "a".to_string(), "b".to_string()]);
+        assert_eq!(pos, 0);
+    }
+
+    #[test]
+    fn test_reorder_pinned_apps_same_position() {
+        let mut apps = vec!["a".to_string(), "b".to_string()];
+        reorder_pinned_apps(&mut apps, 1, 1);
+        assert_eq!(apps, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn test_reorder_pinned_apps_adjacent() {
+        let mut apps = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let pos = reorder_pinned_apps(&mut apps, 0, 1);
+        assert_eq!(apps, vec!["b".to_string(), "a".to_string(), "c".to_string()]);
+        assert_eq!(pos, 1);
+    }
+
+    #[test]
+    fn test_can_add_pinned_app_under_limit() {
+        let apps: Vec<String> = (0..8).map(|i| format!("app{i}")).collect();
+        assert!(can_add_pinned_app(&apps));
+    }
+
+    #[test]
+    fn test_can_add_pinned_app_at_limit() {
+        let apps: Vec<String> = (0..9).map(|i| format!("app{i}")).collect();
+        assert!(!can_add_pinned_app(&apps));
+    }
+
+    #[test]
+    fn test_can_add_pinned_app_empty() {
+        assert!(can_add_pinned_app(&[]));
+    }
+
+    #[test]
+    fn test_add_pinned_app_duplicate() {
+        let pinned = Rc::new(RefCell::new(vec!["app1".to_string()]));
+        let result = add_pinned_app(&pinned, "app1");
+        assert_eq!(result, Ok(false));
+        assert_eq!(pinned.borrow().len(), 1);
+    }
+
+    #[test]
+    fn test_add_pinned_app_new() {
+        let pinned = Rc::new(RefCell::new(vec!["app1".to_string()]));
+        let result = add_pinned_app(&pinned, "app2");
+        assert_eq!(result, Ok(true));
+        assert_eq!(pinned.borrow().len(), 2);
+        assert!(pinned.borrow().contains(&"app2".to_string()));
+    }
+
+    #[test]
+    fn test_remove_pinned_app() {
+        let pinned = Rc::new(RefCell::new(vec!["app1".to_string(), "app2".to_string()]));
+        let result = remove_pinned_app(&pinned, "app1");
+        assert!(result);
+        assert_eq!(pinned.borrow().len(), 1);
+        assert!(pinned.borrow().contains(&"app2".to_string()));
+    }
+
+    #[test]
+    fn test_remove_pinned_app_nonexistent() {
+        let pinned = Rc::new(RefCell::new(vec!["app1".to_string()]));
+        let result = remove_pinned_app(&pinned, "nonexistent");
+        assert!(!result);
+        assert_eq!(pinned.borrow().len(), 1);
+    }
+
+    #[test]
+    fn test_add_pinned_app_at_limit() {
+        let pinned: Rc<RefCell<Vec<String>>> =
+            Rc::new(RefCell::new((0..9).map(|i| format!("app{i}")).collect()));
+        let result = add_pinned_app(&pinned, "new_app");
+        assert!(result.is_err());
+        assert_eq!(pinned.borrow().len(), 9);
+    }
 }
