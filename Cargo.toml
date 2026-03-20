@@ -1,6 +1,6 @@
 [package]
 name = "grunner"
-version = "2.5.0"
+version = "2.6.0"
 edition = "2024"
 description = "A rofi-like application launcher for GNOME, written in Rust"
 
