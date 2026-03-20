@@ -14,6 +14,16 @@ use zbus::zvariant::OwnedValue;
 use super::icons::parse_icon_variant;
 use super::types::{SearchProvider, SearchResult};
 
+/// Lazily initialise and cache the D-Bus session connection.
+///
+/// On the first successful call the connection is stored in a `OnceLock`
+/// and reused for every subsequent call (fast path: `DBUS_CONN.get()`).
+///
+/// If the initial `Connection::session()` fails, the `?` propagates the
+/// error *before* the lock is initialised, so `DBUS_CONN` stays empty.
+/// This means every later call will retry the connection — the right
+/// behaviour for transient D-Bus unavailability (e.g. the bus daemon
+/// restarting).
 async fn get_or_init_conn() -> zbus::Result<Connection> {
     static DBUS_CONN: OnceLock<Connection> = OnceLock::new();
     if let Some(c) = DBUS_CONN.get() {
