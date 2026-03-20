@@ -3,7 +3,7 @@
 //! Kept separate from the UI code so serialisation logic can be
 //! read and tested independently of GTK.
 
-use crate::core::config::{self, config_to_toml, Config};
+use crate::core::config::{self, Config, config_to_toml};
 use log::debug;
 use std::fs;
 

@@ -8,7 +8,7 @@
 pub mod dbus;
 pub mod subprocess;
 
-pub use subprocess::{spawn_subprocess, SubprocessRunner};
+pub use subprocess::{SubprocessRunner, spawn_subprocess};
 
 use crate::core::config::CommandConfig;
 use crate::launcher::DesktopApp;

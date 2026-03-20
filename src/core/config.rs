@@ -285,18 +285,22 @@ pub fn load() -> Config {
 
     // Parse TOML and apply to default configuration
     debug!("Parsing configuration TOML ({} bytes)", content.len());
-    let (cfg, failed) = apply_toml(&content);
+    let (cfg, failed, table) = apply_toml(&content);
 
-    // If sections were malformed, rewrite the config with defaults for those sections
+    // If sections were malformed, patch only those sections with defaults
     if !failed.is_empty() {
         warn!(
             "Config sections failed to parse ({}), falling back to defaults: {}",
             path.display(),
             failed.join(", ")
         );
-        let corrected = config_to_toml(&cfg);
+        let corrected = patch_failed_sections(table, &failed);
         if std::fs::write(&path, &corrected).is_ok() {
-            info!("Rewrote config file with corrected defaults at {}", path.display());
+            info!(
+                "Patched config file replacing sections [{}] with defaults at {}",
+                failed.join(", "),
+                path.display()
+            );
         }
     }
 
@@ -310,9 +314,10 @@ pub fn load() -> Config {
 /// prevent the rest of the config from loading.
 ///
 /// # Returns
-/// A tuple of `(Config, Vec<String>)` where the second element lists the
-/// names of sections that failed to parse and were left at their defaults.
-fn apply_toml(content: &str) -> (Config, Vec<String>) {
+/// A tuple of `(Config, Vec<String>, toml::value::Table)` where the second
+/// element lists section names that failed to parse, and the third is the
+/// original parsed table (useful for patching).
+fn apply_toml(content: &str) -> (Config, Vec<String>, toml::value::Table) {
     let mut cfg = Config::default();
     let mut failed: Vec<String> = Vec::new();
 
@@ -320,13 +325,13 @@ fn apply_toml(content: &str) -> (Config, Vec<String>) {
         Ok(v) => v,
         Err(e) => {
             error!("Failed to parse TOML syntax: {e}");
-            return (cfg, failed);
+            return (cfg, failed, toml::value::Table::new());
         }
     };
 
     let table = match full {
         toml::Value::Table(t) => t,
-        _ => return (cfg, failed),
+        _ => return (cfg, failed, toml::value::Table::new()),
     };
 
     // [window]
@@ -418,7 +423,7 @@ fn apply_toml(content: &str) -> (Config, Vec<String>) {
         }
     }
 
-    (cfg, failed)
+    (cfg, failed, table)
 }
 
 /// Try to deserialize a `toml::Value` into `T`, logging a warning on failure.
@@ -430,6 +435,35 @@ fn parse_section<T: serde::de::DeserializeOwned>(val: &toml::Value) -> Option<T>
             None
         }
     }
+}
+
+/// Replace only the given failed sections in the original TOML table with
+/// their defaults, then re-serialize.  Sections that parsed correctly are
+/// left untouched so their values, ordering, and any surrounding content
+/// are preserved.
+fn patch_failed_sections(mut table: toml::value::Table, failed: &[String]) -> String {
+    // Build default Config → serialize → parse back to a Value table
+    let default_val = Config::default();
+    let default_toml = config_to_toml(&default_val);
+    let default_root: toml::Value = match toml::from_str(&default_toml) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Failed to parse default config for patching: {e}");
+            return toml::to_string_pretty(&toml::Value::Table(table)).unwrap_or_default();
+        }
+    };
+    let default_table = match default_root {
+        toml::Value::Table(t) => t,
+        _ => return toml::to_string_pretty(&toml::Value::Table(table)).unwrap_or_default(),
+    };
+
+    for section in failed {
+        if let Some(default_section) = default_table.get(section) {
+            table.insert(section.clone(), default_section.clone());
+        }
+    }
+
+    toml::to_string_pretty(&toml::Value::Table(table)).unwrap_or_default()
 }
 
 /// Serialize a `Config` back to TOML, matching the file layout.
@@ -485,8 +519,7 @@ pub fn config_to_toml(config: &Config) -> String {
         },
     };
 
-    toml::to_string_pretty(&tc)
-        .expect("config serialization should never fail")
+    toml::to_string_pretty(&tc).expect("config serialization should never fail")
 }
 
 /// Generate default TOML configuration content
@@ -627,7 +660,7 @@ mod tests {
             [search]
             workspace_bar_enabled = true
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert!(config.workspace_bar_enabled);
         assert!(failed.is_empty());
 
@@ -636,7 +669,7 @@ mod tests {
             [search]
             workspace_bar_enabled = false
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert!(!config.workspace_bar_enabled);
         assert!(failed.is_empty());
     }
@@ -648,7 +681,7 @@ mod tests {
             width = 800
             height = 600
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.window_width, 800);
         assert_eq!(config.window_height, 600);
         assert!(failed.is_empty());
@@ -661,7 +694,7 @@ mod tests {
             max_results = 100
             command_debounce_ms = 500
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.max_results, 100);
         assert_eq!(config.command_debounce_ms, 500);
         assert!(failed.is_empty());
@@ -674,7 +707,7 @@ mod tests {
             [window]
             width = -100
         "#;
-        let (config, _failed) = apply_toml(toml);
+        let (config, _failed, _table) = apply_toml(toml);
         assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
 
         // Zero max_results should be ignored
@@ -682,7 +715,7 @@ mod tests {
             [search]
             max_results = 0
         "#;
-        let (config, _failed) = apply_toml(toml);
+        let (config, _failed, _table) = apply_toml(toml);
         assert_eq!(config.max_results, DEFAULT_MAX_RESULTS);
     }
 
@@ -706,7 +739,7 @@ mod tests {
             width = 800
             height = 600
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert!(config.commands.is_empty());
         assert_eq!(config.commands.len(), 0);
         assert!(failed.is_empty());
@@ -720,7 +753,7 @@ mod tests {
             name = "Test Command"
             command = "echo test"
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.commands.len(), 1);
         assert_eq!(config.commands[0].name, "Test Command");
         assert_eq!(config.commands[0].command, "echo test");
@@ -740,7 +773,7 @@ mod tests {
             [search]
             pinned_apps = ["firefox.desktop", "org.gnome.Terminal.desktop"]
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.pinned_apps.len(), 2);
         assert_eq!(config.pinned_apps[0], "firefox.desktop");
         assert_eq!(config.pinned_apps[1], "org.gnome.Terminal.desktop");
@@ -757,7 +790,7 @@ mod tests {
             [window]
             width = 800
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.window_width, 800);
         assert!(config.commands.is_empty());
         assert!(failed.contains(&"commands".to_string()));
@@ -770,7 +803,7 @@ mod tests {
             [window]
             width = "not a number"
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
         assert!(failed.contains(&"window".to_string()));
 
@@ -782,7 +815,7 @@ mod tests {
             [search]
             max_results = 50
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
         assert_eq!(config.max_results, 50);
         assert_eq!(config.command_debounce_ms, DEFAULT_COMMAND_DEBOUNCE_MS);
@@ -803,7 +836,7 @@ mod tests {
             name = "Good"
             command = "echo ok"
         "#;
-        let (config, failed) = apply_toml(toml);
+        let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
         assert!(config.obsidian.is_some()); // default, not the invalid one
         assert_eq!(config.commands.len(), 1);
@@ -836,20 +869,20 @@ mod tests {
 
         // Simulate what load() does
         let content = fs::read_to_string(&path).unwrap();
-        let (cfg, failed) = apply_toml(&content);
+        let (cfg, failed, table) = apply_toml(&content);
 
         assert_eq!(cfg.window_width, 900);
         assert_eq!(cfg.max_results, 25);
         assert!(cfg.commands.is_empty());
         assert!(failed.contains(&"commands".to_string()));
 
-        // Rewrite corrected config
-        let corrected = config_to_toml(&cfg);
+        // Patch only the failed section
+        let corrected = patch_failed_sections(table, &failed);
         fs::write(&path, &corrected).unwrap();
 
         // Re-read and verify it parses cleanly now
         let content2 = fs::read_to_string(&path).unwrap();
-        let (cfg2, failed2) = apply_toml(&content2);
+        let (cfg2, failed2, _table) = apply_toml(&content2);
         assert!(failed2.is_empty());
         assert_eq!(cfg2.window_width, 900);
         assert_eq!(cfg2.max_results, 25);
