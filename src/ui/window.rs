@@ -19,13 +19,8 @@ use crate::core::config::Config;
 use crate::core::global_state;
 use crate::item_activation::activate_item;
 use crate::launcher;
-use crate::model::items::{AppItem, CommandItem};
 use crate::model::list_model::AppListModel;
-use crate::ui::context_menu::{
-    MenuContext, add_copy_content_button, add_copy_file_button, add_copy_text_button,
-    add_menu_button, add_open_in_file_manager_button, add_open_with_default_app_button,
-    is_text_file,
-};
+use crate::ui::context_menu::{WindowCtx, setup_list_context_menu};
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
     build_pinned_strip, launch_pinned_by_index, update_pinned_strip, update_strip_visibility,
@@ -39,11 +34,10 @@ use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, EventControllerMotion,
-    GestureClick, Image, ListView, Orientation, Popover, Revealer, RevealerTransitionType,
-    ScrolledWindow,
+    GestureClick, Image, ListView, Orientation, Revealer, RevealerTransitionType, ScrolledWindow,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
-use libadwaita::{Application, ApplicationWindow, Toast, ToastOverlay};
+use libadwaita::{Application, ApplicationWindow, ToastOverlay};
 use log::{debug, error, info, trace};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -66,7 +60,6 @@ use std::rc::Rc;
 /// * `pinned_separator` - The pinned separator to update
 /// * `pinned_apps` - Current pinned apps list
 /// * `window` - Application window for pinned strip context menus
-#[allow(clippy::too_many_arguments)]
 fn poll_apps(
     rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>,
     model: AppListModel,
@@ -517,389 +510,6 @@ fn connect_list_signals(
     ));
 }
 
-/// Set up right-click context menu on the results list
-#[allow(clippy::too_many_arguments)]
-fn setup_list_context_menu(
-    list_view: &ListView,
-    window: &ApplicationWindow,
-    entry: &Entry,
-    model: &AppListModel,
-    current_mode: &Rc<Cell<AppMode>>,
-    pinned_apps: Rc<RefCell<Vec<String>>>,
-    all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
-    pinned_strip: GtkBox,
-    toast_overlay: ToastOverlay,
-) {
-    let right_click = GestureClick::new();
-    right_click.set_button(3);
-    right_click.connect_pressed(clone!(
-        #[weak]
-        list_view,
-        #[weak]
-        window,
-        #[strong]
-        entry,
-        #[strong]
-        model,
-        #[strong]
-        current_mode,
-        #[strong]
-        pinned_apps,
-        #[strong]
-        all_apps,
-        #[strong]
-        pinned_strip,
-        #[strong]
-        toast_overlay,
-        move |_gesture, _n_press, _click_x, click_y| {
-            // Determine which model position was clicked
-            let scroll_y = gtk4::prelude::ScrollableExt::vadjustment(&list_view)
-                .map(|a| a.value())
-                .unwrap_or(0.0);
-            let row_height = list_view
-                .first_child()
-                .map(|c| c.allocation().height() as f64)
-                .filter(|h| *h > 0.0)
-                .unwrap_or(48.0);
-            let clicked_pos = ((scroll_y + click_y) / row_height) as u32;
-
-            let Some(obj) = model.store.item(clicked_pos) else {
-                return;
-            };
-
-            // Select the clicked row so keyboard/actions target it
-            model.selection.set_selected(clicked_pos);
-
-            let mode = current_mode.get();
-
-            // Build a popover with action buttons based on current mode
-            let popover = Popover::new();
-            popover.set_has_arrow(true);
-            let weak_popover = glib::WeakRef::<Popover>::new();
-            weak_popover.set(Some(&popover));
-
-            let vbox = GtkBox::new(Orientation::Vertical, 0);
-            vbox.add_css_class("context-menu-box");
-
-            match mode {
-                AppMode::Obsidian | AppMode::ObsidianGrep => {
-                    build_obsidian_context_menu(
-                        &obj,
-                        &popover,
-                        &vbox,
-                        &weak_popover,
-                        &model,
-                        mode,
-                        &window,
-                    );
-                }
-                AppMode::FileSearch => {
-                    build_file_search_context_menu(
-                        &obj,
-                        &popover,
-                        &vbox,
-                        &weak_popover,
-                        &model,
-                        &window,
-                    );
-                }
-                AppMode::CustomScript => {
-                    build_shell_context_menu(&obj, &popover, &vbox, &weak_popover, &model, &window);
-                }
-                _ => {
-                    build_normal_context_menu(
-                        &obj,
-                        &popover,
-                        &vbox,
-                        &weak_popover,
-                        &model,
-                        mode,
-                        &window,
-                        &entry,
-                        &pinned_apps,
-                        &all_apps,
-                        &pinned_strip,
-                        &toast_overlay,
-                    );
-                }
-            }
-
-            popover.set_child(Some(&vbox));
-            popover.set_parent(&list_view);
-            let rect = gdk::Rectangle::new(_click_x as i32, click_y as i32, 1, 1);
-            popover.set_pointing_to(Some(&rect));
-            popover.popup();
-        }
-    ));
-    list_view.add_controller(right_click);
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_normal_context_menu(
-    obj: &glib::Object,
-    _popover: &Popover,
-    vbox: &GtkBox,
-    weak_popover: &glib::WeakRef<Popover>,
-    model: &AppListModel,
-    mode: AppMode,
-    window: &ApplicationWindow,
-    entry: &Entry,
-    pinned_apps: &Rc<RefCell<Vec<String>>>,
-    all_apps: &Rc<RefCell<Vec<launcher::DesktopApp>>>,
-    pinned_strip: &GtkBox,
-    toast_overlay: &ToastOverlay,
-) {
-    let ctx = MenuContext {
-        weak_popover: weak_popover.clone(),
-        vbox: vbox.clone(),
-    };
-
-    // Determine if this app is pinned
-    let (desktop_id_opt, is_pinned) = if let Some(app_item) = obj.downcast_ref::<AppItem>() {
-        let exec = app_item.exec();
-        let apps = all_apps.borrow();
-        let did = apps
-            .iter()
-            .find(|a| a.exec == exec)
-            .map(|a| a.desktop_id.clone());
-        let pinned = did
-            .as_ref()
-            .map(|id| pinned_apps.borrow().contains(id))
-            .unwrap_or(false);
-        (did, pinned)
-    } else {
-        (None, false)
-    };
-
-    // Open
-    let model_open = model.clone();
-    let mode_open = mode;
-    let win_open = window.clone();
-    let obj_open = obj.clone();
-    add_menu_button(&ctx, "Open", move || {
-        activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
-        win_open.hide();
-    });
-
-    // Add / Remove from Favorites
-    let entry_for_btns = entry.clone();
-    if is_pinned {
-        let did = desktop_id_opt.clone();
-        let p_apps = pinned_apps.clone();
-        let p_strip = pinned_strip.clone();
-        let p_all = all_apps.clone();
-        let win_ref = window.clone();
-        let weak = weak_popover.clone();
-        add_menu_button(&ctx, "Remove from Favorites", move || {
-            if let Some(ref id) = did {
-                p_apps.borrow_mut().retain(|d| d != id);
-                info!("Removed from Favorites: {id}");
-            }
-            crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(
-                &p_strip,
-                &p_apps,
-                &p_all,
-                &win_ref,
-                entry_for_btns.text().is_empty(),
-            );
-            if let Some(p) = weak.upgrade() {
-                p.popdown();
-            }
-            entry_for_btns.grab_focus();
-        });
-    } else {
-        let did = desktop_id_opt.clone();
-        let p_apps = pinned_apps.clone();
-        let p_strip = pinned_strip.clone();
-        let p_all = all_apps.clone();
-        let win_ref = window.clone();
-        let weak = weak_popover.clone();
-        let toast_ref = toast_overlay.clone();
-        let entry_add = entry_for_btns.clone();
-        add_menu_button(&ctx, "Add to Favorites", move || {
-            let Some(ref id) = did else {
-                if let Some(p) = weak.upgrade() {
-                    p.popdown();
-                }
-                return;
-            };
-            if p_apps.borrow().len() >= 9 {
-                if let Some(p) = weak.upgrade() {
-                    p.popdown();
-                }
-                let toast = Toast::builder()
-                    .title("Maximum 9 favourites reached")
-                    .timeout(2)
-                    .build();
-                toast_ref.add_toast(toast);
-                return;
-            }
-            let mut pinned = p_apps.borrow_mut();
-            if !pinned.contains(id) {
-                pinned.push(id.clone());
-                info!("Added to Favorites: {id}");
-            }
-            drop(pinned);
-            crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
-            crate::ui::pinned_strip::refresh_pinned_strip(
-                &p_strip,
-                &p_apps,
-                &p_all,
-                &win_ref,
-                entry_add.text().is_empty(),
-            );
-            if let Some(p) = weak.upgrade() {
-                p.popdown();
-            }
-            entry_add.grab_focus();
-        });
-    }
-}
-
-fn build_obsidian_context_menu(
-    obj: &glib::Object,
-    _popover: &Popover,
-    vbox: &GtkBox,
-    weak_popover: &glib::WeakRef<Popover>,
-    model: &AppListModel,
-    mode: AppMode,
-    window: &ApplicationWindow,
-) {
-    let cmd_item = match obj.downcast_ref::<CommandItem>() {
-        Some(item) => item,
-        None => return,
-    };
-
-    let ctx = MenuContext {
-        weak_popover: weak_popover.clone(),
-        vbox: vbox.clone(),
-    };
-
-    let path = cmd_item.line();
-
-    // Open in Obsidian
-    let obj_open = obj.clone();
-    let model_open = model.clone();
-    let mode_open = mode;
-    let win_open = window.clone();
-    add_menu_button(&ctx, "Open in Obsidian", move || {
-        activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
-        win_open.hide();
-    });
-
-    // Copy note path
-    add_copy_text_button(&ctx, "Copy note path", &path);
-
-    // Copy note content
-    add_copy_content_button(&ctx, "Copy note content", &path);
-
-    // Open in text editor
-    add_open_with_default_app_button(&ctx, "Open in text editor", &path);
-
-    // Show in file manager
-    add_open_in_file_manager_button(&ctx, "Show in file manager", &path);
-}
-
-fn build_file_search_context_menu(
-    obj: &glib::Object,
-    _popover: &Popover,
-    vbox: &GtkBox,
-    weak_popover: &glib::WeakRef<Popover>,
-    model: &AppListModel,
-    window: &ApplicationWindow,
-) {
-    let cmd_item = match obj.downcast_ref::<CommandItem>() {
-        Some(item) => item,
-        None => return,
-    };
-
-    let ctx = MenuContext {
-        weak_popover: weak_popover.clone(),
-        vbox: vbox.clone(),
-    };
-
-    let path = cmd_item.line();
-
-    // Open
-    let obj_open = obj.clone();
-    let model_open = model.clone();
-    let win_open = window.clone();
-    add_menu_button(&ctx, "Open", move || {
-        activate_item(
-            &obj_open,
-            &model_open,
-            AppMode::FileSearch,
-            gdk::CURRENT_TIME,
-        );
-        win_open.hide();
-    });
-
-    // Copy path
-    add_copy_text_button(&ctx, "Copy path", &path);
-
-    // Copy content (only for text files)
-    if is_text_file(&path) {
-        add_copy_content_button(&ctx, "Copy content", &path);
-    }
-
-    // Copy file (as GFile for file manager paste)
-    add_copy_file_button(&ctx, "Copy file", &path);
-
-    // Show in file manager
-    add_open_in_file_manager_button(&ctx, "Show in file manager", &path);
-}
-
-fn build_shell_context_menu(
-    obj: &glib::Object,
-    _popover: &Popover,
-    vbox: &GtkBox,
-    weak_popover: &glib::WeakRef<Popover>,
-    model: &AppListModel,
-    window: &ApplicationWindow,
-) {
-    let cmd_item = match obj.downcast_ref::<CommandItem>() {
-        Some(item) => item,
-        None => return,
-    };
-
-    let ctx = MenuContext {
-        weak_popover: weak_popover.clone(),
-        vbox: vbox.clone(),
-    };
-
-    let line = cmd_item.line();
-    let command = if let Some((_, cmd)) = line.split_once(" | ") {
-        cmd.trim().to_string()
-    } else if let Some(stripped) = line.strip_prefix("Run: ") {
-        stripped.trim().to_string()
-    } else {
-        line
-    };
-
-    // Run
-    let obj_run = obj.clone();
-    let model_run = model.clone();
-    let win_run = window.clone();
-    add_menu_button(&ctx, "Run", move || {
-        activate_item(
-            &obj_run,
-            &model_run,
-            AppMode::CustomScript,
-            gdk::CURRENT_TIME,
-        );
-        win_run.hide();
-    });
-
-    // Copy command
-    add_copy_text_button(&ctx, "Copy command", &command);
-
-    // Copy working directory (only if set)
-    if let Some(working_dir) = cmd_item.working_dir() {
-        add_copy_text_button(&ctx, "Copy working directory", &working_dir);
-    }
-}
-
 /// Start background loading of desktop applications
 fn start_background_loading(
     cfg: &Config,
@@ -1131,6 +741,18 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     // Display the window
     window.present();
 
+    // Shared context for UI functions
+    let ctx = WindowCtx {
+        window: window.clone(),
+        entry: entry.clone(),
+        model: model.clone(),
+        current_mode: current_mode.clone(),
+        pinned_apps: pinned_apps.clone(),
+        all_apps: all_apps.clone(),
+        pinned_strip: pinned_strip.clone(),
+        toast_overlay: toast_overlay.clone(),
+    };
+
     // 5. Connect Signals
     // 5.1 Window lifecycle signals
     if let Some(ref obsidian_bar) = obsidian_bar {
@@ -1183,17 +805,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     connect_list_signals(&list_view, &window, &model, &current_mode);
 
     // 5.6 List view context menu
-    setup_list_context_menu(
-        &list_view,
-        &window,
-        &entry,
-        &model,
-        &current_mode,
-        pinned_apps.clone(),
-        all_apps.clone(),
-        pinned_strip.clone(),
-        toast_overlay,
-    );
+    setup_list_context_menu(&list_view, &ctx);
 
     // 6. Background Application Loading
     start_background_loading(cfg, &model, all_apps, pinned_strip, pinned_apps, &window);

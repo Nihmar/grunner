@@ -6,14 +6,38 @@
 //! menu button creation, clipboard operations, and popover management.
 
 use glib::WeakRef;
+use glib::clone;
+use gtk4::gdk;
 use gtk4::prelude::*;
-use gtk4::{Align, Box as GtkBox, Button, Popover};
-use log::error;
+use gtk4::{Align, Box as GtkBox, Button, GestureClick, Orientation, Popover};
+use libadwaita::{ApplicationWindow, Toast, ToastOverlay};
+use log::{error, info};
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use crate::app_mode::AppMode;
+use crate::item_activation::activate_item;
+use crate::launcher;
+use crate::model::items::{AppItem, CommandItem};
+use crate::model::list_model::AppListModel;
 
 /// Shared state for building a context menu
 pub struct MenuContext {
     pub weak_popover: WeakRef<Popover>,
     pub vbox: GtkBox,
+}
+
+/// Shared UI state passed to context menu and other UI functions
+#[derive(Clone)]
+pub struct WindowCtx {
+    pub window: ApplicationWindow,
+    pub entry: gtk4::Entry,
+    pub model: AppListModel,
+    pub current_mode: Rc<Cell<AppMode>>,
+    pub pinned_apps: Rc<RefCell<Vec<String>>>,
+    pub all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
+    pub pinned_strip: GtkBox,
+    pub toast_overlay: ToastOverlay,
 }
 
 /// Create a flat menu button with standard CSS classes
@@ -150,5 +174,304 @@ pub fn open_in_file_manager(path: &str) {
 pub fn open_with_default_app(path: &str) {
     if let Err(e) = std::process::Command::new("xdg-open").arg(path).spawn() {
         error!("Failed to open file with default app: {e}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Context menu dispatch
+// ---------------------------------------------------------------------------
+
+/// Set up right-click context menu on the results list
+pub fn setup_list_context_menu(list_view: &gtk4::ListView, ctx: &WindowCtx) {
+    let right_click = GestureClick::new();
+    right_click.set_button(3);
+    let ctx = ctx.clone();
+    right_click.connect_pressed(clone!(
+        #[weak]
+        list_view,
+        move |_gesture, _n_press, _click_x, click_y| {
+            let scroll_y = ScrollableExt::vadjustment(&list_view)
+                .map(|a| a.value())
+                .unwrap_or(0.0);
+            let row_height = list_view
+                .first_child()
+                .map(|c| c.allocation().height() as f64)
+                .filter(|h| *h > 0.0)
+                .unwrap_or(48.0);
+            let clicked_pos = ((scroll_y + click_y) / row_height) as u32;
+
+            let Some(obj) = ctx.model.store.item(clicked_pos) else {
+                return;
+            };
+
+            ctx.model.selection.set_selected(clicked_pos);
+            let mode = ctx.current_mode.get();
+
+            let popover = Popover::new();
+            popover.set_has_arrow(true);
+            let weak_popover = glib::WeakRef::<Popover>::new();
+            weak_popover.set(Some(&popover));
+
+            let vbox = GtkBox::new(Orientation::Vertical, 0);
+            vbox.add_css_class("context-menu-box");
+
+            match mode {
+                AppMode::Obsidian | AppMode::ObsidianGrep => {
+                    build_obsidian_context_menu(&obj, &vbox, &weak_popover, &ctx, mode);
+                }
+                AppMode::FileSearch => {
+                    build_file_search_context_menu(&obj, &vbox, &weak_popover, &ctx);
+                }
+                AppMode::CustomScript => {
+                    build_shell_context_menu(&obj, &vbox, &weak_popover, &ctx);
+                }
+                _ => {
+                    build_normal_context_menu(&obj, &vbox, &weak_popover, &ctx, mode);
+                }
+            }
+
+            popover.set_child(Some(&vbox));
+            popover.set_parent(&list_view);
+            let rect = gdk::Rectangle::new(_click_x as i32, click_y as i32, 1, 1);
+            popover.set_pointing_to(Some(&rect));
+            popover.popup();
+        }
+    ));
+    list_view.add_controller(right_click);
+}
+
+// ---------------------------------------------------------------------------
+// Context menu builders
+// ---------------------------------------------------------------------------
+
+fn build_normal_context_menu(
+    obj: &glib::Object,
+    vbox: &GtkBox,
+    weak_popover: &glib::WeakRef<Popover>,
+    ctx: &WindowCtx,
+    mode: AppMode,
+) {
+    let ctx_menu = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
+    let (desktop_id_opt, is_pinned) = if let Some(app_item) = obj.downcast_ref::<AppItem>() {
+        let exec = app_item.exec();
+        let apps = ctx.all_apps.borrow();
+        let did = apps
+            .iter()
+            .find(|a| a.exec == exec)
+            .map(|a| a.desktop_id.clone());
+        let pinned = did
+            .as_ref()
+            .map(|id| ctx.pinned_apps.borrow().contains(id))
+            .unwrap_or(false);
+        (did, pinned)
+    } else {
+        (None, false)
+    };
+
+    let model_open = ctx.model.clone();
+    let mode_open = mode;
+    let win_open = ctx.window.clone();
+    let obj_open = obj.clone();
+    add_menu_button(&ctx_menu, "Open", move || {
+        activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
+        win_open.hide();
+    });
+
+    let entry_for_btns = ctx.entry.clone();
+    if is_pinned {
+        let did = desktop_id_opt.clone();
+        let p_apps = ctx.pinned_apps.clone();
+        let p_strip = ctx.pinned_strip.clone();
+        let p_all = ctx.all_apps.clone();
+        let win_ref = ctx.window.clone();
+        let weak = weak_popover.clone();
+        add_menu_button(&ctx_menu, "Remove from Favorites", move || {
+            if let Some(ref id) = did {
+                p_apps.borrow_mut().retain(|d| d != id);
+                info!("Removed from Favorites: {id}");
+            }
+            crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
+            crate::ui::pinned_strip::refresh_pinned_strip(
+                &p_strip,
+                &p_apps,
+                &p_all,
+                &win_ref,
+                entry_for_btns.text().is_empty(),
+            );
+            if let Some(p) = weak.upgrade() {
+                p.popdown();
+            }
+            entry_for_btns.grab_focus();
+        });
+    } else {
+        let did = desktop_id_opt.clone();
+        let p_apps = ctx.pinned_apps.clone();
+        let p_strip = ctx.pinned_strip.clone();
+        let p_all = ctx.all_apps.clone();
+        let win_ref = ctx.window.clone();
+        let weak = weak_popover.clone();
+        let toast_ref = ctx.toast_overlay.clone();
+        let entry_add = entry_for_btns.clone();
+        add_menu_button(&ctx_menu, "Add to Favorites", move || {
+            let Some(ref id) = did else {
+                if let Some(p) = weak.upgrade() {
+                    p.popdown();
+                }
+                return;
+            };
+            if p_apps.borrow().len() >= 9 {
+                if let Some(p) = weak.upgrade() {
+                    p.popdown();
+                }
+                let toast = Toast::builder()
+                    .title("Maximum 9 favourites reached")
+                    .timeout(2)
+                    .build();
+                toast_ref.add_toast(toast);
+                return;
+            }
+            let mut pinned = p_apps.borrow_mut();
+            if !pinned.contains(id) {
+                pinned.push(id.clone());
+                info!("Added to Favorites: {id}");
+            }
+            drop(pinned);
+            crate::ui::pinned_strip::save_pinned_apps(&p_apps.borrow());
+            crate::ui::pinned_strip::refresh_pinned_strip(
+                &p_strip,
+                &p_apps,
+                &p_all,
+                &win_ref,
+                entry_add.text().is_empty(),
+            );
+            if let Some(p) = weak.upgrade() {
+                p.popdown();
+            }
+            entry_add.grab_focus();
+        });
+    }
+}
+
+fn build_obsidian_context_menu(
+    obj: &glib::Object,
+    vbox: &GtkBox,
+    weak_popover: &glib::WeakRef<Popover>,
+    ctx: &WindowCtx,
+    mode: AppMode,
+) {
+    let cmd_item = match obj.downcast_ref::<CommandItem>() {
+        Some(item) => item,
+        None => return,
+    };
+
+    let ctx_menu = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
+    let path = cmd_item.line();
+
+    let obj_open = obj.clone();
+    let model_open = ctx.model.clone();
+    let mode_open = mode;
+    let win_open = ctx.window.clone();
+    add_menu_button(&ctx_menu, "Open in Obsidian", move || {
+        activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
+        win_open.hide();
+    });
+
+    add_copy_text_button(&ctx_menu, "Copy note path", &path);
+    add_copy_content_button(&ctx_menu, "Copy note content", &path);
+    add_open_with_default_app_button(&ctx_menu, "Open in text editor", &path);
+    add_open_in_file_manager_button(&ctx_menu, "Show in file manager", &path);
+}
+
+fn build_file_search_context_menu(
+    obj: &glib::Object,
+    vbox: &GtkBox,
+    weak_popover: &glib::WeakRef<Popover>,
+    ctx: &WindowCtx,
+) {
+    let cmd_item = match obj.downcast_ref::<CommandItem>() {
+        Some(item) => item,
+        None => return,
+    };
+
+    let ctx_menu = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
+    let path = cmd_item.line();
+
+    let obj_open = obj.clone();
+    let model_open = ctx.model.clone();
+    let win_open = ctx.window.clone();
+    add_menu_button(&ctx_menu, "Open", move || {
+        activate_item(
+            &obj_open,
+            &model_open,
+            AppMode::FileSearch,
+            gdk::CURRENT_TIME,
+        );
+        win_open.hide();
+    });
+
+    add_copy_text_button(&ctx_menu, "Copy path", &path);
+
+    if is_text_file(&path) {
+        add_copy_content_button(&ctx_menu, "Copy content", &path);
+    }
+
+    add_copy_file_button(&ctx_menu, "Copy file", &path);
+    add_open_in_file_manager_button(&ctx_menu, "Show in file manager", &path);
+}
+
+fn build_shell_context_menu(
+    obj: &glib::Object,
+    vbox: &GtkBox,
+    weak_popover: &glib::WeakRef<Popover>,
+    ctx: &WindowCtx,
+) {
+    let cmd_item = match obj.downcast_ref::<CommandItem>() {
+        Some(item) => item,
+        None => return,
+    };
+
+    let ctx_menu = MenuContext {
+        weak_popover: weak_popover.clone(),
+        vbox: vbox.clone(),
+    };
+
+    let line = cmd_item.line();
+    let command = if let Some((_, cmd)) = line.split_once(" | ") {
+        cmd.trim().to_string()
+    } else if let Some(stripped) = line.strip_prefix("Run: ") {
+        stripped.trim().to_string()
+    } else {
+        line
+    };
+
+    let obj_run = obj.clone();
+    let model_run = ctx.model.clone();
+    let win_run = ctx.window.clone();
+    add_menu_button(&ctx_menu, "Run", move || {
+        activate_item(
+            &obj_run,
+            &model_run,
+            AppMode::CustomScript,
+            gdk::CURRENT_TIME,
+        );
+        win_run.hide();
+    });
+
+    add_copy_text_button(&ctx_menu, "Copy command", &command);
+
+    if let Some(working_dir) = cmd_item.working_dir() {
+        add_copy_text_button(&ctx_menu, "Copy working directory", &working_dir);
     }
 }
