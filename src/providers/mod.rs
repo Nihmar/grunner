@@ -6,6 +6,9 @@
 //! list model logic.
 
 pub mod dbus;
+pub mod subprocess;
+
+pub use subprocess::{spawn_subprocess, SubprocessRunner};
 
 use crate::core::config::CommandConfig;
 use crate::launcher::DesktopApp;
