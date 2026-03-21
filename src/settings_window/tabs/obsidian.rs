@@ -18,6 +18,7 @@ use std::rc::Rc;
 /// # Panics
 /// Assumes `config_rc.borrow().obsidian` is `Some` — this is always the case
 /// since `Config::default()` initializes it to `Some(ObsidianConfig::default())`.
+#[allow(clippy::too_many_lines)]
 pub fn build_tab(
     notebook: &gtk4::Notebook,
     config_rc: &Rc<RefCell<Config>>,

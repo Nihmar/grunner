@@ -20,7 +20,7 @@ use crate::core::config::Config;
 use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::list_model::AppListModel;
-use crate::ui::context_menu::{setup_list_context_menu, WindowCtx};
+use crate::ui::context_menu::{WindowCtx, setup_list_context_menu};
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
     build_pinned_strip, launch_pinned_by_index, update_pinned_strip, update_strip_visibility,
@@ -50,11 +50,11 @@ use std::rc::Rc;
 ///
 /// This function checks a channel for the results of desktop application
 /// scanning and updates the list model when apps are ready. It uses
-/// GLib's idle callbacks to avoid blocking the UI thread.
+/// `GLib`'s idle callbacks to avoid blocking the UI thread.
 ///
 /// # Arguments
 /// * `rx` - Channel receiver for desktop application vector
-/// * `model` - The AppListModel to update with loaded applications
+/// * `model` - The `AppListModel` to update with loaded applications
 /// * `all_apps` - Shared reference to loaded apps for pinned strip
 /// * `pinned_strip` - The pinned strip container to update
 /// * `pinned_separator` - The pinned separator to update
@@ -75,7 +75,7 @@ fn poll_apps(
             info!("Loaded {} applications", apps.len());
 
             // Store loaded apps for pinned strip lookup
-            *all_apps.borrow_mut() = apps.clone();
+            (*all_apps.borrow_mut()).clone_from(&apps);
 
             // Update pinned strip with loaded apps
             let pinned = pinned_apps.borrow();
@@ -104,7 +104,7 @@ fn poll_apps(
                     pinned_apps,
                     window,
                     dragging,
-                )
+                );
             });
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -446,12 +446,13 @@ fn connect_search_signals(
     current_mode: &Rc<Cell<AppMode>>,
     obsidian_bar: &GtkBox,
     command_icon: &Image,
-    obsidian_icon_name: String,
+    obsidian_icon_name: &str,
     pinned: &PinnedUiState,
 ) {
     // Handle text changes in search entry (main search functionality)
     let pinned_strip = pinned.strip.clone();
     let pinned_apps_clone = pinned.apps.clone();
+    let obsidian_icon_name = obsidian_icon_name.to_string();
     entry.connect_changed(clone!(
         #[strong]
         model,
@@ -543,7 +544,7 @@ fn start_background_loading(
             pinned_apps,
             win_clone,
             dragging,
-        )
+        );
     });
 }
 
@@ -555,7 +556,7 @@ fn start_background_loading(
 ///
 /// # Arguments
 /// * `model` - The application list model containing selection state
-/// * `list_view` - The GTK ListView widget to scroll
+/// * `list_view` - The GTK `ListView` widget to scroll
 /// * `pos` - Position (index) of the item to select and scroll to
 fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
     // Update selection model
@@ -566,7 +567,7 @@ fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
 
 /// Set up keyboard event controller for search entry navigation
 ///
-/// This creates an EventControllerKey that handles keyboard navigation:
+/// This creates an `EventControllerKey` that handles keyboard navigation:
 /// - Escape: close window
 /// - Enter: activate selected item
 /// - Arrow keys: move selection up/down
@@ -577,8 +578,8 @@ fn setup_keyboard_controller(
     window: &ApplicationWindow,
     model: &AppListModel,
     current_mode: &Rc<Cell<AppMode>>,
-    pinned_apps: Rc<RefCell<Vec<String>>>,
-    all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
+    pinned_apps: &Rc<RefCell<Vec<String>>>,
+    all_apps: &Rc<RefCell<Vec<launcher::DesktopApp>>>,
 ) {
     let key_ctrl = EventControllerKey::new();
     key_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
@@ -683,6 +684,10 @@ fn setup_keyboard_controller(
 /// # Arguments
 /// * `app` - The GTK Application instance
 /// * `cfg` - Application configuration loaded from file or defaults
+///
+/// # Panics
+/// Panics if the default GDK display cannot be obtained.
+#[allow(clippy::too_many_lines)]
 pub fn build_ui(app: &Application, cfg: &Config) {
     debug!("Workspace bar enabled: {}", cfg.workspace_bar_enabled);
 
@@ -772,7 +777,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             let Some(device) = gesture.device() else {
                 return;
             };
-            let button = gesture.current_button() as i32;
+            let button = gesture.current_button().cast_signed();
             toplevel.begin_move(&device, button, x, y, gdk::CURRENT_TIME);
         }
     ));
@@ -827,7 +832,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             &current_mode,
             obsidian_bar,
             &command_icon,
-            obsidian_icon_name.to_string(),
+            obsidian_icon_name,
             &pinned_ui,
         );
     }
@@ -838,8 +843,8 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         &window,
         &model,
         &current_mode,
-        pinned_apps.clone(),
-        all_apps.clone(),
+        &pinned_apps,
+        &all_apps,
     );
 
     // 5.5 List view activation

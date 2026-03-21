@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Append the "General" tab to `notebook`.
+#[allow(clippy::cast_possible_truncation)]
 pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     let (scroll, inner) = make_tab_page();
 
@@ -29,7 +30,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     width_row.connect_notify_local(Some("value"), {
         let config_rc = Rc::clone(config_rc);
         move |row, _| {
-            config_rc.borrow_mut().window_width = row.value() as i32;
+            config_rc.borrow_mut().window_width = row.value().round() as i32;
         }
     });
     window_group.add(&width_row);
@@ -45,7 +46,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     height_row.connect_notify_local(Some("value"), {
         let config_rc = Rc::clone(config_rc);
         move |row, _| {
-            config_rc.borrow_mut().window_height = row.value() as i32;
+            config_rc.borrow_mut().window_height = row.value().round() as i32;
         }
     });
     window_group.add(&height_row);

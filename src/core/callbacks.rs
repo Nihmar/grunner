@@ -1,6 +1,6 @@
 //! Settings hot-reload signals for Grunner
 //!
-//! Provides `AppCallbacks`, a lightweight GObject that carries three
+//! Provides `AppCallbacks`, a lightweight `GObject` that carries three
 //! notification signals emitted by the settings window after a
 //! successful save:
 //!
@@ -13,12 +13,11 @@
 //! `config::load()`.
 
 use glib::prelude::ObjectExt;
-use glib::subclass::Signal;
-use glib::subclass::prelude::*;
-use std::sync::OnceLock;
 
 mod imp {
-    use super::*;
+    use glib::subclass::Signal;
+    use glib::subclass::prelude::*;
+    use std::sync::OnceLock;
 
     #[derive(Default)]
     pub struct AppCallbacks;
@@ -65,6 +64,9 @@ impl AppCallbacks {
         self.emit_by_name::<()>("window-resized", &[]);
     }
 
+    /// # Panics
+    ///
+    /// Panics if the signal value cannot be downcast to `Self`.
     pub fn connect_config_changed<F: Fn(&Self) + 'static>(&self, f: F) -> glib::SignalHandlerId {
         self.connect_local("config-changed", false, move |values| {
             let obj = values[0].get::<Self>().expect("wrong type in signal");
@@ -73,6 +75,9 @@ impl AppCallbacks {
         })
     }
 
+    /// # Panics
+    ///
+    /// Panics if the signal value cannot be downcast to `Self`.
     pub fn connect_theme_changed<F: Fn(&Self) + 'static>(&self, f: F) -> glib::SignalHandlerId {
         self.connect_local("theme-changed", false, move |values| {
             let obj = values[0].get::<Self>().expect("wrong type in signal");
@@ -81,6 +86,9 @@ impl AppCallbacks {
         })
     }
 
+    /// # Panics
+    ///
+    /// Panics if the signal value cannot be downcast to `Self`.
     pub fn connect_window_resized<F: Fn(&Self) + 'static>(&self, f: F) -> glib::SignalHandlerId {
         self.connect_local("window-resized", false, move |values| {
             let obj = values[0].get::<Self>().expect("wrong type in signal");

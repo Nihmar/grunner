@@ -16,6 +16,9 @@ use std::rc::Rc;
 pub const MAX_PINNED_APPS: usize = 9;
 
 /// Add an app to pinned apps, returns true if added
+///
+/// # Errors
+/// Returns `Err` if the maximum number of pinned apps (`MAX_PINNED_APPS`) has been reached.
 pub fn add_pinned_app(
     pinned_apps: &Rc<RefCell<Vec<String>>>,
     desktop_id: &str,
@@ -51,9 +54,13 @@ pub fn can_add_pinned_app(pinned_apps: &[String]) -> bool {
     pinned_apps.len() < MAX_PINNED_APPS
 }
 
-/// Reorder pinned apps: move item from source_idx to target_idx
+/// Reorder pinned apps: move item from `source_idx` to `target_idx`
 /// Returns the final position where the item was inserted
-pub fn reorder_pinned_apps(pinned_apps: &mut Vec<String>, source_idx: usize, target_idx: usize) -> usize {
+pub fn reorder_pinned_apps(
+    pinned_apps: &mut Vec<String>,
+    source_idx: usize,
+    target_idx: usize,
+) -> usize {
     if source_idx == target_idx {
         return source_idx;
     }
@@ -63,6 +70,7 @@ pub fn reorder_pinned_apps(pinned_apps: &mut Vec<String>, source_idx: usize, tar
 }
 
 /// Build the pinned apps strip container (vertical layout for right sidebar)
+#[must_use]
 pub fn build_pinned_strip() -> GtkBox {
     let strip = GtkBox::new(Orientation::Vertical, 6);
     strip.set_valign(Align::Start);
@@ -200,13 +208,14 @@ fn setup_drag_and_drop(
 
         // Move source overlay widget to new position in strip
         let children = strip_drop.observe_children();
-        if let Some(source_obj) = children.item(s as u32)
+        if let Some(source_obj) = children.item(u32::try_from(s).unwrap_or(u32::MAX))
             && let Ok(source_overlay) = source_obj.downcast::<gtk4::Widget>()
         {
             strip_drop.remove(&source_overlay);
             if insert_pos == 0 {
                 strip_drop.prepend(&source_overlay);
-            } else if let Some(prev_obj) = children.item((insert_pos - 1) as u32)
+            } else if let Some(prev_obj) =
+                children.item(u32::try_from(insert_pos - 1).unwrap_or(u32::MAX))
                 && let Ok(prev_widget) = prev_obj.downcast::<gtk4::Widget>()
             {
                 strip_drop.insert_child_after(&source_overlay, Some(&prev_widget));
@@ -407,7 +416,10 @@ mod tests {
     fn test_reorder_pinned_apps_forward() {
         let mut apps = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let pos = reorder_pinned_apps(&mut apps, 0, 2);
-        assert_eq!(apps, vec!["b".to_string(), "c".to_string(), "a".to_string()]);
+        assert_eq!(
+            apps,
+            vec!["b".to_string(), "c".to_string(), "a".to_string()]
+        );
         assert_eq!(pos, 2);
     }
 
@@ -415,7 +427,10 @@ mod tests {
     fn test_reorder_pinned_apps_backward() {
         let mut apps = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let pos = reorder_pinned_apps(&mut apps, 2, 0);
-        assert_eq!(apps, vec!["c".to_string(), "a".to_string(), "b".to_string()]);
+        assert_eq!(
+            apps,
+            vec!["c".to_string(), "a".to_string(), "b".to_string()]
+        );
         assert_eq!(pos, 0);
     }
 
@@ -430,7 +445,10 @@ mod tests {
     fn test_reorder_pinned_apps_adjacent() {
         let mut apps = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let pos = reorder_pinned_apps(&mut apps, 0, 1);
-        assert_eq!(apps, vec!["b".to_string(), "a".to_string(), "c".to_string()]);
+        assert_eq!(
+            apps,
+            vec!["b".to_string(), "a".to_string(), "c".to_string()]
+        );
         assert_eq!(pos, 1);
     }
 

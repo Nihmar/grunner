@@ -25,7 +25,7 @@ use gtk4::gio;
 use gtk4::prelude::*;
 use gtk4::{SignalListItemFactory, SingleSelection};
 use std::cell::{Cell, RefCell};
-use std::path::PathBuf;
+use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -190,7 +190,7 @@ pub struct AppListModel {
 }
 
 impl AppListModel {
-    /// Create a new AppListModel with the given configuration
+    /// Create a new `AppListModel` with the given configuration
     ///
     /// # Arguments
     /// * `max_results` - Maximum number of search results to display
@@ -199,6 +199,7 @@ impl AppListModel {
     /// * `search_provider_blacklist` - List of provider IDs to exclude
     /// * `commands` - List of custom script commands
     /// * `disable_modes` - Whether to disable all special modes (colon commands)
+    #[must_use]
     pub fn new(
         max_results: usize,
         obsidian_cfg: Option<ObsidianConfig>,
@@ -274,10 +275,11 @@ impl AppListModel {
         self.command_debounce_ms.set(config.command_debounce_ms);
 
         // Update search provider blacklist
-        *self.search_provider_blacklist.borrow_mut() = config.search_provider_blacklist.clone();
+        (*self.search_provider_blacklist.borrow_mut())
+            .clone_from(&config.search_provider_blacklist);
 
         // Update commands
-        *self.commands.borrow_mut() = config.commands.clone();
+        (*self.commands.borrow_mut()).clone_from(&config.commands);
 
         // Repopulate if max_results changed or in CustomScript mode
         if old_max_results != config.max_results {
@@ -629,9 +631,9 @@ impl AppListModel {
     }
 
     /// Run `find` command to search for files in Obsidian vault
-    pub(crate) fn run_find_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+    pub(crate) fn run_find_in_vault(&self, vault_path: &Path, pattern: &str) {
         let mut cmd = std::process::Command::new("find");
-        cmd.arg(&vault_path)
+        cmd.arg(vault_path)
             .arg("-type")
             .arg("f")
             .arg("-iname")
@@ -640,7 +642,7 @@ impl AppListModel {
     }
 
     /// Run `rg` (ripgrep with grep fallback) command to search file contents in Obsidian vault
-    pub(crate) fn run_rg_in_vault(&self, vault_path: PathBuf, pattern: &str) {
+    pub(crate) fn run_rg_in_vault(&self, vault_path: &Path, pattern: &str) {
         if which("rg").is_some() {
             let mut cmd = std::process::Command::new("rg");
             cmd.arg("-i")
@@ -649,7 +651,7 @@ impl AppListModel {
                 .arg("--no-heading")
                 .arg("--color=never")
                 .arg(pattern)
-                .arg(&vault_path);
+                .arg(vault_path);
             self.run_subprocess(cmd);
         } else {
             let mut cmd = std::process::Command::new("grep");
@@ -661,14 +663,14 @@ impl AppListModel {
                 .arg("--color=never")
                 .arg("--")
                 .arg(pattern)
-                .arg(&vault_path);
+                .arg(vault_path);
             self.run_subprocess(cmd);
         }
     }
 
-    /// Create a GTK SignalListItemFactory for rendering list items
+    /// Create a GTK `SignalListItemFactory` for rendering list items
     ///
-    /// This factory uses the external list_factory module to handle
+    /// This factory uses the external `list_factory` module to handle
     /// UI creation and binding, separating presentation logic from data management.
     pub fn create_factory(&self) -> SignalListItemFactory {
         let active_mode = self.active_mode.get();

@@ -9,6 +9,7 @@ use zbus::zvariant::OwnedValue;
 /// - Simple string (themed icon name)
 /// - Structure with type and payload (themed-icon or file-icon)
 /// - Nested variants and dictionaries
+#[must_use]
 pub fn parse_icon_variant(val: &OwnedValue) -> Option<IconData> {
     use zbus::zvariant::Value;
 

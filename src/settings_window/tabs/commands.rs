@@ -8,7 +8,9 @@ use libadwaita::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Append the "Commands" tab to `notebook`.
+/// # Panics
+/// May panic when accessing `config_rc_clone.borrow().commands.last()` if the
+/// commands vector is empty (though this shouldn't happen since a new command is pushed first).
 pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     let (scroll, inner) = make_tab_page();
 

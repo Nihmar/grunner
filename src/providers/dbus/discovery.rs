@@ -11,6 +11,7 @@ use super::types::SearchProvider;
 ///
 /// Scans standard directories for .ini files describing search providers,
 /// parses them, and filters out any providers in the blacklist.
+#[must_use]
 pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
     let home = get_home_dir();
     let dirs: Vec<PathBuf> = vec![

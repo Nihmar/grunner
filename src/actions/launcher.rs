@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 ///
 /// On Unix systems, checks the file's execute permission bits.
 /// On non-Unix systems, simply returns true if the file exists.
+#[must_use]
 pub fn is_executable(path: &std::path::Path) -> bool {
     if !path.is_file() {
         return false;
@@ -72,6 +73,7 @@ fn find_terminal_impl() -> Option<String> {
 /// Get the preferred terminal emulator
 ///
 /// Returns the cached terminal emulator found at startup.
+#[must_use]
 pub fn find_terminal() -> Option<String> {
     terminal().cloned()
 }

@@ -71,6 +71,7 @@ fn make_icon_button(label: &str, icon_candidates: &[&str], icon_theme: &gtk4::Ic
 ///
 /// # Returns
 /// A `GtkBox` containing all power action buttons properly arranged and configured
+#[must_use]
 pub fn build_power_bar(
     window: &ApplicationWindow,
     entry: &Entry,

@@ -78,10 +78,11 @@ fn build_close_badge() -> Button {
     badge
 }
 
+#[allow(clippy::too_many_lines)]
 fn populate(
     buttons_box: &GtkBox,
     scroll: &ScrolledWindow,
-    windows: Vec<WindowInfo>,
+    windows: &[WindowInfo],
     icon_theme: &gtk4::IconTheme,
     app_window: &ApplicationWindow,
     on_change: &Rc<dyn Fn()>,
@@ -105,7 +106,7 @@ fn populate(
     let window_count = windows.len();
     let all_ids: Vec<u64> = windows.iter().map(|w| w.id).collect();
 
-    for info in &windows {
+    for info in windows {
         log::debug!(
             "[workspace_bar] creating button id={} title={:?} icon={:?}",
             info.id,
@@ -344,7 +345,7 @@ fn poll_windows(
             populate(
                 &buttons_box,
                 &scroll,
-                windows,
+                &windows,
                 &icon_theme,
                 &window,
                 &on_change,
@@ -356,7 +357,7 @@ fn poll_windows(
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => {
             glib::idle_add_local_once(move || {
-                poll_windows(rx, scroll, buttons_box, window, on_change)
+                poll_windows(rx, scroll, buttons_box, window, on_change);
             });
         }
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {

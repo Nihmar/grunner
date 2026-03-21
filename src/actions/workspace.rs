@@ -140,7 +140,9 @@ pub async fn activate_window(id: u64) {
         return;
     };
 
-    let result = windows.activate(id as u32).await;
+    let result = windows
+        .activate(u32::try_from(id).unwrap_or(u32::MAX))
+        .await;
     if let Err(e) = result {
         warn!("[workspace] Activate({id}) failed: {e}");
     }
@@ -154,7 +156,7 @@ pub async fn close_window(id: u64) {
         return;
     };
 
-    let result = windows.close(id as u32).await;
+    let result = windows.close(u32::try_from(id).unwrap_or(u32::MAX)).await;
     if let Err(e) = result {
         warn!("[workspace] Close({id}) failed: {e}");
     }

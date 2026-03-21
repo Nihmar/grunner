@@ -42,7 +42,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     for (i, (mode, name)) in THEMES.iter().enumerate() {
         theme_combo.append_text(name);
         if *mode == current_theme {
-            current_index = i as u32;
+            current_index = u32::try_from(i).unwrap_or(0);
         }
     }
     theme_combo.set_active(Some(current_index));
@@ -75,10 +75,10 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     let config_rc_clone2 = Rc::clone(config_rc);
     path_entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
-        if !text.is_empty() {
-            config_rc_clone2.borrow_mut().custom_theme_path = Some(text);
-        } else {
+        if text.is_empty() {
             config_rc_clone2.borrow_mut().custom_theme_path = None;
+        } else {
+            config_rc_clone2.borrow_mut().custom_theme_path = Some(text);
         }
     });
 

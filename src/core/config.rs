@@ -127,7 +127,7 @@ pub struct Config {
     pub window_height: i32,
     /// Maximum number of search results to display
     pub max_results: usize,
-    /// Directories to scan for .desktop files (raw paths, use expanded_app_dirs())
+    /// Directories to scan for .desktop files (raw paths, use `expanded_app_dirs()`)
     pub app_dirs: Vec<String>,
     /// Optional Obsidian integration configuration
     pub obsidian: Option<ObsidianConfig>,
@@ -140,7 +140,7 @@ pub struct Config {
     /// List of custom script commands for :sh mode
     pub commands: Vec<CommandConfig>,
     /// Disable all special modes (colon commands) and hide power bar
-    /// Activated via --simple / -s command-line flag or GRUNNER_SIMPLE env var
+    /// Activated via --simple / -s command-line flag or `GRUNNER_SIMPLE` env var
     pub disable_modes: bool,
     /// Theme mode selection
     pub theme: ThemeMode,
@@ -329,9 +329,8 @@ fn apply_toml(content: &str) -> (Config, Vec<String>, toml::value::Table) {
         }
     };
 
-    let table = match full {
-        toml::Value::Table(t) => t,
-        _ => return (cfg, failed, toml::value::Table::new()),
+    let toml::Value::Table(table) = full else {
+        return (cfg, failed, toml::value::Table::new());
     };
 
     // [window]
@@ -411,11 +410,11 @@ fn apply_toml(content: &str) -> (Config, Vec<String>, toml::value::Table) {
         match parse_section::<ThemeConfig>(val) {
             Some(theme) => {
                 if let Some(mode) = theme.mode {
-                    debug!("Setting theme mode to {:?}", mode);
+                    debug!("Setting theme mode to {mode:?}");
                     cfg.theme = mode;
                 }
                 if let Some(path) = theme.custom_theme_path {
-                    debug!("Setting custom theme path to {}", path);
+                    debug!("Setting custom theme path to {path}");
                     cfg.custom_theme_path = Some(path);
                 }
             }
@@ -452,9 +451,8 @@ fn patch_failed_sections(mut table: toml::value::Table, failed: &[String]) -> St
             return toml::to_string_pretty(&toml::Value::Table(table)).unwrap_or_default();
         }
     };
-    let default_table = match default_root {
-        toml::Value::Table(t) => t,
-        _ => return toml::to_string_pretty(&toml::Value::Table(table)).unwrap_or_default(),
+    let toml::Value::Table(default_table) = default_root else {
+        return toml::to_string_pretty(&toml::Value::Table(table)).unwrap_or_default();
     };
 
     for section in failed {
@@ -469,6 +467,11 @@ fn patch_failed_sections(mut table: toml::value::Table, failed: &[String]) -> St
 /// Serialize a `Config` back to TOML, matching the file layout.
 ///
 /// `None` fields are omitted so the file stays clean.
+///
+/// # Panics
+///
+/// Panics if TOML serialization of a valid `Config` fails (should never happen).
+#[must_use]
 pub fn config_to_toml(config: &Config) -> String {
     #[derive(Serialize)]
     struct TomlConfig<'a> {

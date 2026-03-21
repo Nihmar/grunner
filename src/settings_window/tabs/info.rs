@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Append the "Info" tab to `notebook`.
+#[allow(clippy::too_many_lines)]
 pub fn build_tab(
     notebook: &gtk4::Notebook,
     config_rc: &Rc<RefCell<Config>>,
@@ -175,8 +176,9 @@ Grunner integrates with GNOME Shell search providers (Files, Calendar, Contacts,
                 cfg.window_height = default_config.window_height;
                 cfg.max_results = default_config.max_results;
                 cfg.command_debounce_ms = default_config.command_debounce_ms;
-                cfg.app_dirs = default_config.app_dirs.clone();
-                cfg.search_provider_blacklist = default_config.search_provider_blacklist.clone();
+                cfg.app_dirs.clone_from(&default_config.app_dirs);
+                cfg.search_provider_blacklist
+                    .clone_from(&default_config.search_provider_blacklist);
                 cfg.obsidian = default_config.obsidian;
                 cfg.workspace_bar_enabled = default_config.workspace_bar_enabled;
             }

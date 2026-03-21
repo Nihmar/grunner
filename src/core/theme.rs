@@ -14,6 +14,7 @@ pub struct ThemeManager {
 }
 
 impl ThemeManager {
+    #[must_use]
     pub fn new() -> Self {
         let provider = gtk4::CssProvider::new();
         Self { provider }
@@ -67,7 +68,7 @@ impl ThemeManager {
             ThemeMode::Custom => {
                 // For custom themes, we don't know if it's light or dark,
                 // so we don't force a color scheme. The theme CSS should define everything.
-                self.load_custom_theme(custom_path)
+                Self::load_custom_theme(custom_path)
             }
         };
 
@@ -78,10 +79,10 @@ impl ThemeManager {
             &self.provider,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
-        log::info!("Applied theme: {:?}", mode);
+        log::info!("Applied theme: {mode:?}");
     }
 
-    fn load_custom_theme(&self, path: Option<&str>) -> &'static str {
+    fn load_custom_theme(path: Option<&str>) -> &'static str {
         if let Some(path) = path {
             let expanded = expand_home(path);
             match std::fs::read_to_string(&expanded) {

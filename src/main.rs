@@ -64,7 +64,7 @@ fn run() -> Result<ExitCode, lexopt::Error> {
                 print_help();
                 return Ok(ExitCode::SUCCESS);
             }
-            Short('v') | Short('V') | Long("version") => {
+            Short('v' | 'V') | Long("version") => {
                 println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
                 return Ok(ExitCode::SUCCESS);
             }
@@ -102,7 +102,7 @@ fn run() -> Result<ExitCode, lexopt::Error> {
         log::debug!("Number of windows: {}", windows.len());
 
         for (i, win) in windows.iter().enumerate() {
-            let classes: Vec<String> = win.css_classes().iter().map(|c| c.to_string()).collect();
+            let classes: Vec<String> = win.css_classes().iter().map(ToString::to_string).collect();
             log::debug!(
                 "Window {}: visible={}, CSS classes: {:?}",
                 i,

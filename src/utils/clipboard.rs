@@ -15,6 +15,9 @@ pub fn copy_text(text: &str) {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if no display is available or clipboard content cannot be set.
 pub fn copy_file(path: &str) -> Result<(), String> {
     let display = gdk::Display::default().ok_or("No display available")?;
     let file = gio::File::for_path(path);
@@ -23,13 +26,15 @@ pub fn copy_file(path: &str) -> Result<(), String> {
     let clipboard = display.clipboard();
     clipboard
         .set_content(Some(&content_provider))
-        .map_err(|e| format!("Failed to set clipboard content: {}", e))
+        .map_err(|e| format!("Failed to set clipboard content: {e}"))
 }
 
+/// # Errors
+///
+/// Returns an error if the file cannot be read.
 #[allow(dead_code)]
 pub fn copy_content(path: &str) -> Result<(), String> {
-    let content =
-        std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {e}"))?;
     copy_text(&content);
     Ok(())
 }

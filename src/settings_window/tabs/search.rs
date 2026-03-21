@@ -10,6 +10,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Append the "Search" tab to `notebook`.
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     let (scroll, inner) = make_tab_page();
 
@@ -30,7 +36,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     max_results_row.connect_notify_local(Some("value"), {
         let config_rc = Rc::clone(config_rc);
         move |row, _| {
-            config_rc.borrow_mut().max_results = row.value() as usize;
+            config_rc.borrow_mut().max_results = row.value().round() as usize;
         }
     });
     behavior_group.add(&max_results_row);
@@ -46,7 +52,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     debounce_row.connect_notify_local(Some("value"), {
         let config_rc = Rc::clone(config_rc);
         move |row, _| {
-            config_rc.borrow_mut().command_debounce_ms = row.value() as u32;
+            config_rc.borrow_mut().command_debounce_ms = row.value().round() as u32;
         }
     });
     behavior_group.add(&debounce_row);

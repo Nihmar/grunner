@@ -62,6 +62,7 @@ impl AppMode {
     /// - No prefix or unrecognized prefix → `Normal` (default application search)
     ///
     /// Note: Order matters - `:obg` must be checked before `:ob` since both start with `:ob`
+    #[must_use]
     pub fn from_text(text: &str) -> Self {
         if text.starts_with(":obg") {
             Self::ObsidianGrep
@@ -90,6 +91,7 @@ impl AppMode {
     /// - `Obsidian`/`ObsidianGrep` → Uses the provided `obsidian_icon`
     /// - `CustomScript` → "utilities-terminal" (terminal icon)
     /// - `Normal` → `None` (no special icon)
+    #[must_use]
     pub fn icon_name(self, obsidian_icon: &str) -> Option<&str> {
         match self {
             Self::FileSearch => Some("text-x-generic"),
@@ -107,6 +109,7 @@ impl AppMode {
     ///
     /// This is used by the UI to determine whether to show the special Obsidian
     /// action bar with buttons for vault actions, new notes, etc.
+    #[must_use]
     pub fn show_obsidian_bar(self) -> bool {
         matches!(self, Self::Obsidian | Self::ObsidianGrep)
     }

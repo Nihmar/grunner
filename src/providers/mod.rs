@@ -31,7 +31,7 @@ pub trait SearchProvider {
     /// * `query` - The search string
     ///
     /// # Returns
-    /// A vector of `glib::Object` instances (AppItem, CommandItem, or SearchResultItem)
+    /// A vector of `glib::Object` instances (`AppItem`, `CommandItem`, or `SearchResultItem`)
     fn search(&self, query: &str) -> Vec<glib::Object>;
 
     /// Update the maximum number of results to return
@@ -163,6 +163,7 @@ impl SearchProvider for AppProvider {
 pub struct CalculatorProvider;
 
 impl CalculatorProvider {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }

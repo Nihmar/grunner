@@ -1,6 +1,6 @@
 //! Command handling logic for Grunner
 //!
-//! This module extracts command handling logic from the AppListModel,
+//! This module extracts command handling logic from the `AppListModel`,
 //! separating concerns between data management and command execution.
 //!
 //! It handles colon-prefixed commands like `:ob`, `:f`, `:sh`, etc.
@@ -10,7 +10,7 @@ use crate::model::items::CommandItem;
 use crate::model::list_model::AppListModel;
 use gtk4::prelude::ListModelExt;
 use log::{debug, error};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Parse a colon-prefixed command into command name and argument
 ///
@@ -31,7 +31,7 @@ pub(crate) fn parse_colon_command(query: &str) -> (&str, &str) {
     }
 }
 
-/// Command handler that operates on an AppListModel instance
+/// Command handler that operates on an `AppListModel` instance
 pub struct CommandHandler<'a> {
     model: &'a AppListModel,
 }
@@ -90,7 +90,7 @@ impl<'a> CommandHandler<'a> {
                 let model_clone = self.model.clone();
                 (
                     ActiveMode::ObsidianFile,
-                    Box::new(move || model_clone.run_find_in_vault(PathBuf::from(vault_str), &arg)),
+                    Box::new(move || model_clone.run_find_in_vault(Path::new(&vault_str), &arg)),
                 )
             }
             ("obg", false) => {
@@ -99,7 +99,7 @@ impl<'a> CommandHandler<'a> {
                 let model_clone = self.model.clone();
                 (
                     ActiveMode::ObsidianGrep,
-                    Box::new(move || model_clone.run_rg_in_vault(PathBuf::from(vault_str), &arg)),
+                    Box::new(move || model_clone.run_rg_in_vault(Path::new(&vault_str), &arg)),
                 )
             }
             _ => {
@@ -191,7 +191,7 @@ impl<'a> CommandHandler<'a> {
     ///
     /// Returns `Some(PathBuf)` if vault is configured and exists,
     /// otherwise shows an error and returns `None`.
-    fn validated_vault_path(&self) -> Option<std::path::PathBuf> {
+    fn validated_vault_path(&self) -> Option<PathBuf> {
         use crate::utils::expand_home;
         let obs_cfg = if let Some(c) = &self.model.obsidian_cfg {
             c.clone()

@@ -35,6 +35,7 @@ impl<'a> ActivationContext<'a> {
         }
     }
 
+    #[must_use]
     pub fn obsidian_config(&self) -> Option<&'a ObsidianConfig> {
         self.model.obsidian_cfg.as_ref()
     }
@@ -56,7 +57,7 @@ pub enum ActivatableItem<'a> {
     Command(&'a CommandItem),
 }
 
-impl<'a> Activatable for ActivatableItem<'a> {
+impl Activatable for ActivatableItem<'_> {
     fn activate(&self, ctx: &ActivationContext) {
         match self {
             ActivatableItem::App(item) => activate_app(item),
@@ -162,7 +163,7 @@ fn activate_search_result(item: &SearchResultItem, ctx: &ActivationContext) {
 }
 
 /// Convert a GTK object to an activatable item if possible
-pub fn as_activatable<'a>(obj: &'a glib::Object) -> Option<ActivatableItem<'a>> {
+pub fn as_activatable(obj: &glib::Object) -> Option<ActivatableItem<'_>> {
     if let Some(item) = obj.downcast_ref::<AppItem>() {
         Some(ActivatableItem::App(item))
     } else {

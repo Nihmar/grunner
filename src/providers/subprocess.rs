@@ -29,7 +29,7 @@ impl<R: 'static> SubprocessRunner<R> {
     ///
     /// # Arguments
     /// * `rx` - Channel receiver for results
-    /// * `model` - Reference to the AppListModel for UI updates
+    /// * `model` - Reference to the `AppListModel` for UI updates
     /// * `generation` - Generation ID to track stale tasks
     /// * `processor` - Callback to process results and update UI
     pub fn new<F>(

@@ -3,7 +3,7 @@
 //! This module provides a single location for global state variables
 //! using `OnceLock` for lazy initialisation (HOME directory, Tokio runtime).
 //!
-//! Settings hot-reload callbacks have moved to `core::callbacks` (GObject signals).
+//! Settings hot-reload callbacks have moved to `core::callbacks` (`GObject` signals).
 
 use std::sync::OnceLock;
 
@@ -23,6 +23,9 @@ pub fn get_home_dir() -> &'static str {
 
 static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
+/// # Panics
+///
+/// Panics if the Tokio runtime cannot be created.
 pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
     TOKIO_RT.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()

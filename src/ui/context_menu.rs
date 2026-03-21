@@ -46,6 +46,7 @@ pub struct WindowCtx {
 }
 
 /// Create a flat menu button with standard CSS classes
+#[must_use]
 pub fn make_menu_button(label: &str) -> Button {
     let btn = Button::with_label(label);
     btn.add_css_class("flat");
@@ -104,7 +105,7 @@ pub fn add_copy_content_button(ctx: &MenuContext, label: &str, path: &str) {
     });
 }
 
-/// Add a menu button that copies a file (as GFile) to clipboard and closes the popover
+/// Add a menu button that copies a file (as `GFile`) to clipboard and closes the popover
 pub fn add_copy_file_button(ctx: &MenuContext, label: &str, path: &str) {
     let path = path.to_string();
     let weak = ctx.weak_popover.clone();
@@ -152,6 +153,7 @@ pub use crate::utils::clipboard::copy_text as copy_text_to_clipboard;
 // ---------------------------------------------------------------------------
 
 /// Check if a file is likely a text file based on its MIME type
+#[must_use]
 pub fn is_text_file(path: &str) -> bool {
     let (mime_str, _) = gtk4::gio::content_type_guess(Some(path), None);
     mime_str.starts_with("text/")
@@ -167,8 +169,7 @@ pub fn is_text_file(path: &str) -> bool {
 pub fn open_in_file_manager(path: &str) {
     let parent = std::path::Path::new(path)
         .parent()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.to_string());
+        .map_or_else(|| path.to_string(), |p| p.to_string_lossy().to_string());
 
     if let Err(e) = std::process::Command::new("xdg-open").arg(&parent).spawn() {
         error!("Failed to open file manager: {e}");
@@ -187,6 +188,7 @@ pub fn open_with_default_app(path: &str) {
 // ---------------------------------------------------------------------------
 
 /// Set up right-click context menu on the results list
+#[allow(clippy::cast_possible_truncation)]
 pub fn setup_list_context_menu(list_view: &gtk4::ListView, ctx: &WindowCtx) {
     let right_click = GestureClick::new();
     right_click.set_button(3);
@@ -194,16 +196,15 @@ pub fn setup_list_context_menu(list_view: &gtk4::ListView, ctx: &WindowCtx) {
     right_click.connect_pressed(clone!(
         #[weak]
         list_view,
-        move |_gesture, _n_press, _click_x, click_y| {
-            let scroll_y = ScrollableExt::vadjustment(&list_view)
-                .map(|a| a.value())
-                .unwrap_or(0.0);
+        move |_gesture, _n_press, click_x, click_y| {
+            let scroll_y = ScrollableExt::vadjustment(&list_view).map_or(0.0, |a| a.value());
             let row_height = list_view
                 .first_child()
-                .map(|c| c.allocation().height() as f64)
+                .map(|c| f64::from(c.allocation().height()))
                 .filter(|h| *h > 0.0)
                 .unwrap_or(48.0);
-            let clicked_pos = ((scroll_y + click_y) / row_height) as u32;
+            let clicked_pos =
+                u32::try_from(((scroll_y + click_y) / row_height).trunc() as i64).unwrap_or(0);
 
             let Some(obj) = ctx.model.store.item(clicked_pos) else {
                 return;
@@ -230,14 +231,14 @@ pub fn setup_list_context_menu(list_view: &gtk4::ListView, ctx: &WindowCtx) {
                 AppMode::CustomScript => {
                     build_shell_context_menu(&obj, &vbox, &weak_popover, &ctx);
                 }
-                _ => {
+                AppMode::Normal => {
                     build_normal_context_menu(&obj, &vbox, &weak_popover, &ctx, mode);
                 }
             }
 
             popover.set_child(Some(&vbox));
             popover.set_parent(&list_view);
-            let rect = gdk::Rectangle::new(_click_x as i32, click_y as i32, 1, 1);
+            let rect = gdk::Rectangle::new(click_x as i32, click_y as i32, 1, 1);
             popover.set_pointing_to(Some(&rect));
             popover.popup();
         }
@@ -270,19 +271,18 @@ fn build_normal_context_menu(
             .map(|a| a.desktop_id.clone());
         let pinned = did
             .as_ref()
-            .map(|id| ctx.pinned_apps.borrow().contains(id))
-            .unwrap_or(false);
+            .is_some_and(|id| ctx.pinned_apps.borrow().contains(id));
         (did, pinned)
     } else {
         (None, false)
     };
 
     let model_open = ctx.model.clone();
-    let mode_open = mode;
+    let action_open = mode;
     let win_open = ctx.window.clone();
     let obj_open = obj.clone();
     add_menu_button(&ctx_menu, "Open", move || {
-        activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
+        activate_item(&obj_open, &model_open, action_open, gdk::CURRENT_TIME);
         win_open.hide();
     });
 
@@ -367,9 +367,8 @@ fn build_obsidian_context_menu(
     ctx: &WindowCtx,
     mode: AppMode,
 ) {
-    let cmd_item = match obj.downcast_ref::<CommandItem>() {
-        Some(item) => item,
-        None => return,
+    let Some(cmd_item) = obj.downcast_ref::<CommandItem>() else {
+        return;
     };
 
     let ctx_menu = MenuContext {
@@ -381,10 +380,10 @@ fn build_obsidian_context_menu(
 
     let obj_open = obj.clone();
     let model_open = ctx.model.clone();
-    let mode_open = mode;
+    let action_open = mode;
     let win_open = ctx.window.clone();
     add_menu_button(&ctx_menu, "Open in Obsidian", move || {
-        activate_item(&obj_open, &model_open, mode_open, gdk::CURRENT_TIME);
+        activate_item(&obj_open, &model_open, action_open, gdk::CURRENT_TIME);
         win_open.hide();
     });
 
@@ -400,9 +399,8 @@ fn build_file_search_context_menu(
     weak_popover: &glib::WeakRef<Popover>,
     ctx: &WindowCtx,
 ) {
-    let cmd_item = match obj.downcast_ref::<CommandItem>() {
-        Some(item) => item,
-        None => return,
+    let Some(cmd_item) = obj.downcast_ref::<CommandItem>() else {
+        return;
     };
 
     let ctx_menu = MenuContext {
@@ -441,9 +439,8 @@ fn build_shell_context_menu(
     weak_popover: &glib::WeakRef<Popover>,
     ctx: &WindowCtx,
 ) {
-    let cmd_item = match obj.downcast_ref::<CommandItem>() {
-        Some(item) => item,
-        None => return,
+    let Some(cmd_item) = obj.downcast_ref::<CommandItem>() else {
+        return;
     };
 
     let ctx_menu = MenuContext {

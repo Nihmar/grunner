@@ -22,6 +22,7 @@ pub struct BindContext<'a> {
 }
 
 impl<'a> BindContext<'a> {
+    #[must_use]
     pub fn new(
         image: &'a Image,
         name_label: &'a Label,
@@ -68,7 +69,7 @@ impl BindStrategy for CalculatorBinder {
     }
 }
 
-/// Strategy for shell command results (CustomScript mode)
+/// Strategy for shell command results (`CustomScript` mode)
 struct ShellCommandBinder;
 
 impl BindStrategy for ShellCommandBinder {
@@ -91,7 +92,7 @@ impl BindStrategy for ShellCommandBinder {
     }
 }
 
-/// Strategy for grep results (file:line:content format)
+/// Strategy for grep results (`file:line:content` format)
 struct GrepResultBinder;
 
 impl BindStrategy for GrepResultBinder {
@@ -201,6 +202,11 @@ fn get_binders() -> Vec<Box<dyn BindStrategy>> {
 ///
 /// This function builds a `GTK SignalListItemFactory` that handles
 /// the creation and binding of list items based on their type.
+///
+/// # Panics
+///
+/// Panics if the list item cannot be downcast to `ListItem`, or if
+/// expected child widgets (hbox, image, vbox, labels) are missing.
 #[must_use]
 pub fn create_factory(
     active_mode: ActiveMode,
@@ -392,9 +398,9 @@ fn bind_obsidian_item(
 ) {
     let icon_name = match obs_item.action() {
         crate::model::items::ObsidianAction::OpenVault => "org.obsidianmd.Obsidian",
-        crate::model::items::ObsidianAction::NewNote => "document-new",
+        crate::model::items::ObsidianAction::NewNote
+        | crate::model::items::ObsidianAction::QuickNote => "document-new",
         crate::model::items::ObsidianAction::DailyNote => "x-office-calendar",
-        crate::model::items::ObsidianAction::QuickNote => "document-new",
     };
 
     image.set_icon_name(Some(icon_name));

@@ -21,6 +21,7 @@ pub struct DesktopInfo {
     pub icon: Option<String>,
 }
 
+#[must_use]
 pub fn resolve_desktop_info(desktop_id: &str) -> Option<DesktopInfo> {
     let home = get_home_dir();
 
@@ -47,6 +48,7 @@ pub fn resolve_desktop_info(desktop_id: &str) -> Option<DesktopInfo> {
     None
 }
 
+#[must_use]
 pub fn resolve_icon_from_desktop(desktop_id: &str) -> String {
     resolve_desktop_info(desktop_id)
         .map(|info| info.icon.unwrap_or_default())
