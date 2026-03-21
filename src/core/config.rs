@@ -475,19 +475,19 @@ fn patch_failed_sections(mut table: toml::value::Table, failed: &[String]) -> St
 pub fn config_to_toml(config: &Config) -> String {
     #[derive(Serialize)]
     struct TomlConfig<'a> {
-        window: WindowConfig,
-        search: SearchConfig<'a>,
+        window: SerWindow,
+        search: SerSearch<'a>,
         obsidian: Option<&'a ObsidianConfig>,
         commands: &'a [CommandConfig],
-        theme: ThemeConfig,
+        theme: SerTheme,
     }
     #[derive(Serialize)]
-    struct WindowConfig {
+    struct SerWindow {
         width: i32,
         height: i32,
     }
     #[derive(Serialize)]
-    struct SearchConfig<'a> {
+    struct SerSearch<'a> {
         max_results: usize,
         app_dirs: &'a [String],
         command_debounce_ms: u32,
@@ -496,17 +496,17 @@ pub fn config_to_toml(config: &Config) -> String {
         pinned_apps: &'a [String],
     }
     #[derive(Serialize)]
-    struct ThemeConfig {
+    struct SerTheme {
         mode: ThemeMode,
         custom_theme_path: Option<String>,
     }
 
     let tc = TomlConfig {
-        window: WindowConfig {
+        window: SerWindow {
             width: config.window_width,
             height: config.window_height,
         },
-        search: SearchConfig {
+        search: SerSearch {
             max_results: config.max_results,
             app_dirs: &config.app_dirs,
             command_debounce_ms: config.command_debounce_ms,
@@ -516,7 +516,7 @@ pub fn config_to_toml(config: &Config) -> String {
         },
         obsidian: config.obsidian.as_ref(),
         commands: &config.commands,
-        theme: ThemeConfig {
+        theme: SerTheme {
             mode: config.theme,
             custom_theme_path: config.custom_theme_path.clone(),
         },

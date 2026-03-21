@@ -4,32 +4,27 @@
 //! - Application list management with fuzzy matching
 //! - Command execution and result handling
 //! - Search provider integration
-//! - Obsidian vault searching
 //! - Real-time result updates with background threads
 //!
 //! The `AppListModel` struct is the central coordinator that manages
 //! all search modes, executes commands, and updates the GTK list store.
 
-use crate::actions::which;
 use crate::app_mode::ActiveMode;
 use crate::core::config::{CommandConfig, ObsidianConfig};
-use crate::core::global_state::get_home_dir;
 use crate::launcher::DesktopApp;
-use crate::model::items::CommandItem;
 use crate::model::items::SearchResultItem;
 use crate::providers::dbus::{self, SearchProvider as DbusSearchProvider};
 use crate::providers::{AppProvider, CalculatorProvider, CommandProvider, SearchProvider};
-pub use crate::providers::{SubprocessRunner, spawn_subprocess};
-use crate::utils::expand_home;
+use gtk4::SingleSelection;
 use gtk4::gio;
 use gtk4::prelude::*;
-use gtk4::{SignalListItemFactory, SingleSelection};
 use std::cell::{Cell, RefCell};
-use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
 const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 100;
+const PROVIDER_SEARCH_DEBOUNCE_MS: u32 = 120;
+const PROVIDER_CLEAR_TIMEOUT_MS: u64 = 25;
 
 // ── Pollers ───────────────────────────────────────────────────────────────────
 
@@ -190,6 +185,43 @@ pub struct AppListModel {
 }
 
 impl AppListModel {
+    // ── Internal API ──────────────────────────────────────────────────────────
+
+    /// Set the current active mode
+    pub(crate) fn set_active_mode(&self, mode: ActiveMode) {
+        self.active_mode.set(mode);
+    }
+
+    /// Get the current active mode
+    pub(crate) fn active_mode(&self) -> ActiveMode {
+        self.active_mode.get()
+    }
+
+    /// Append an item to the list store
+    pub(crate) fn append_store_item(&self, obj: &impl IsA<glib::Object>) {
+        self.store.append(obj);
+    }
+
+    /// Remove all items from the list store
+    pub(crate) fn remove_all_store_items(&self) {
+        self.store.remove_all();
+    }
+
+    /// Return the number of items in the list store
+    pub(crate) fn store_item_count(&self) -> u32 {
+        self.store.n_items()
+    }
+
+    /// Set the selected position in the selection model
+    pub(crate) fn set_selected_position(&self, pos: u32) {
+        self.selection.set_selected(pos);
+    }
+
+    /// Return a reference to the Obsidian configuration, if present
+    pub(crate) fn obsidian_config(&self) -> Option<&ObsidianConfig> {
+        self.obsidian_cfg.as_ref()
+    }
+
     /// Create a new `AppListModel` with the given configuration
     ///
     /// # Arguments
@@ -387,7 +419,7 @@ impl AppListModel {
         let max = self.max_results.get();
         let model_clone = self.clone();
         // Use shorter debounce for search providers for more responsive feel
-        self.schedule_command_with_delay(120, move || {
+        self.schedule_command_with_delay(PROVIDER_SEARCH_DEBOUNCE_MS, move || {
             model_clone.run_provider_search(providers_clone, query, max, clear_store);
         });
     }
@@ -396,10 +428,29 @@ impl AppListModel {
     ///
     /// This is used to identify stale async tasks - if a task's generation
     /// doesn't match the current one, its results should be discarded.
-    fn bump_task_gen(&self) -> u64 {
+    pub(crate) fn bump_task_gen(&self) -> u64 {
         let next_gen = self.task_gen.get() + 1;
         self.task_gen.set(next_gen);
         next_gen
+    }
+
+    /// Bump the task generation counter and schedule a command that
+    /// only executes if no newer bump has occurred.
+    ///
+    /// This encapsulates the common bump-and-check pattern used by
+    /// handlers that schedule async work which should be cancelled
+    /// when the user types new input.
+    pub(crate) fn bump_and_schedule<F>(&self, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        let generation = self.bump_task_gen();
+        let model_clone = self.clone();
+        self.schedule_command(move || {
+            if model_clone.task_gen.get() == generation {
+                f();
+            }
+        });
     }
 
     /// Main entry point for updating search results based on query
@@ -471,7 +522,7 @@ impl AppListModel {
             // Colon commands: immediate (they have internal debounce)
             glib::idle_add_local_once(move || model.populate(&query));
         } else {
-            // Default search: 200ms debounce
+            // Default search: debounce via schedule_search (uses search_debounce_ms)
             self.schedule_search(move || model.populate(&query));
         }
     }
@@ -481,34 +532,6 @@ impl AppListModel {
         use crate::command_handler::CommandHandler;
         let handler = CommandHandler::new(self);
         handler.handle_colon_command(query);
-    }
-
-    /// Run a subprocess command and collect its output in a background thread
-    ///
-    /// The command output is sent back to the main thread via a channel,
-    /// then processed by a `SubprocessRunner` to update the UI.
-    fn run_subprocess(&self, cmd: std::process::Command) {
-        let generation = self.task_gen.get();
-        let max_results = self.max_results.get();
-        let model_clone = self.clone();
-
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
-
-        spawn_subprocess(move || cmd, max_results, tx);
-
-        let processor = |model: &AppListModel, _gen: u64, lines: Vec<String>| {
-            model.store.remove_all();
-            for line in lines {
-                model.store.append(&CommandItem::new(line));
-            }
-            if model.store.n_items() > 0
-                && model.selection.selected() == gtk4::INVALID_LIST_POSITION
-            {
-                model.selection.set_selected(0);
-            }
-        };
-        let runner = SubprocessRunner::new(rx, model_clone, generation, processor);
-        glib::idle_add_local_once(move || runner.poll());
     }
 
     /// Run a search query through GNOME Shell search providers
@@ -534,16 +557,19 @@ impl AppListModel {
             let clear_model = self.clone();
             let clear_gen = generation;
             let clear_timeout_clone = clear_timeout.clone();
-            let timeout_id = glib::timeout_add_local(Duration::from_millis(25), move || {
-                if clear_model.task_gen.get() == clear_gen {
-                    clear_model.store.remove_all();
-                    clear_model
-                        .selection
-                        .set_selected(gtk4::INVALID_LIST_POSITION);
-                }
-                *clear_timeout_clone.borrow_mut() = None;
-                glib::ControlFlow::Break
-            });
+            let timeout_id = glib::timeout_add_local(
+                Duration::from_millis(PROVIDER_CLEAR_TIMEOUT_MS),
+                move || {
+                    if clear_model.task_gen.get() == clear_gen {
+                        clear_model.store.remove_all();
+                        clear_model
+                            .selection
+                            .set_selected(gtk4::INVALID_LIST_POSITION);
+                    }
+                    *clear_timeout_clone.borrow_mut() = None;
+                    glib::ControlFlow::Break
+                },
+            );
             *clear_timeout.borrow_mut() = Some(timeout_id);
         }
 
@@ -563,122 +589,6 @@ impl AppListModel {
             clear_store,
         };
         glib::idle_add_local_once(move || poller.poll());
-    }
-
-    /// Execute a file search command without using shell
-    pub(crate) fn run_file_search(&self, argument: &str) {
-        // Try plocate first, fall back to find
-        let command = if which("plocate").is_some() {
-            // plocate -i -- "$argument" 2>/dev/null
-            let mut cmd = std::process::Command::new("plocate");
-            cmd.arg("-i")
-                .arg("--")
-                .arg(argument)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null());
-            cmd
-        } else {
-            // find "$HOME" -type f -ipath "*$argument*" 2>/dev/null
-            let home = get_home_dir();
-            let mut cmd = std::process::Command::new("find");
-            cmd.arg(home)
-                .arg("-type")
-                .arg("f")
-                .arg("-iname")
-                .arg(format!("*{argument}*"))
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null());
-            cmd
-        };
-
-        self.run_subprocess(command);
-    }
-
-    /// Execute a file grep command without using shell
-    pub(crate) fn run_file_grep(&self, argument: &str) {
-        let command = if which("rg").is_some() {
-            // rg --with-filename --line-number --no-heading -S "$argument" ~ 2>/dev/null | head -20
-            let home = get_home_dir();
-            let mut cmd = std::process::Command::new("rg");
-            cmd.arg("--with-filename")
-                .arg("--line-number")
-                .arg("--no-heading")
-                .arg("-i")
-                .arg(argument)
-                .arg(home)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null());
-            cmd
-        } else {
-            // grep -r -i -n -I -H -- "$argument" "$HOME" 2>/dev/null | head -20
-            let home = get_home_dir();
-            let mut cmd = std::process::Command::new("grep");
-            cmd.arg("-r")
-                .arg("-i")
-                .arg("-n")
-                .arg("-I")
-                .arg("-H")
-                .arg("--")
-                .arg(argument)
-                .arg(home)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null());
-            cmd
-        };
-
-        // Run the command (output limited by run_subprocess)
-        self.run_subprocess(command);
-    }
-
-    /// Run `find` command to search for files in Obsidian vault
-    pub(crate) fn run_find_in_vault(&self, vault_path: &Path, pattern: &str) {
-        let mut cmd = std::process::Command::new("find");
-        cmd.arg(vault_path)
-            .arg("-type")
-            .arg("f")
-            .arg("-iname")
-            .arg(format!("*{pattern}*"));
-        self.run_subprocess(cmd);
-    }
-
-    /// Run `rg` (ripgrep with grep fallback) command to search file contents in Obsidian vault
-    pub(crate) fn run_rg_in_vault(&self, vault_path: &Path, pattern: &str) {
-        if which("rg").is_some() {
-            let mut cmd = std::process::Command::new("rg");
-            cmd.arg("-i")
-                .arg("--with-filename")
-                .arg("--line-number")
-                .arg("--no-heading")
-                .arg("--color=never")
-                .arg(pattern)
-                .arg(vault_path);
-            self.run_subprocess(cmd);
-        } else {
-            let mut cmd = std::process::Command::new("grep");
-            cmd.arg("-r")
-                .arg("-n")
-                .arg("-i")
-                .arg("-I")
-                .arg("-H")
-                .arg("--color=never")
-                .arg("--")
-                .arg(pattern)
-                .arg(vault_path);
-            self.run_subprocess(cmd);
-        }
-    }
-
-    /// Create a GTK `SignalListItemFactory` for rendering list items
-    ///
-    /// This factory uses the external `list_factory` module to handle
-    /// UI creation and binding, separating presentation logic from data management.
-    pub fn create_factory(&self) -> SignalListItemFactory {
-        let active_mode = self.active_mode.get();
-        let vault_path = self
-            .obsidian_cfg
-            .as_ref()
-            .map(|cfg| expand_home(&cfg.vault).to_string_lossy().into_owned());
-        crate::ui::list_factory::create_factory(active_mode, vault_path)
     }
 }
 

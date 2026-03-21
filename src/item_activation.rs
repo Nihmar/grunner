@@ -41,27 +41,28 @@ impl<'a> ActivationContext<'a> {
     }
 }
 
-// ─── Activatable Trait ─────────────────────────────────────────────────────────
+// ─── GrunnerItem Enum ──────────────────────────────────────────────────────────
 
-/// Trait for activatable items
-///
-/// Implement this trait to make an item type activatable.
-/// Each implementation defines how the item behaves when activated.
-pub trait Activatable {
-    fn activate(&self, ctx: &ActivationContext);
-}
-
-/// Wrapper enum for activatable items
-pub enum ActivatableItem<'a> {
+/// Enum representing all item types in Grunner
+pub enum GrunnerItem<'a> {
     App(&'a AppItem),
     Command(&'a CommandItem),
+    ObsidianAction(&'a ObsidianActionItem),
+    SearchResult(&'a SearchResultItem),
 }
 
-impl Activatable for ActivatableItem<'_> {
-    fn activate(&self, ctx: &ActivationContext) {
-        match self {
-            ActivatableItem::App(item) => activate_app(item),
-            ActivatableItem::Command(item) => activate_command(item, ctx),
+impl<'a> GrunnerItem<'a> {
+    /// Try to downcast a `glib::Object` to a `GrunnerItem`
+    pub fn from_object(obj: &'a glib::Object) -> Option<Self> {
+        if let Some(item) = obj.downcast_ref::<AppItem>() {
+            Some(GrunnerItem::App(item))
+        } else if let Some(item) = obj.downcast_ref::<CommandItem>() {
+            Some(GrunnerItem::Command(item))
+        } else if let Some(item) = obj.downcast_ref::<ObsidianActionItem>() {
+            Some(GrunnerItem::ObsidianAction(item))
+        } else {
+            obj.downcast_ref::<SearchResultItem>()
+                .map(GrunnerItem::SearchResult)
         }
     }
 }
@@ -162,30 +163,6 @@ fn activate_search_result(item: &SearchResultItem, ctx: &ActivationContext) {
     });
 }
 
-/// Convert a GTK object to an activatable item if possible
-pub fn as_activatable(obj: &glib::Object) -> Option<ActivatableItem<'_>> {
-    if let Some(item) = obj.downcast_ref::<AppItem>() {
-        Some(ActivatableItem::App(item))
-    } else {
-        obj.downcast_ref::<CommandItem>()
-            .map(ActivatableItem::Command)
-    }
-}
-
-/// Activate an Obsidian action item
-pub fn activate_obsidian_action_item(obj: &glib::Object, ctx: &ActivationContext) {
-    if let Some(item) = obj.downcast_ref::<ObsidianActionItem>() {
-        activate_obsidian_action(item, ctx);
-    }
-}
-
-/// Activate a search result item
-pub fn activate_search_result_item(obj: &glib::Object, ctx: &ActivationContext) {
-    if let Some(item) = obj.downcast_ref::<SearchResultItem>() {
-        activate_search_result(item, ctx);
-    }
-}
-
 // ─── Legacy API (for backwards compatibility) ─────────────────────────────────
 
 /// Parse and open Obsidian grep result lines
@@ -221,10 +198,11 @@ pub fn activate_item(obj: &glib::Object, model: &AppListModel, mode: AppMode, ti
     debug!("Activating item in mode {mode:?}");
     let ctx = ActivationContext::new(model, mode, timestamp);
 
-    if let Some(activatable) = as_activatable(obj) {
-        activatable.activate(&ctx);
-    } else {
-        activate_obsidian_action_item(obj, &ctx);
-        activate_search_result_item(obj, &ctx);
+    match GrunnerItem::from_object(obj) {
+        Some(GrunnerItem::App(item)) => activate_app(item),
+        Some(GrunnerItem::Command(item)) => activate_command(item, &ctx),
+        Some(GrunnerItem::ObsidianAction(item)) => activate_obsidian_action(item, &ctx),
+        Some(GrunnerItem::SearchResult(item)) => activate_search_result(item, &ctx),
+        None => warn!("Unknown item type, cannot activate"),
     }
 }

@@ -352,7 +352,13 @@ fn build_main_layout(
     };
 
     // Create list view factory for rendering result items
-    let factory = model.create_factory();
+    let active_mode = model.active_mode.get();
+    let vault_path = model.obsidian_cfg.as_ref().map(|cfg| {
+        crate::utils::expand_home(&cfg.vault)
+            .to_string_lossy()
+            .into_owned()
+    });
+    let factory = crate::ui::list_factory::create_factory(active_mode, vault_path);
     // Create list view with selection model and custom factory
     let list_view = ListView::new(Some(model.selection.clone()), Some(factory));
     list_view.set_single_click_activate(false); // Require double-click/Enter to activate

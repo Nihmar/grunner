@@ -8,6 +8,7 @@
 pub mod clipboard;
 pub mod desktop;
 
+use crate::calculator::is_valid_calc_char;
 use crate::core::global_state::get_home_dir;
 use gtk4::gio;
 use std::path::PathBuf;
@@ -113,20 +114,7 @@ pub fn is_calculator_result(line: &str) -> bool {
         return false;
     }
 
-    if !expr.chars().all(|c| {
-        c.is_ascii_digit()
-            || c == '.'
-            || c == '+'
-            || c == '-'
-            || c == '*'
-            || c == '/'
-            || c == '%'
-            || c == '^'
-            || c == '('
-            || c == ')'
-            || c.is_whitespace()
-            || c.is_ascii_alphabetic()
-    }) {
+    if !expr.chars().all(is_valid_calc_char) {
         return false;
     }
 

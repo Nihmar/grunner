@@ -15,6 +15,7 @@ pub mod core {
 }
 pub mod item_activation;
 pub mod launcher;
+pub mod logging;
 pub mod model {
     pub mod items;
     pub mod list_model;

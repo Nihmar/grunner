@@ -6,6 +6,7 @@
 //! list model logic.
 
 pub mod dbus;
+pub mod file_search;
 pub mod subprocess;
 
 pub use subprocess::{SubprocessRunner, spawn_subprocess};

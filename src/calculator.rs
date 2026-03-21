@@ -16,6 +16,22 @@
 
 use log::debug;
 
+/// Check whether a character is valid inside a calculator expression.
+pub(crate) fn is_valid_calc_char(c: char) -> bool {
+    c.is_ascii_digit()
+        || c == '.'
+        || c == '+'
+        || c == '-'
+        || c == '*'
+        || c == '/'
+        || c == '%'
+        || c == '^'
+        || c == '('
+        || c == ')'
+        || c.is_whitespace()
+        || c.is_ascii_alphabetic()
+}
+
 /// Evaluate a mathematical expression and return the result as a string
 ///
 /// # Arguments
@@ -44,20 +60,7 @@ pub fn evaluate(expr: &str) -> Option<String> {
     }
 
     // Check if expression contains only valid characters (numbers, operators, spaces, parentheses, ASCII letters)
-    if !expr.chars().all(|c| {
-        c.is_ascii_digit()
-            || c == '.'
-            || c == '+'
-            || c == '-'
-            || c == '*'
-            || c == '/'
-            || c == '%'
-            || c == '^'
-            || c == '('
-            || c == ')'
-            || c.is_whitespace()
-            || c.is_ascii_alphabetic()
-    }) {
+    if !expr.chars().all(is_valid_calc_char) {
         return None;
     }
 

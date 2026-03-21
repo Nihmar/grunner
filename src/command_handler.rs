@@ -8,7 +8,8 @@
 use crate::app_mode::ActiveMode;
 use crate::model::items::CommandItem;
 use crate::model::list_model::AppListModel;
-use gtk4::prelude::ListModelExt;
+use crate::providers::file_search;
+
 use log::{debug, error};
 use std::path::{Path, PathBuf};
 
@@ -46,7 +47,7 @@ impl<'a> CommandHandler<'a> {
     pub fn handle_colon_command(&self, query: &str) {
         let (cmd_part, arg) = parse_colon_command(query);
         debug!("handle_colon_command: query='{query}', cmd_part='{cmd_part}', arg='{arg}'");
-        debug!("Active mode: {:?}", self.model.active_mode.get());
+        debug!("Active mode: {:?}", self.model.active_mode());
 
         match cmd_part {
             "ob" | "obg" => self.handle_obsidian(cmd_part, arg),
@@ -74,13 +75,13 @@ impl<'a> CommandHandler<'a> {
         let (mode, runner): (ActiveMode, Box<dyn FnOnce()>) = match (cmd_name, arg.is_empty()) {
             ("ob", true) => {
                 // Empty :ob command - show Obsidian action mode
-                self.model.active_mode.set(ActiveMode::ObsidianAction);
+                self.model.set_active_mode(ActiveMode::ObsidianAction);
                 self.clear_store();
                 return;
             }
             ("obg", true) => {
                 // Empty :obg command - show Obsidian grep mode
-                self.model.active_mode.set(ActiveMode::ObsidianGrep);
+                self.model.set_active_mode(ActiveMode::ObsidianGrep);
                 self.clear_store();
                 return;
             }
@@ -90,7 +91,9 @@ impl<'a> CommandHandler<'a> {
                 let model_clone = self.model.clone();
                 (
                     ActiveMode::ObsidianFile,
-                    Box::new(move || model_clone.run_find_in_vault(Path::new(&vault_str), &arg)),
+                    Box::new(move || {
+                        file_search::run_find_in_vault(&model_clone, Path::new(&vault_str), &arg);
+                    }),
                 )
             }
             ("obg", false) => {
@@ -99,7 +102,9 @@ impl<'a> CommandHandler<'a> {
                 let model_clone = self.model.clone();
                 (
                     ActiveMode::ObsidianGrep,
-                    Box::new(move || model_clone.run_rg_in_vault(Path::new(&vault_str), &arg)),
+                    Box::new(move || {
+                        file_search::run_rg_in_vault(&model_clone, Path::new(&vault_str), &arg);
+                    }),
                 )
             }
             _ => {
@@ -109,8 +114,8 @@ impl<'a> CommandHandler<'a> {
             }
         };
 
-        self.model.active_mode.set(mode);
-        self.model.task_gen.set(self.model.task_gen.get() + 1);
+        self.model.set_active_mode(mode);
+        self.model.bump_task_gen();
         self.model.schedule_command(runner);
     }
 
@@ -120,14 +125,10 @@ impl<'a> CommandHandler<'a> {
             return;
         }
 
-        let current_gen = self.model.task_gen.get() + 1;
-        self.model.task_gen.set(current_gen);
         let arg = arg.to_string();
         let model_clone = self.model.clone();
-        self.model.schedule_command(move || {
-            if model_clone.task_gen.get() == current_gen {
-                model_clone.run_file_search(&arg);
-            }
+        self.model.bump_and_schedule(move || {
+            file_search::run_file_search(&model_clone, &arg);
         });
     }
 
@@ -137,21 +138,17 @@ impl<'a> CommandHandler<'a> {
             return;
         }
 
-        let current_gen = self.model.task_gen.get() + 1;
-        self.model.task_gen.set(current_gen);
         let arg = arg.to_string();
         let model_clone = self.model.clone();
-        self.model.schedule_command(move || {
-            if model_clone.task_gen.get() == current_gen {
-                model_clone.run_file_grep(&arg);
-            }
+        self.model.bump_and_schedule(move || {
+            file_search::run_file_grep(&model_clone, &arg);
         });
     }
 
     pub(crate) fn handle_sh(&self, arg: &str) {
         use crate::providers::CommandProvider;
         debug!("Setting active_mode to CustomScript");
-        self.model.active_mode.set(ActiveMode::CustomScript);
+        self.model.set_active_mode(ActiveMode::CustomScript);
         self.clear_store();
 
         // Get filtered commands using the CommandProvider trait
@@ -167,7 +164,7 @@ impl<'a> CommandHandler<'a> {
         for cmd in filtered_commands {
             // Format as "Name | Command" for display
             let item_str = format!("{} | {}", cmd.name, cmd.command);
-            self.model.store.append(&CommandItem::new_with_options(
+            self.model.append_store_item(&CommandItem::new_with_options(
                 item_str,
                 cmd.working_dir.clone(),
                 cmd.keep_open,
@@ -179,12 +176,11 @@ impl<'a> CommandHandler<'a> {
             let run_item_str = format!("Run: {arg}");
             // Custom commands default to keep_open=true
             self.model
-                .store
-                .append(&CommandItem::new_with_options(run_item_str, None, true));
+                .append_store_item(&CommandItem::new_with_options(run_item_str, None, true));
         }
 
-        debug!("Final store count: {}", self.model.store.n_items());
-        debug!("Active mode is now: {:?}", self.model.active_mode.get());
+        debug!("Final store count: {}", self.model.store_item_count());
+        debug!("Active mode is now: {:?}", self.model.active_mode());
     }
 
     /// Validate the Obsidian vault path from configuration
@@ -193,7 +189,7 @@ impl<'a> CommandHandler<'a> {
     /// otherwise shows an error and returns `None`.
     fn validated_vault_path(&self) -> Option<PathBuf> {
         use crate::utils::expand_home;
-        let obs_cfg = if let Some(c) = &self.model.obsidian_cfg {
+        let obs_cfg = if let Some(c) = self.model.obsidian_config() {
             c.clone()
         } else {
             self.show_error_item("Obsidian not configured - edit config");
@@ -214,17 +210,16 @@ impl<'a> CommandHandler<'a> {
     ///
     /// Used for configuration errors, missing dependencies, etc.
     fn show_error_item(&self, msg: impl Into<String>) {
-        self.model.store.remove_all();
-        self.model.store.append(&CommandItem::new(msg.into()));
-        self.model.selection.set_selected(0);
+        self.model.remove_all_store_items();
+        self.model.append_store_item(&CommandItem::new(msg.into()));
+        self.model.set_selected_position(0);
     }
 
     /// Clear all items from the list store and reset selection
     fn clear_store(&self) {
-        self.model.store.remove_all();
+        self.model.remove_all_store_items();
         self.model
-            .selection
-            .set_selected(gtk4::INVALID_LIST_POSITION);
+            .set_selected_position(gtk4::INVALID_LIST_POSITION);
     }
 }
 

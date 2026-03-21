@@ -1,33 +1,5 @@
-mod actions;
-mod app_mode;
-mod calculator;
-mod command_handler;
-mod core {
-    pub mod callbacks;
-    pub mod config;
-    pub mod global_state;
-    pub mod theme;
-}
-mod item_activation;
-mod launcher;
-mod logging;
-mod model {
-    pub mod items;
-    pub mod list_model;
-}
-mod providers;
-mod settings_window;
-mod ui {
-    pub mod context_menu;
-    pub mod list_factory;
-    pub mod obsidian_bar;
-    pub mod pinned_strip;
-    pub mod power_bar;
-    pub mod window;
-    pub mod workspace_bar;
-}
-mod utils;
 use glib::ExitCode;
+use grunner::{core, logging, providers, ui};
 use gtk4::prelude::*;
 use lexopt::prelude::*;
 use libadwaita::Application;

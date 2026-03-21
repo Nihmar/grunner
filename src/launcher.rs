@@ -197,54 +197,26 @@ fn save_cache(apps: &[DesktopApp]) {
 fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     info!("Scanning {} directories for .desktop files", dirs.len());
 
-    // Only use parallel iteration for larger workloads to avoid thread pool overhead
-    // For small directory counts, sequential processing is more efficient
-    let use_parallel = dirs.len() > 4;
-
-    // Collect all .desktop file paths
-    let paths: Vec<PathBuf> = if use_parallel {
-        dirs.par_iter()
-            .filter(|d| {
-                let exists = d.exists();
-                if !exists {
-                    debug!("Skipping non-existent directory: {}", d.display());
-                }
-                exists
-            })
-            .flat_map(|dir| {
-                debug!("Scanning directory: {}", dir.display());
-                WalkDir::new(dir)
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|e| {
-                        e.path().extension().and_then(|ext| ext.to_str()) == Some("desktop")
-                    })
-                    .map(|e| e.path())
-                    .collect::<Vec<_>>()
-            })
-            .collect()
-    } else {
-        dirs.iter()
-            .filter(|d| {
-                let exists = d.exists();
-                if !exists {
-                    debug!("Skipping non-existent directory: {}", d.display());
-                }
-                exists
-            })
-            .flat_map(|dir| {
-                debug!("Scanning directory: {}", dir.display());
-                WalkDir::new(dir)
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|e| {
-                        e.path().extension().and_then(|ext| ext.to_str()) == Some("desktop")
-                    })
-                    .map(|e| e.path())
-                    .collect::<Vec<_>>()
-            })
-            .collect()
-    };
+    // Collect all .desktop file paths (Rayon handles small workloads efficiently)
+    let paths: Vec<PathBuf> = dirs
+        .par_iter()
+        .filter(|d| {
+            let exists = d.exists();
+            if !exists {
+                debug!("Skipping non-existent directory: {}", d.display());
+            }
+            exists
+        })
+        .flat_map(|dir| {
+            debug!("Scanning directory: {}", dir.display());
+            WalkDir::new(dir)
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("desktop"))
+                .map(|e| e.path())
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
     debug!("Found {} .desktop files before deduplication", paths.len());
 
@@ -260,19 +232,11 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
         unique_paths.len()
     );
 
-    // Parse desktop files - use parallel iteration only for larger workloads
-    let use_parallel_parsing = unique_paths.len() > 50;
-    let mut apps: Vec<DesktopApp> = if use_parallel_parsing {
-        unique_paths
-            .par_iter()
-            .filter_map(|p| parse_desktop_file(p))
-            .collect()
-    } else {
-        unique_paths
-            .iter()
-            .filter_map(|p| parse_desktop_file(p))
-            .collect()
-    };
+    // Parse desktop files
+    let mut apps: Vec<DesktopApp> = unique_paths
+        .par_iter()
+        .filter_map(|p| parse_desktop_file(p))
+        .collect();
 
     debug!("Successfully parsed {} applications", apps.len());
 

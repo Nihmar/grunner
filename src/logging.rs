@@ -236,6 +236,10 @@ fn init_no_logger() {
 }
 
 /// Initialize logging based on configuration
+///
+/// # Errors
+///
+/// Returns an error if the global logger has already been set.
 pub fn init_with_config(config: &LogConfig) -> Result<(), SetLoggerError> {
     // Store configuration
     let _ = CONFIG.set(config.clone());
@@ -262,6 +266,10 @@ pub fn init_with_config(config: &LogConfig) -> Result<(), SetLoggerError> {
 }
 
 /// Initialize logging based on environment variables
+///
+/// # Errors
+///
+/// Returns an error if the global logger has already been set.
 pub fn init() -> Result<(), SetLoggerError> {
     let config = load_config_from_env();
     init_with_config(&config)
