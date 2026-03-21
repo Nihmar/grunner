@@ -46,70 +46,60 @@ use std::rc::Rc;
 // Helper functions for background processing
 // ---------------------------------------------------------------------------
 
-/// Poll for application loading results from background thread
-///
-/// This function checks a channel for the results of desktop application
-/// scanning and updates the list model when apps are ready. It uses
-/// `GLib`'s idle callbacks to avoid blocking the UI thread.
-///
-/// # Arguments
-/// * `rx` - Channel receiver for desktop application vector
-/// * `model` - The `AppListModel` to update with loaded applications
-/// * `all_apps` - Shared reference to loaded apps for pinned strip
-/// * `pinned_strip` - The pinned strip container to update
-/// * `pinned_separator` - The pinned separator to update
-/// * `pinned_apps` - Current pinned apps list
-/// * `window` - Application window for pinned strip context menus
-fn poll_apps(
-    rx: std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>,
+/// Context for app loading polling — groups all state needed when apps are ready
+struct AppLoadingContext {
+    rx: Rc<std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>>,
     model: AppListModel,
     all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pinned_strip: GtkBox,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: ApplicationWindow,
     dragging: Rc<Cell<bool>>,
-) {
-    match rx.try_recv() {
-        Ok(apps) => {
-            // Apps loaded successfully - update the model
-            info!("Loaded {} applications", apps.len());
+}
 
-            // Store loaded apps for pinned strip lookup
-            (*all_apps.borrow_mut()).clone_from(&apps);
-
-            // Update pinned strip with loaded apps
-            let pinned = pinned_apps.borrow();
-            update_pinned_strip(
-                &pinned_strip,
-                &pinned,
-                &apps,
-                &window,
-                &pinned_apps,
-                &all_apps,
-                &dragging,
-            );
-            update_strip_visibility(&pinned_strip, &pinned, true);
-
-            model.set_apps(apps);
+impl Clone for AppLoadingContext {
+    fn clone(&self) -> Self {
+        Self {
+            rx: Rc::clone(&self.rx),
+            model: self.model.clone(),
+            all_apps: Rc::clone(&self.all_apps),
+            pinned_strip: self.pinned_strip.clone(),
+            pinned_apps: Rc::clone(&self.pinned_apps),
+            window: self.window.clone(),
+            dragging: Rc::clone(&self.dragging),
         }
-        Err(std::sync::mpsc::TryRecvError::Empty) => {
-            // No data yet - reschedule polling on next idle
-            trace!("Application loading still in progress");
-            glib::idle_add_local_once(move || {
-                poll_apps(
-                    rx,
-                    model,
-                    all_apps,
-                    pinned_strip,
-                    pinned_apps,
-                    window,
-                    dragging,
+    }
+}
+
+impl AppLoadingContext {
+    fn poll(&self) {
+        match self.rx.try_recv() {
+            Ok(apps) => {
+                info!("Loaded {} applications", apps.len());
+                (*self.all_apps.borrow_mut()).clone_from(&apps);
+
+                let pinned = self.pinned_apps.borrow();
+                update_pinned_strip(
+                    &self.pinned_strip,
+                    &pinned,
+                    &apps,
+                    &self.window,
+                    &self.pinned_apps,
+                    &self.all_apps,
+                    &self.dragging,
                 );
-            });
-        }
-        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-            // Thread finished (shouldn't happen without sending data)
-            error!("Application loading thread terminated unexpectedly");
+                update_strip_visibility(&self.pinned_strip, &pinned, true);
+
+                self.model.set_apps(apps);
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                trace!("Application loading still in progress");
+                let ctx = self.clone();
+                glib::idle_add_local_once(move || ctx.poll());
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                error!("Application loading thread terminated unexpectedly");
+            }
         }
     }
 }
@@ -533,25 +523,22 @@ fn start_background_loading(
     dragging: Rc<Cell<bool>>,
 ) {
     let dirs = cfg.expanded_app_dirs();
-    let model_poll = model.clone();
     let (tx, rx) = std::sync::mpsc::channel();
 
     std::thread::spawn(move || {
         let _ = tx.send(launcher::load_apps(&dirs));
     });
 
-    let win_clone = window.clone();
-    glib::idle_add_local_once(move || {
-        poll_apps(
-            rx,
-            model_poll,
-            all_apps,
-            pinned_strip,
-            pinned_apps,
-            win_clone,
-            dragging,
-        );
-    });
+    let ctx = AppLoadingContext {
+        rx: Rc::new(rx),
+        model: model.clone(),
+        all_apps,
+        pinned_strip,
+        pinned_apps,
+        window: window.clone(),
+        dragging,
+    };
+    glib::idle_add_local_once(move || ctx.poll());
 }
 
 /// Scroll the list view to ensure a selected item is visible

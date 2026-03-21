@@ -184,6 +184,56 @@ pub struct AppListModel {
     providers: Rc<Vec<Box<dyn SearchProvider>>>,
 }
 
+/// Trait for command handlers that need to interact with the list model.
+///
+/// This abstraction allows `CommandHandler` to be tested with mock implementations
+/// and reduces coupling between command logic and the concrete model type.
+pub trait CommandSink {
+    fn set_mode(&self, mode: ActiveMode);
+    fn clear(&self);
+    fn push(&self, item: &impl IsA<glib::Object>);
+    fn count(&self) -> u32;
+    fn select(&self, pos: u32);
+    fn bump_gen(&self) -> u64;
+    fn schedule<F: FnOnce() + 'static>(&self, f: F);
+    fn bump_and_schedule<F: FnOnce() + 'static>(&self, f: F);
+}
+
+impl CommandSink for AppListModel {
+    fn set_mode(&self, mode: ActiveMode) {
+        self.set_active_mode(mode);
+    }
+
+    fn clear(&self) {
+        self.remove_all_store_items();
+    }
+
+    fn push(&self, item: &impl IsA<glib::Object>) {
+        self.append_store_item(item);
+    }
+
+    fn count(&self) -> u32 {
+        self.store_item_count()
+    }
+
+    fn select(&self, pos: u32) {
+        self.set_selected_position(pos);
+    }
+
+    fn bump_gen(&self) -> u64 {
+        self.bump_task_gen()
+    }
+
+    fn schedule<F: FnOnce() + 'static>(&self, f: F) {
+        AppListModel::schedule_command(self, f);
+    }
+
+    fn bump_and_schedule<F: FnOnce() + 'static>(&self, f: F) {
+        self.bump_task_gen();
+        AppListModel::schedule_command(self, f);
+    }
+}
+
 impl AppListModel {
     // ── Internal API ──────────────────────────────────────────────────────────
 

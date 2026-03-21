@@ -36,8 +36,14 @@ pub enum AppMode {
 
 /// Enum representing the rendering mode for list items
 ///
-/// This is used internally by the list model to determine how to render
-/// command items based on the current search mode.
+/// This is used internally by the list model and list factory to determine how to render
+/// items based on the current search mode.
+///
+/// ## Relationship with `AppMode`
+/// - `AppMode::Obsidian` + no arg → `ActiveMode::ObsidianAction` (action buttons)
+/// - `AppMode::Obsidian` + with arg → `ActiveMode::ObsidianFile` (file list)
+/// - `AppMode::ObsidianGrep` → `ActiveMode::ObsidianGrep`
+/// - `AppMode::CustomScript` → `ActiveMode::CustomScript`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActiveMode {
     /// Default mode - no special rendering
