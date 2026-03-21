@@ -58,13 +58,8 @@ pub fn reorder_pinned_apps(pinned_apps: &mut Vec<String>, source_idx: usize, tar
         return source_idx;
     }
     let item = pinned_apps.remove(source_idx);
-    let insert_pos = if target_idx > source_idx {
-        target_idx
-    } else {
-        target_idx
-    };
-    pinned_apps.insert(insert_pos, item);
-    insert_pos
+    pinned_apps.insert(target_idx, item);
+    target_idx
 }
 
 /// Build the pinned apps strip container (vertical layout for right sidebar)

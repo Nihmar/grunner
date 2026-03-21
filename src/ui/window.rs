@@ -20,7 +20,7 @@ use crate::core::config::Config;
 use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::list_model::AppListModel;
-use crate::ui::context_menu::{WindowCtx, setup_list_context_menu};
+use crate::ui::context_menu::{setup_list_context_menu, WindowCtx};
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
     build_pinned_strip, launch_pinned_by_index, update_pinned_strip, update_strip_visibility,
@@ -289,7 +289,6 @@ fn build_main_layout(
     entry: &Entry,
     model: &AppListModel,
     cfg: &Config,
-    display: &gdk::Display,
     callbacks: &AppCallbacks,
     pinned_apps: &Rc<RefCell<Vec<String>>>,
     dragging: &Rc<Cell<bool>>,
@@ -341,7 +340,8 @@ fn build_main_layout(
     let obsidian_bar = build_obsidian_bar(window, entry, model);
 
     // Get current icon theme for button icons
-    let icon_theme = gtk4::IconTheme::for_display(display);
+    let display = gtk4::prelude::WidgetExt::display(window);
+    let icon_theme = gtk4::IconTheme::for_display(&display);
 
     // Build power/settings action bar (always visible at bottom)
     // Only show power bar when special modes are enabled
@@ -374,7 +374,7 @@ fn build_main_layout(
     }
 
     // Build right sidebar for pinned apps
-    let right_sidebar = build_right_sidebar(&pinned_strip, &pinned_apps, dragging);
+    let right_sidebar = build_right_sidebar(&pinned_strip, pinned_apps, dragging);
     root.append(&right_sidebar);
 
     // Set root container as window content, wrapped in toast overlay
@@ -750,7 +750,6 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             &entry,
             &model,
             cfg,
-            &display,
             &callbacks,
             &pinned_apps,
             &dragging,
