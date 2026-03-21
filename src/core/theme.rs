@@ -11,19 +11,23 @@ pub mod themes;
 
 pub struct ThemeManager {
     provider: gtk4::CssProvider,
+    custom_css: Option<String>,
 }
 
 impl ThemeManager {
     #[must_use]
     pub fn new() -> Self {
         let provider = gtk4::CssProvider::new();
-        Self { provider }
+        Self {
+            provider,
+            custom_css: None,
+        }
     }
 
-    pub fn apply(&self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
+    pub fn apply(&mut self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
         let style_manager = libadwaita::StyleManager::default();
 
-        let css = match mode {
+        let css: &str = match mode {
             ThemeMode::System => {
                 log::info!("Using system theme (libadwaita defaults)");
                 style_manager.set_color_scheme(libadwaita::ColorScheme::Default);
@@ -66,9 +70,8 @@ impl ThemeManager {
                 themes::DRACULA
             }
             ThemeMode::Custom => {
-                // For custom themes, we don't know if it's light or dark,
-                // so we don't force a color scheme. The theme CSS should define everything.
-                Self::load_custom_theme(custom_path)
+                self.custom_css = Self::load_custom_theme(custom_path);
+                self.custom_css.as_deref().unwrap_or(themes::DARK)
             }
         };
 
@@ -82,23 +85,23 @@ impl ThemeManager {
         log::info!("Applied theme: {mode:?}");
     }
 
-    fn load_custom_theme(path: Option<&str>) -> &'static str {
+    fn load_custom_theme(path: Option<&str>) -> Option<String> {
         if let Some(path) = path {
             let expanded = expand_home(path);
             match std::fs::read_to_string(&expanded) {
-                Ok(css) => Box::leak(css.into_boxed_str()),
+                Ok(css) => Some(css),
                 Err(e) => {
                     log::error!(
                         "Failed to load custom theme from {}: {}",
                         expanded.display(),
                         e
                     );
-                    themes::DARK
+                    None
                 }
             }
         } else {
-            log::warn!("Custom theme selected but no path provided, using dark theme");
-            themes::DARK
+            log::warn!("Custom theme selected but no path provided");
+            None
         }
     }
 }

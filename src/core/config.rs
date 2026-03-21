@@ -169,14 +169,14 @@ impl Default for Config {
     /// - Default search result limit
     /// - Common application directories (stored as raw strings, not expanded)
     /// - Empty commands list (colon commands are built-in mode triggers)
-    /// - Obsidian configuration with empty defaults (always present so the UI is visible)
+    /// - Obsidian configuration is None by default (must be explicitly configured)
     fn default() -> Self {
         Self {
             window_width: DEFAULT_WINDOW_WIDTH,
             window_height: DEFAULT_WINDOW_HEIGHT,
             max_results: DEFAULT_MAX_RESULTS,
             app_dirs: default_app_dirs(),
-            obsidian: Some(ObsidianConfig::default()),
+            obsidian: None,
             command_debounce_ms: DEFAULT_COMMAND_DEBOUNCE_MS,
             search_provider_blacklist: Vec::new(),
             workspace_bar_enabled: true,
@@ -634,7 +634,7 @@ mod tests {
         assert_eq!(config.command_debounce_ms, DEFAULT_COMMAND_DEBOUNCE_MS);
         assert!(config.app_dirs.len() > 0);
         assert!(config.workspace_bar_enabled);
-        assert!(config.obsidian.is_some());
+        assert!(config.obsidian.is_none());
         assert!(config.pinned_apps.is_empty());
     }
 
@@ -842,7 +842,7 @@ mod tests {
         "#;
         let (config, failed, _table) = apply_toml(toml);
         assert_eq!(config.window_width, DEFAULT_WINDOW_WIDTH);
-        assert!(config.obsidian.is_some()); // default, not the invalid one
+        assert!(config.obsidian.is_none()); // default is None
         assert_eq!(config.commands.len(), 1);
         assert_eq!(config.commands[0].name, "Good");
         assert!(failed.contains(&"window".to_string()));

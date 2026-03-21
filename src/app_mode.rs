@@ -1,8 +1,16 @@
 //! Application mode management for Grunner
 //!
-//! This module defines the `AppMode` enum which represents the different
-//! operational modes of the application. Each mode corresponds to a different
-//! type of search or functionality that Grunner can perform.
+//! This module defines two enums that serve distinct purposes:
+//!
+//! - [`AppMode`] — represents the **input mode** triggered by colon commands (`:f`, `:ob`, etc.).
+//!   Used by the UI to determine what search to perform and what widgets to show.
+//!
+//! - [`ActiveMode`] — represents the **rendering mode** for list items.
+//!   Used by the list factory to determine how to display command results
+//!   (e.g., Obsidian actions vs file paths vs custom scripts).
+//!
+//! The mapping is typically: `AppMode::Obsidian` → `ActiveMode::ObsidianAction` or
+//! `ActiveMode::ObsidianFile` depending on whether results are actions or files.
 
 /// Enum representing the different modes of the Grunner application
 ///

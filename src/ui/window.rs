@@ -130,7 +130,7 @@ fn setup_css(cfg: &Config, display: &gdk::Display) {
     );
 
     // Apply theme based on configuration
-    let theme_manager = crate::core::theme::ThemeManager::new();
+    let mut theme_manager = crate::core::theme::ThemeManager::new();
     theme_manager.apply(cfg.theme, cfg.custom_theme_path.as_deref(), display);
 }
 
@@ -728,7 +728,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
     let display_for_theme = display.clone();
     callbacks.connect_theme_changed(move |_| {
         let config = crate::core::config::load();
-        let theme_manager = crate::core::theme::ThemeManager::new();
+        let mut theme_manager = crate::core::theme::ThemeManager::new();
         theme_manager.apply(
             config.theme,
             config.custom_theme_path.as_deref(),

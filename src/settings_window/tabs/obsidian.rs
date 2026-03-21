@@ -1,7 +1,5 @@
 //! Obsidian tab — vault path (with folder-picker), daily notes folder,
 //! new notes folder, and quick-note file.
-//!
-//! This tab is always visible since `config.obsidian` defaults to `Some(ObsidianConfig::default())`.
 
 use super::make_tab_page;
 use crate::core::config::Config;
@@ -15,15 +13,18 @@ use std::rc::Rc;
 
 /// Append the "Obsidian" tab to `notebook`.
 ///
-/// # Panics
-/// Assumes `config_rc.borrow().obsidian` is `Some` — this is always the case
-/// since `Config::default()` initializes it to `Some(ObsidianConfig::default())`.
-#[allow(clippy::too_many_lines)]
+/// Initializes `obsidian` to `Some(ObsidianConfig::default())` if it's `None`,
+/// so the user can configure Obsidian via the settings window.
+#[allow(clippy::too_many_lines, clippy::missing_panics_doc)]
 pub fn build_tab(
     notebook: &gtk4::Notebook,
     config_rc: &Rc<RefCell<Config>>,
     parent: &libadwaita::ApplicationWindow,
 ) {
+    if config_rc.borrow().obsidian.is_none() {
+        config_rc.borrow_mut().obsidian = Some(crate::core::config::ObsidianConfig::default());
+    }
+
     let (scroll, inner) = make_tab_page();
 
     let obsidian_group = PreferencesGroup::builder()

@@ -85,8 +85,6 @@ pub fn evaluate(expr: &str) -> Option<String> {
     // Check for function calls or constants
     let has_function_or_constant = trimmed.chars().any(|c| c.is_ascii_alphabetic());
 
-    let _has_minus = trimmed.contains('-');
-
     // Count how many minus signs there are and their positions
     let minus_positions: Vec<usize> = trimmed
         .char_indices()

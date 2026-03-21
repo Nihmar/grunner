@@ -146,9 +146,9 @@ impl ProviderSearchPoller {
 #[derive(Clone)]
 pub struct AppListModel {
     /// GTK list store containing the current search results
-    pub store: gio::ListStore,
+    pub(crate) store: gio::ListStore,
     /// GTK selection model for tracking selected item
-    pub selection: SingleSelection,
+    pub(crate) selection: SingleSelection,
 
     /// All available desktop applications (cached)
     all_apps: Rc<RefCell<Vec<DesktopApp>>>,
@@ -179,7 +179,7 @@ pub struct AppListModel {
     /// List of custom script commands
     pub(crate) commands: Rc<RefCell<Vec<crate::core::config::CommandConfig>>>,
     /// Whether all special modes (colon commands) are disabled
-    disable_modes: bool,
+    pub(crate) disable_modes: Cell<bool>,
     /// Search providers for different search types
     providers: Rc<Vec<Box<dyn SearchProvider>>>,
 }
@@ -274,7 +274,7 @@ impl AppListModel {
             search_providers: Rc::new(std::cell::OnceCell::new()),
             search_provider_blacklist: blacklist_rc,
             commands: commands_rc,
-            disable_modes,
+            disable_modes: Cell::new(disable_modes),
             providers,
         }
     }
@@ -297,6 +297,9 @@ impl AppListModel {
 
         // Update max_results
         self.max_results.set(config.max_results);
+
+        // Update disable_modes
+        self.disable_modes.set(config.disable_modes);
 
         // Update max_results on providers
         for provider in self.providers.iter() {
@@ -340,6 +343,26 @@ impl AppListModel {
         }
     }
 
+    fn schedule_with_debounce<F>(slot: &Rc<RefCell<Option<glib::SourceId>>>, delay_ms: u32, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        if let Some(id) = slot.borrow_mut().take() {
+            id.remove();
+        }
+        let mut f_opt = Some(f);
+        let slot_clone = slot.clone();
+        let source_id =
+            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
+                *slot_clone.borrow_mut() = None;
+                if let Some(f) = f_opt.take() {
+                    f();
+                }
+                glib::ControlFlow::Break
+            });
+        *slot.borrow_mut() = Some(source_id);
+    }
+
     /// Schedule a command to run after a delay with debouncing
     ///
     /// # Arguments
@@ -353,17 +376,7 @@ impl AppListModel {
         F: FnOnce() + 'static,
     {
         self.cancel_debounce();
-        let mut f_opt = Some(f);
-        let debounce_ref = self.command_debounce.clone();
-        let source_id =
-            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
-                *debounce_ref.borrow_mut() = None;
-                if let Some(f) = f_opt.take() {
-                    f();
-                }
-                glib::ControlFlow::Break
-            });
-        *self.command_debounce.borrow_mut() = Some(source_id);
+        Self::schedule_with_debounce(&self.command_debounce, delay_ms, f);
     }
 
     fn schedule_search_with_delay<F>(&self, delay_ms: u32, f: F)
@@ -371,17 +384,7 @@ impl AppListModel {
         F: FnOnce() + 'static,
     {
         self.cancel_search_debounce();
-        let mut f_opt = Some(f);
-        let debounce_ref = self.search_debounce.clone();
-        let source_id =
-            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
-                *debounce_ref.borrow_mut() = None;
-                if let Some(f) = f_opt.take() {
-                    f();
-                }
-                glib::ControlFlow::Break
-            });
-        *self.search_debounce.borrow_mut() = Some(source_id);
+        Self::schedule_with_debounce(&self.search_debounce, delay_ms, f);
     }
 
     /// Schedule a command to run with the configured default debounce delay
@@ -466,7 +469,7 @@ impl AppListModel {
         self.cancel_search_debounce();
 
         // Handle colon-prefixed commands (skip if modes are disabled)
-        if !self.disable_modes && query.starts_with(':') {
+        if !self.disable_modes.get() && query.starts_with(':') {
             self.handle_colon_command(query);
             return;
         }

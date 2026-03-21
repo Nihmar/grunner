@@ -90,13 +90,27 @@ impl AppProvider {
         // Fast path: simple prefix match for short, single-word queries
         // This covers 80% of typical searches
         if !query.contains(char::is_whitespace) && query.len() < 15 {
-            let prefix_results: Vec<_> = apps
+            let mut scored: Vec<_> = apps
                 .iter()
                 .filter(|app| {
                     app.name.to_lowercase().starts_with(&query_lower)
                         || app.name.to_lowercase().contains(&query_lower)
                 })
+                .map(|app| {
+                    let score = if app.name.to_lowercase().starts_with(&query_lower) {
+                        100
+                    } else {
+                        50
+                    };
+                    (score, app)
+                })
+                .collect();
+
+            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            let prefix_results: Vec<_> = scored
+                .into_iter()
                 .take(max_results)
+                .map(|(_, app)| app)
                 .collect();
 
             if !prefix_results.is_empty() {

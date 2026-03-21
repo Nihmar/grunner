@@ -128,18 +128,24 @@ pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
             show_error_notification("No terminal emulator found");
         }
     } else {
-        // Run directly without terminal
-        let mut cmd = std::process::Command::new("sh");
-        cmd.arg("-c").arg(&clean);
-        if let Some(ref dir) = working_dir {
-            cmd.current_dir(dir);
-        }
-        debug!("Spawning command directly: {cmd:?}");
-        if let Err(e) = cmd.spawn() {
-            error!("Failed to launch command '{clean}': {e}");
-            show_error_notification(&format!("Failed to launch: {clean}"));
+        // Run directly without terminal, avoiding shell injection
+        let parts: Vec<&str> = clean.split_whitespace().collect();
+        if let Some((prog, args)) = parts.split_first() {
+            let mut cmd = std::process::Command::new(prog);
+            cmd.args(args);
+            if let Some(ref dir) = working_dir {
+                cmd.current_dir(dir);
+            }
+            debug!("Spawning command directly: {cmd:?}");
+            if let Err(e) = cmd.spawn() {
+                error!("Failed to launch command '{clean}': {e}");
+                show_error_notification(&format!("Failed to launch: {clean}"));
+            } else {
+                info!("Successfully launched application: {clean}");
+            }
         } else {
-            info!("Successfully launched application: {clean}");
+            warn!("Empty command after clean_exec: {clean}");
+            show_error_notification("Invalid command");
         }
     }
 }

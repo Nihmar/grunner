@@ -40,6 +40,7 @@ A fast, keyboard-driven application launcher for GNOME and other Linux desktops,
 - **GNOME Shell search providers** — query installed GNOME Shell search providers (Files, Calendar, Contacts, etc.) inline with app search
 - **Workspace bar** — shows open windows on the current workspace; requires the [window-calls](https://extensions.gnome.org/extension/4724/window-calls/) GNOME Shell extension
 - **Pinned apps** — right-sidebar strip of favorite apps with `Alt+1`..`9` shortcuts
+- **Context menu** — right-click any search result for quick actions (copy, open containing folder, add to favourites, etc.)
 - **Power bar** — suspend, restart, power off, and log out with confirmation dialogs
 - **Settings window** — graphical dialog with tabs for editing configuration; hot-reload on save
 - **Themeable** — 10 built-in themes or load a custom CSS file
@@ -138,6 +139,7 @@ Launch `grunner`. The window appears with a search bar focused and ready.
 | `Page Up` / `Page Down`    | Jump 10 items                                  |
 | `Escape`                   | Close the launcher                             |
 | `Alt+1` .. `Alt+9`        | Launch pinned app by position                  |
+| `Right-click`               | Open context menu for quick actions            |
 
 ### Command-line options
 

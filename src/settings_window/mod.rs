@@ -42,7 +42,7 @@ pub fn open_settings_window(
     // Apply theme to settings window display
     if let Some(display) = gtk4::gdk::Display::default() {
         log::info!("Applying theme to settings window");
-        let theme_manager = crate::core::theme::ThemeManager::new();
+        let mut theme_manager = crate::core::theme::ThemeManager::new();
         theme_manager.apply(config.theme, config.custom_theme_path.as_deref(), &display);
     }
 
