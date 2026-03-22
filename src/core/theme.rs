@@ -24,8 +24,7 @@ impl ThemeManager {
     pub fn apply(&self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
         let style_manager = libadwaita::StyleManager::default();
 
-        #[allow(unused_assignments)]
-        let mut custom_css: Option<String> = None;
+        let css_owned;
         let css: &str = match mode {
             ThemeMode::System => {
                 log::info!("Using system theme (libadwaita defaults)");
@@ -69,8 +68,8 @@ impl ThemeManager {
                 themes::DRACULA
             }
             ThemeMode::Custom => {
-                custom_css = Self::load_custom_theme(custom_path);
-                custom_css.as_deref().unwrap_or(themes::DARK)
+                css_owned = Self::load_custom_theme(custom_path);
+                css_owned.as_deref().unwrap_or(themes::DARK)
             }
         };
 

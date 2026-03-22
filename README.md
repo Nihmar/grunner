@@ -2,7 +2,7 @@
 
 A fast, keyboard-driven application launcher for GNOME and other Linux desktops, written in Rust. Inspired by Rofi, grunner is built on GTK4 and libadwaita, and follows your system's light/dark theme and accent color automatically.
 
-**Version:** 2.5.0
+**Version:** 2.6.0
 
 ---
 
@@ -414,6 +414,8 @@ src/
 │
 ├── providers/
 │   ├── mod.rs                  # SearchProvider trait, AppProvider, CalculatorProvider
+│   ├── file_search.rs          # plocate/find and ripgrep/grep file search
+│   ├── subprocess.rs           # Subprocess spawning for :sh commands
 │   └── dbus/                   # GNOME Shell search provider D-Bus integration
 │       ├── discovery.rs        # Provider discovery from .ini files
 │       ├── query.rs            # D-Bus query execution, result building
@@ -471,15 +473,15 @@ The project has **167 tests** (158 unit + 4 integration + 5 doc-tests) covering 
 
 | Module | What's tested | Count |
 |---|---|---|
-| `calculator.rs` | arithmetic, precedence, parens, trig, functions, division by zero, precision, edge cases | 18 |
-| `core/config.rs` | defaults, TOML parsing per section, invalid types, legacy format, round-trip, auto-patch | 24 |
+| `calculator.rs` | arithmetic, precedence, parens, trig, functions, division by zero, precision, edge cases | 21 |
+| `core/config.rs` | defaults, TOML parsing per section, invalid types, legacy format, round-trip, auto-patch | 23 |
 | `launcher.rs` | `clean_exec()` field-code stripping, `parse_desktop_file()` with valid/hidden/missing fields | 20 |
 | `actions/file.rs` | `parse_file_line()` grep-pattern parsing (valid, invalid, edge cases) | 10 |
 | `actions/launcher.rs` | `which()` PATH lookup, `is_executable()` permission checks | 8 |
-| `logging.rs` | `parse_log_level()`, `parse_log_destination()` case-insensitive mapping, Display trait | 18 |
-| `utils.rs` | `expand_home()`, `contract_home()` round-trip, `is_calculator_result()` format detection | 14 |
+| `logging.rs` | `parse_log_level()`, `parse_log_destination()` case-insensitive mapping, Display trait | 19 |
+| `utils.rs` | `expand_home()`, `contract_home()` round-trip, `is_calculator_result()` format detection | 20 |
 | `command_handler.rs` | `parse_colon_command()` name/arg splitting, trim behavior | 8 |
-| `app_mode.rs` | mode detection, icon mapping, case sensitivity, partial prefixes | 14 |
+| `app_mode.rs` | mode detection, icon mapping, case sensitivity, partial prefixes | 11 |
 | `settings_window/save.rs` | `config_to_toml` output validation, section presence | 3 |
 | `model/list_model.rs` | calculator result detection | 1 |
 | `core/global_state.rs` | home dir resolution | 1 |
