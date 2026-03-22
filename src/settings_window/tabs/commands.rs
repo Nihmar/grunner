@@ -69,9 +69,10 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
             cfg.commands.push(new_cmd);
         }
 
+        let cmd_ref = config_rc_clone.borrow();
         let row = create_command_row(
-            config_rc_clone.borrow().commands.len() - 1,
-            config_rc_clone.borrow().commands.last().unwrap(),
+            cmd_ref.commands.len() - 1,
+            cmd_ref.commands.last().unwrap(),
             &config_rc_clone,
             &list_box_clone,
         );

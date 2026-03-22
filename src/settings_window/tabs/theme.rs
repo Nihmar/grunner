@@ -33,26 +33,36 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     theme_label.set_halign(gtk4::Align::Start);
     page.append(&theme_label);
 
-    let theme_combo = gtk4::ComboBoxText::new();
+    let theme_names: Vec<&str> = THEMES.iter().map(|(_, name)| *name).collect();
+    let model = gtk4::StringList::new(&theme_names);
+    let current_theme = config_rc.borrow().theme;
+    let current_index = THEMES
+        .iter()
+        .position(|(mode, _)| *mode == current_theme)
+        .unwrap_or(0);
+
+    let theme_combo = gtk4::DropDown::new(
+        Some(model.clone().upcast::<gtk4::gio::ListModel>()),
+        gtk4::Expression::NONE,
+    );
     theme_combo.set_halign(gtk4::Align::Fill);
     theme_combo.set_hexpand(true);
-
-    let current_theme = config_rc.borrow().theme;
-    let mut current_index = 0;
-    for (i, (mode, name)) in THEMES.iter().enumerate() {
-        theme_combo.append_text(name);
-        if *mode == current_theme {
-            current_index = u32::try_from(i).unwrap_or(0);
-        }
-    }
-    theme_combo.set_active(Some(current_index));
+    theme_combo.set_selected(u32::try_from(current_index).unwrap_or(0));
 
     let config_rc_clone = Rc::clone(config_rc);
-    theme_combo.connect_changed(move |combo| {
-        if let Some(index) = combo.active()
-            && let Some((mode, _)) = THEMES.get(index as usize)
+    theme_combo.connect_selected_item_notify(move |dropdown| {
+        if let Some(item) = dropdown
+            .selected_item()
+            .and_then(|i| i.downcast::<gtk4::StringObject>().ok())
         {
-            config_rc_clone.borrow_mut().theme = *mode;
+            if let Some(idx) = theme_names
+                .iter()
+                .position(|n| *n == item.string().as_str())
+            {
+                if let Some((mode, _)) = THEMES.get(idx) {
+                    config_rc_clone.borrow_mut().theme = *mode;
+                }
+            }
         }
     });
 

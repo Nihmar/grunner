@@ -243,7 +243,7 @@ fn spawn_refresh_delayed(
 
     glib::spawn_future_local(async move {
         if delay_ms > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            glib::timeout_future(std::time::Duration::from_millis(delay_ms)).await;
         }
         let windows = ws::fetch_workspace_windows().await;
         log::debug!(
