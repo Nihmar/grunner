@@ -14,9 +14,11 @@
 use crate::app_mode::ActiveMode;
 use crate::core::config::{CommandConfig, ObsidianConfig};
 use crate::launcher::DesktopApp;
+use crate::model::debounce::{DEFAULT_SEARCH_DEBOUNCE_MS, DebounceScheduler};
 use crate::model::items::SearchResultItem;
+use crate::model::model_config::ModelConfig;
+use crate::model::search_state::SearchState;
 use crate::providers::dbus::{self, SearchProvider as DbusSearchProvider};
-use crate::providers::{AppProvider, CalculatorProvider, SearchProvider};
 use gtk4::SingleSelection;
 use gtk4::gio;
 use gtk4::prelude::*;
@@ -24,223 +26,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 100;
 const PROVIDER_SEARCH_DEBOUNCE_MS: u32 = 120;
 const PROVIDER_CLEAR_TIMEOUT_MS: u64 = 25;
-
-// ── Search State ─────────────────────────────────────────────────────────────
-
-/// Manages search state: current query and task generation for cancellation.
-///
-/// Task generation allows stale async operations to be detected and discarded
-/// when the user types new input before previous searches complete.
-#[derive(Clone)]
-pub struct SearchState {
-    current_query: Rc<RefCell<String>>,
-    task_gen: Rc<Cell<u64>>,
-    active_mode: Rc<Cell<ActiveMode>>,
-}
-
-impl SearchState {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            current_query: Rc::new(RefCell::new(String::new())),
-            task_gen: Rc::new(Cell::new(0)),
-            active_mode: Rc::new(Cell::new(ActiveMode::None)),
-        }
-    }
-
-    #[must_use]
-    pub fn current_query(&self) -> String {
-        self.current_query.borrow().clone()
-    }
-
-    pub fn set_query(&self, query: &str) {
-        *self.current_query.borrow_mut() = query.to_string();
-    }
-
-    #[must_use]
-    pub fn active_mode(&self) -> ActiveMode {
-        self.active_mode.get()
-    }
-
-    pub fn set_active_mode(&self, mode: ActiveMode) {
-        self.active_mode.set(mode);
-    }
-
-    #[must_use]
-    pub fn bump_task_gen(&self) -> u64 {
-        let next = self.task_gen.get() + 1;
-        self.task_gen.set(next);
-        next
-    }
-
-    #[must_use]
-    pub fn task_gen(&self) -> u64 {
-        self.task_gen.get()
-    }
-}
-
-impl Default for SearchState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// ── Debounce Scheduler ────────────────────────────────────────────────────────
-
-/// Manages debounce timers for command execution and search operations.
-///
-/// Provides separate scheduling for:
-/// - Commands (colon commands) using `schedule_command`
-/// - Search providers using `schedule_search`
-pub struct DebounceScheduler {
-    command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
-    command_debounce_ms: Cell<u32>,
-    search_debounce: Rc<RefCell<Option<glib::SourceId>>>,
-    search_debounce_ms: u32,
-}
-
-impl DebounceScheduler {
-    #[must_use]
-    pub fn new(command_ms: u32, search_ms: u32) -> Self {
-        Self {
-            command_debounce: Rc::new(RefCell::new(None)),
-            command_debounce_ms: Cell::new(command_ms),
-            search_debounce: Rc::new(RefCell::new(None)),
-            search_debounce_ms: search_ms,
-        }
-    }
-
-    #[must_use]
-    pub fn command_debounce_ms(&self) -> u32 {
-        self.command_debounce_ms.get()
-    }
-
-    pub fn set_command_debounce_ms(&self, ms: u32) {
-        self.command_debounce_ms.set(ms);
-    }
-
-    pub fn cancel_command(&self) {
-        if let Some(id) = self.command_debounce.borrow_mut().take() {
-            id.remove();
-        }
-    }
-
-    pub fn cancel_search(&self) {
-        if let Some(id) = self.search_debounce.borrow_mut().take() {
-            id.remove();
-        }
-    }
-
-    pub fn schedule_command<F>(&self, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        self.cancel_command();
-        Self::schedule_with_delay(&self.command_debounce, self.command_debounce_ms.get(), f);
-    }
-
-    pub fn schedule_search<F>(&self, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        self.cancel_search();
-        Self::schedule_with_delay(&self.search_debounce, self.search_debounce_ms, f);
-    }
-
-    pub fn schedule_command_with_delay<F>(&self, delay_ms: u32, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        self.cancel_command();
-        Self::schedule_with_delay(&self.command_debounce, delay_ms, f);
-    }
-
-    fn schedule_with_delay<F>(slot: &Rc<RefCell<Option<glib::SourceId>>>, delay_ms: u32, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        if let Some(id) = slot.borrow_mut().take() {
-            id.remove();
-        }
-        let mut f_opt = Some(f);
-        let slot_clone = slot.clone();
-        let source_id =
-            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
-                *slot_clone.borrow_mut() = None;
-                if let Some(f) = f_opt.take() {
-                    f();
-                }
-                glib::ControlFlow::Break
-            });
-        *slot.borrow_mut() = Some(source_id);
-    }
-}
-
-impl Clone for DebounceScheduler {
-    fn clone(&self) -> Self {
-        Self {
-            command_debounce: Rc::clone(&self.command_debounce),
-            command_debounce_ms: Cell::new(self.command_debounce_ms.get()),
-            search_debounce: Rc::clone(&self.search_debounce),
-            search_debounce_ms: self.search_debounce_ms,
-        }
-    }
-}
-
-// ── Model Config ─────────────────────────────────────────────────────────────
-
-/// Holds configuration settings for the search model.
-///
-/// Contains values that can be updated via `apply_config` without recreating the model.
-#[derive(Clone)]
-pub struct ModelConfig {
-    pub max_results: Cell<usize>,
-    pub obsidian_cfg: Option<ObsidianConfig>,
-    pub commands: Rc<RefCell<Vec<CommandConfig>>>,
-    pub blacklist: Rc<RefCell<Vec<String>>>,
-    pub disable_modes: Cell<bool>,
-    pub providers: Rc<Vec<Box<dyn SearchProvider>>>,
-}
-
-impl ModelConfig {
-    pub fn new(
-        max_results: usize,
-        obsidian_cfg: Option<ObsidianConfig>,
-        blacklist: Vec<String>,
-        commands: Vec<CommandConfig>,
-        disable_modes: bool,
-        all_apps: Rc<RefCell<Vec<DesktopApp>>>,
-    ) -> Self {
-        let providers = Rc::new(vec![
-            Box::new(AppProvider::new(all_apps, max_results)) as Box<dyn SearchProvider>,
-            Box::new(CalculatorProvider::new()) as Box<dyn SearchProvider>,
-        ]);
-
-        Self {
-            max_results: Cell::new(max_results),
-            obsidian_cfg,
-            commands: Rc::new(RefCell::new(commands)),
-            blacklist: Rc::new(RefCell::new(blacklist)),
-            disable_modes: Cell::new(disable_modes),
-            providers,
-        }
-    }
-
-    pub fn apply_config(&self, config: &crate::core::config::Config) {
-        self.max_results.set(config.max_results);
-        self.disable_modes.set(config.disable_modes);
-
-        for provider in self.providers.iter() {
-            provider.set_max_results(config.max_results);
-        }
-
-        (*self.blacklist.borrow_mut()).clone_from(&config.search_provider_blacklist);
-        (*self.commands.borrow_mut()).clone_from(&config.commands);
-    }
-}
 
 // ── Pollers ───────────────────────────────────────────────────────────────────
 
@@ -767,12 +554,6 @@ impl AppListModel {
             clear_store,
         };
         glib::idle_add_local_once(move || poller.poll());
-    }
-}
-
-impl Default for DebounceScheduler {
-    fn default() -> Self {
-        Self::new(300, DEFAULT_SEARCH_DEBOUNCE_MS)
     }
 }
 

@@ -20,12 +20,12 @@ use crate::core::config::Config;
 use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::list_model::AppListModel;
-use crate::ui::context_menu::{WindowCtx, setup_list_context_menu};
 use crate::ui::obsidian_bar::build_obsidian_bar;
 use crate::ui::pinned_strip::{
-    build_pinned_strip, launch_pinned_by_index, update_pinned_strip, update_strip_visibility,
+    build_pinned_strip, launch_pinned_by_index, update_strip_visibility,
 };
 use crate::ui::power_bar::build_power_bar;
+use crate::ui::window_context::{PinnedUiState, WindowContext};
 use crate::ui::workspace_bar::build_workspace_bar;
 use glib::clone;
 
@@ -33,79 +33,14 @@ use gtk4::gdk;
 use gtk4::gdk::Key;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, EventControllerMotion,
-    GestureClick, Image, ListView, Orientation, Revealer, RevealerTransitionType, ScrolledWindow,
+    Align, Box as GtkBox, CssProvider, Entry, EventControllerKey, EventControllerMotion, Image,
+    ListView, Orientation, Revealer, RevealerTransitionType, ScrolledWindow,
 };
 use libadwaita::prelude::AdwApplicationWindowExt;
 use libadwaita::{Application, ApplicationWindow, ToastOverlay};
-use log::{debug, error, info, trace};
+use log::{debug, info};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-
-// ---------------------------------------------------------------------------
-// Helper functions for background processing
-// ---------------------------------------------------------------------------
-
-/// Context for app loading polling — groups all state needed when apps are ready
-struct AppLoadingContext {
-    rx: Rc<std::sync::mpsc::Receiver<Vec<launcher::DesktopApp>>>,
-    model: AppListModel,
-    all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
-    pinned_strip: GtkBox,
-    pinned_apps: Rc<RefCell<Vec<String>>>,
-    window: ApplicationWindow,
-    dragging: Rc<Cell<bool>>,
-    cfg: Config,
-}
-
-impl Clone for AppLoadingContext {
-    fn clone(&self) -> Self {
-        Self {
-            rx: Rc::clone(&self.rx),
-            model: self.model.clone(),
-            all_apps: Rc::clone(&self.all_apps),
-            pinned_strip: self.pinned_strip.clone(),
-            pinned_apps: Rc::clone(&self.pinned_apps),
-            window: self.window.clone(),
-            dragging: Rc::clone(&self.dragging),
-            cfg: self.cfg.clone(),
-        }
-    }
-}
-
-impl AppLoadingContext {
-    fn poll(&self) {
-        match self.rx.try_recv() {
-            Ok(apps) => {
-                info!("Loaded {} applications", apps.len());
-                (*self.all_apps.borrow_mut()).clone_from(&apps);
-
-                let pinned = self.pinned_apps.borrow();
-                update_pinned_strip(
-                    &self.pinned_strip,
-                    &pinned,
-                    &apps,
-                    &self.window,
-                    &self.pinned_apps,
-                    &self.all_apps,
-                    &self.dragging,
-                    &self.cfg,
-                );
-                update_strip_visibility(&self.pinned_strip, &pinned, true);
-
-                self.model.set_apps(apps);
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => {
-                trace!("Application loading still in progress");
-                let ctx = self.clone();
-                glib::idle_add_local_once(move || ctx.poll());
-            }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                error!("Application loading thread terminated unexpectedly");
-            }
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // UI Construction Helpers
@@ -376,7 +311,7 @@ fn build_main_layout(
 }
 
 /// Connect window lifecycle signals
-fn connect_window_signals(
+pub(crate) fn connect_window_signals(
     window: &ApplicationWindow,
     entry: &Entry,
     obsidian_bar: &GtkBox,
@@ -416,178 +351,12 @@ fn connect_window_signals(
     ));
 }
 
-/// Pinned apps UI state
-struct PinnedUiState {
-    strip: GtkBox,
-    apps: Rc<RefCell<Vec<String>>>,
-}
-
-/// Internal context for UI construction phases
-///
-/// Groups all shared state needed during UI building so that helper
-/// functions receive a single struct instead of many individual arguments.
-#[derive(Clone)]
-struct WindowContext {
-    display: gdk::Display,
-    cfg: Config,
-    model: AppListModel,
-    current_mode: Rc<Cell<AppMode>>,
-    window: ApplicationWindow,
-    callbacks: AppCallbacks,
-    entry: Entry,
-    list_view: ListView,
-    obsidian_bar: Option<GtkBox>,
-    command_icon: Image,
-    pinned_strip: GtkBox,
-    toast_overlay: ToastOverlay,
-    all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
-    pinned_apps: Rc<RefCell<Vec<String>>>,
-    dragging: Rc<Cell<bool>>,
-    theme_manager: crate::core::theme::ThemeManager,
-}
-
-impl WindowContext {
-    fn ctx(&self) -> WindowCtx {
-        WindowCtx {
-            window: self.window.clone(),
-            entry: self.entry.clone(),
-            model: self.model.clone(),
-            current_mode: self.current_mode.clone(),
-            pinned_apps: self.pinned_apps.clone(),
-            all_apps: self.all_apps.clone(),
-            pinned_strip: self.pinned_strip.clone(),
-            toast_overlay: self.toast_overlay.clone(),
-            dragging: self.dragging.clone(),
-            cfg: self.cfg.clone(),
-        }
-    }
-
-    fn setup_theme(&self) {
-        self.theme_manager.apply(
-            self.cfg.theme,
-            self.cfg.custom_theme_path.as_deref(),
-            &self.display,
-        );
-    }
-
-    fn wire_callbacks(&self) {
-        let model = self.model.clone();
-        self.callbacks.connect_config_changed(move |_| {
-            let config = crate::core::config::load();
-            model.apply_config(&config);
-        });
-
-        let display = self.display.clone();
-        let theme_manager = self.theme_manager.clone();
-        self.callbacks.connect_theme_changed(move |_| {
-            let config = crate::core::config::load();
-            theme_manager.apply(config.theme, config.custom_theme_path.as_deref(), &display);
-        });
-
-        let window = self.window.clone();
-        self.callbacks.connect_window_resized(move |_| {
-            let config = crate::core::config::load();
-            window.set_resizable(true);
-            window.set_default_size(config.window_width, config.window_height);
-            window.set_resizable(false);
-        });
-    }
-
-    fn setup_dragging(&self, root: &GtkBox) {
-        let click = GestureClick::new();
-        click.set_button(1);
-        click.set_propagation_phase(gtk4::PropagationPhase::Target);
-        let window = self.window.clone();
-        click.connect_pressed(move |gesture, _n_press, x, y| {
-            let Some(surface) = window.surface() else {
-                return;
-            };
-            let Some(toplevel) = surface.downcast_ref::<gdk::Toplevel>() else {
-                return;
-            };
-            let Some(device) = gesture.device() else {
-                return;
-            };
-            let button = gesture.current_button().cast_signed();
-            toplevel.begin_move(&device, button, x, y, gdk::CURRENT_TIME);
-        });
-        root.add_controller(click);
-    }
-
-    fn wire_signals(&self) {
-        if let Some(ref obsidian_bar) = self.obsidian_bar {
-            connect_window_signals(
-                &self.window,
-                &self.entry,
-                obsidian_bar,
-                &self.command_icon,
-                &self.model,
-                &self.current_mode,
-            );
-        }
-
-        let icon_theme = gtk4::IconTheme::for_display(&self.display);
-        let obsidian_icon_name = ["obsidian", "md.obsidian.Obsidian", "text-x-markdown"]
-            .iter()
-            .find(|&&name| icon_theme.has_icon(name))
-            .copied()
-            .unwrap_or("text-x-markdown");
-
-        let pinned_ui = PinnedUiState {
-            strip: self.pinned_strip.clone(),
-            apps: self.pinned_apps.clone(),
-        };
-        if let Some(ref obsidian_bar) = self.obsidian_bar {
-            connect_search_signals(
-                &self.entry,
-                &self.model,
-                &self.current_mode,
-                obsidian_bar,
-                &self.command_icon,
-                obsidian_icon_name,
-                &pinned_ui,
-            );
-        }
-
-        setup_keyboard_controller(
-            &self.list_view,
-            &self.window,
-            &self.model,
-            &self.current_mode,
-            &self.pinned_apps,
-            &self.all_apps,
-        );
-        connect_list_signals(
-            &self.list_view,
-            &self.window,
-            &self.model,
-            &self.current_mode,
-        );
-        setup_list_context_menu(&self.list_view, &self.ctx());
-    }
-
-    fn start_loading(&self) {
-        let dirs = self.cfg.expanded_app_dirs();
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(launcher::load_apps(&dirs));
-        });
-        let load_ctx = AppLoadingContext {
-            rx: Rc::new(rx),
-            model: self.model.clone(),
-            all_apps: self.all_apps.clone(),
-            pinned_strip: self.pinned_strip.clone(),
-            pinned_apps: self.pinned_apps.clone(),
-            window: self.window.clone(),
-            dragging: self.dragging.clone(),
-            cfg: self.cfg.clone(),
-        };
-        glib::idle_add_local_once(move || load_ctx.poll());
-    }
-}
+// ---------------------------------------------------------------------------
+// Signal handlers (called from WindowContext)
+// ---------------------------------------------------------------------------
 
 /// Connect search entry signals (text changes, icon updates)
-fn connect_search_signals(
+pub(crate) fn connect_search_signals(
     entry: &Entry,
     model: &AppListModel,
     current_mode: &Rc<Cell<AppMode>>,
@@ -639,7 +408,7 @@ fn connect_search_signals(
 }
 
 /// Connect list view activation signals (mouse double-click)
-fn connect_list_signals(
+pub(crate) fn connect_list_signals(
     list_view: &ListView,
     window: &ApplicationWindow,
     model: &AppListModel,
@@ -688,7 +457,7 @@ fn scroll_selection_to(model: &AppListModel, list_view: &ListView, pos: u32) {
 /// - Arrow keys: move selection up/down
 /// - Page Up/Down: jump 10 items
 /// - Alt+1..Alt+9: launch N-th pinned app
-fn setup_keyboard_controller(
+pub(crate) fn setup_keyboard_controller(
     list_view: &ListView,
     window: &ApplicationWindow,
     model: &AppListModel,

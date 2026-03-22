@@ -17,8 +17,11 @@ pub mod item_activation;
 pub mod launcher;
 pub mod logging;
 pub mod model {
+    pub mod debounce;
     pub mod items;
     pub mod list_model;
+    pub mod model_config;
+    pub mod search_state;
 }
 pub mod providers;
 pub mod settings_window;
@@ -29,6 +32,7 @@ pub mod ui {
     pub mod pinned_strip;
     pub mod power_bar;
     pub mod window;
+    pub mod window_context;
     pub mod workspace_bar;
 }
 pub mod utils;

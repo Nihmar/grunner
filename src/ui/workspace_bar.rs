@@ -78,7 +78,6 @@ fn build_close_badge() -> Button {
     badge
 }
 
-#[allow(clippy::too_many_lines)]
 fn populate(
     buttons_box: &GtkBox,
     scroll: &ScrolledWindow,
@@ -107,106 +106,11 @@ fn populate(
     let all_ids: Vec<u32> = windows.iter().map(|w| w.id).collect();
 
     for info in windows {
-        log::debug!(
-            "[workspace_bar] creating button id={} title={:?} icon={:?}",
-            info.id,
-            info.title,
-            info.icon_name
-        );
-
-        let btn = Button::new();
-        btn.add_css_class("workspace-window-btn");
-        btn.set_tooltip_text(Some(&info.title));
-
-        let inner = GtkBox::new(Orientation::Horizontal, 4);
-        inner.add_css_class("workspace-window-btn-inner");
-
-        let resolved_icon = resolve_icon(&info.icon_name, icon_theme);
-        log::debug!(
-            "[workspace_bar] resolved icon {:?} → {:?}",
-            info.icon_name,
-            resolved_icon
-        );
-        let icon = Image::from_icon_name(&resolved_icon);
-        icon.add_css_class("workspace-window-icon");
-        inner.append(&icon);
-
-        let label = Label::new(Some(&truncate(&info.title, MAX_TITLE_CHARS)));
-        label.add_css_class("workspace-window-label");
-        inner.append(&label);
-
-        btn.set_child(Some(&inner));
-
-        let win_id = info.id;
-        btn.connect_clicked(clone!(
-            #[weak]
-            app_window,
-            move |_| {
-                glib::spawn_future_local(async move {
-                    ws::activate_window(win_id).await;
-                });
-                app_window.hide();
-            }
-        ));
-
-        let overlay = Overlay::new();
-        overlay.set_child(Some(&btn));
-
-        let close_badge = build_close_badge();
-        overlay.add_overlay(&close_badge);
-
-        let motion = EventControllerMotion::new();
-        motion.connect_enter(clone!(
-            #[weak]
-            close_badge,
-            move |_, _, _| {
-                close_badge.set_visible(true);
-            }
-        ));
-        motion.connect_leave(clone!(
-            #[weak]
-            close_badge,
-            move |_| {
-                close_badge.set_visible(false);
-            }
-        ));
-        overlay.add_controller(motion);
-
-        let badge_win_id = info.id;
-        let refresh_badge = on_change.clone();
-        close_badge.connect_clicked(move |_| {
-            let refresh = refresh_badge.clone();
-            glib::spawn_future_local(async move {
-                ws::close_window(badge_win_id).await;
-                refresh();
-            });
-        });
-
+        let overlay = build_window_button(info, icon_theme, app_window, on_change);
         buttons_box.append(&overlay);
     }
 
-    let separator = gtk4::Separator::new(Orientation::Horizontal);
-    separator.add_css_class("workspace-separator-h");
-    buttons_box.append(&separator);
-
-    let close_all_btn = Button::builder()
-        .icon_name("window-close-symbolic")
-        .halign(gtk4::Align::Center)
-        .build();
-    close_all_btn.add_css_class("workspace-close-all-btn");
-    close_all_btn.set_tooltip_text(Some("Close all windows"));
-
-    let ids_for_close_all = all_ids.clone();
-    let refresh_close_all = on_change.clone();
-    close_all_btn.connect_clicked(move |_| {
-        let ids = ids_for_close_all.clone();
-        let refresh = refresh_close_all.clone();
-        glib::spawn_future_local(async move {
-            ws::close_all_windows(ids).await;
-            refresh();
-        });
-    });
-    buttons_box.append(&close_all_btn);
+    build_controls(buttons_box, &all_ids, on_change);
 
     log::debug!("[workspace_bar] populate done, showing scroll");
     scroll.set_visible(true);
@@ -218,6 +122,115 @@ fn populate(
         scroll.remove_css_class("tall");
         buttons_box.set_margin_bottom(0);
     }
+}
+
+fn build_window_button(
+    info: &WindowInfo,
+    icon_theme: &gtk4::IconTheme,
+    app_window: &ApplicationWindow,
+    on_change: &Rc<dyn Fn()>,
+) -> Overlay {
+    log::debug!(
+        "[workspace_bar] creating button id={} title={:?} icon={:?}",
+        info.id,
+        info.title,
+        info.icon_name
+    );
+
+    let btn = Button::new();
+    btn.add_css_class("workspace-window-btn");
+    btn.set_tooltip_text(Some(&info.title));
+
+    let inner = GtkBox::new(Orientation::Horizontal, 4);
+    inner.add_css_class("workspace-window-btn-inner");
+
+    let resolved_icon = resolve_icon(&info.icon_name, icon_theme);
+    log::debug!(
+        "[workspace_bar] resolved icon {:?} → {:?}",
+        info.icon_name,
+        resolved_icon
+    );
+    let icon = Image::from_icon_name(&resolved_icon);
+    icon.add_css_class("workspace-window-icon");
+    inner.append(&icon);
+
+    let label = Label::new(Some(&truncate(&info.title, MAX_TITLE_CHARS)));
+    label.add_css_class("workspace-window-label");
+    inner.append(&label);
+
+    btn.set_child(Some(&inner));
+
+    let win_id = info.id;
+    btn.connect_clicked(clone!(
+        #[weak]
+        app_window,
+        move |_| {
+            glib::spawn_future_local(async move {
+                ws::activate_window(win_id).await;
+            });
+            app_window.hide();
+        }
+    ));
+
+    let overlay = Overlay::new();
+    overlay.set_child(Some(&btn));
+
+    let close_badge = build_close_badge();
+    overlay.add_overlay(&close_badge);
+
+    let motion = EventControllerMotion::new();
+    motion.connect_enter(clone!(
+        #[weak]
+        close_badge,
+        move |_, _, _| {
+            close_badge.set_visible(true);
+        }
+    ));
+    motion.connect_leave(clone!(
+        #[weak]
+        close_badge,
+        move |_| {
+            close_badge.set_visible(false);
+        }
+    ));
+    overlay.add_controller(motion);
+
+    let badge_win_id = info.id;
+    let refresh_badge = on_change.clone();
+    close_badge.connect_clicked(move |_| {
+        let refresh = refresh_badge.clone();
+        glib::spawn_future_local(async move {
+            ws::close_window(badge_win_id).await;
+            refresh();
+        });
+    });
+
+    overlay
+}
+
+fn build_controls(buttons_box: &GtkBox, all_ids: &[u32], on_change: &Rc<dyn Fn()>) {
+    let separator = gtk4::Separator::new(Orientation::Horizontal);
+    separator.add_css_class("workspace-separator-h");
+    buttons_box.append(&separator);
+
+    let close_all_btn = Button::builder()
+        .icon_name("window-close-symbolic")
+        .halign(gtk4::Align::Center)
+        .build();
+    close_all_btn.add_css_class("workspace-close-all-btn");
+    close_all_btn.set_tooltip_text(Some("Close all windows"));
+
+    let ids_for_close_all = all_ids.to_vec();
+    let refresh_close_all = on_change.clone();
+    close_all_btn.connect_clicked(move |_| {
+        let ids = ids_for_close_all.clone();
+        let refresh = refresh_close_all.clone();
+        glib::spawn_future_local(async move {
+            ws::close_all_windows(ids).await;
+            refresh();
+        });
+    });
+    buttons_box.append(&close_all_btn);
 }
 
 fn spawn_refresh(

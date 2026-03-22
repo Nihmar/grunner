@@ -42,7 +42,7 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
         .unwrap_or(0);
 
     let theme_combo = gtk4::DropDown::new(
-        Some(model.clone().upcast::<gtk4::gio::ListModel>()),
+        Some(model.upcast::<gtk4::gio::ListModel>()),
         gtk4::Expression::NONE,
     );
     theme_combo.set_halign(gtk4::Align::Fill);
@@ -50,19 +50,10 @@ pub fn build_tab(notebook: &gtk4::Notebook, config_rc: &Rc<RefCell<Config>>) {
     theme_combo.set_selected(u32::try_from(current_index).unwrap_or(0));
 
     let config_rc_clone = Rc::clone(config_rc);
-    theme_combo.connect_selected_item_notify(move |dropdown| {
-        if let Some(item) = dropdown
-            .selected_item()
-            .and_then(|i| i.downcast::<gtk4::StringObject>().ok())
-        {
-            if let Some(idx) = theme_names
-                .iter()
-                .position(|n| *n == item.string().as_str())
-            {
-                if let Some((mode, _)) = THEMES.get(idx) {
-                    config_rc_clone.borrow_mut().theme = *mode;
-                }
-            }
+    theme_combo.connect_selected_notify(move |dropdown| {
+        let idx = dropdown.selected() as usize;
+        if let Some((mode, _)) = THEMES.get(idx) {
+            config_rc_clone.borrow_mut().theme = *mode;
         }
     });
 
