@@ -9,7 +9,6 @@
 //! The bar auto-refreshes every time the Grunner launcher window becomes visible.
 
 use crate::actions::workspace::{self as ws, WindowInfo};
-use crate::core::global_state::get_tokio_runtime;
 use glib::clone;
 use gtk4::{
     Box as GtkBox, Button, EventControllerMotion, EventControllerScroll,
@@ -17,7 +16,8 @@ use gtk4::{
     ScrolledWindow, gdk, prelude::*,
 };
 use libadwaita::ApplicationWindow;
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 const MAX_TITLE_CHARS: usize = 22;
 
@@ -104,7 +104,7 @@ fn populate(
     }
 
     let window_count = windows.len();
-    let all_ids: Vec<u64> = windows.iter().map(|w| w.id).collect();
+    let all_ids: Vec<u32> = windows.iter().map(|w| w.id).collect();
 
     for info in windows {
         log::debug!(
@@ -224,7 +224,7 @@ fn spawn_refresh(
     scroll: &ScrolledWindow,
     buttons_box: &GtkBox,
     window: &ApplicationWindow,
-    on_change: &Rc<dyn Fn()>,
+    on_change: Rc<dyn Fn()>,
 ) {
     spawn_refresh_delayed(scroll, buttons_box, window, on_change, 0);
 }
@@ -233,36 +233,25 @@ fn spawn_refresh_delayed(
     scroll: &ScrolledWindow,
     buttons_box: &GtkBox,
     window: &ApplicationWindow,
-    on_change: &Rc<dyn Fn()>,
+    on_change: Rc<dyn Fn()>,
     delay_ms: u64,
 ) {
-    let (tx, rx) = std::sync::mpsc::channel::<Option<Vec<WindowInfo>>>();
+    let scroll_c = scroll.clone();
+    let buttons_c = buttons_box.clone();
+    let window_c = window.clone();
+    let oc = on_change.clone();
 
-    std::thread::spawn(move || {
+    glib::spawn_future_local(async move {
         if delay_ms > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
         }
-        let rt = get_tokio_runtime();
-        let windows = rt.block_on(ws::fetch_workspace_windows());
+        let windows = ws::fetch_workspace_windows().await;
         log::debug!(
-            "[workspace_bar] background thread result: {:?}",
+            "[workspace_bar] async refresh result: {:?}",
             windows.as_ref().map(std::vec::Vec::len)
         );
-        let _ = tx.send(windows);
+        poll_windows(windows, scroll_c, buttons_c, window_c, oc);
     });
-
-    let oc = on_change.clone();
-    glib::idle_add_local_once(clone!(
-        #[weak]
-        scroll,
-        #[weak]
-        buttons_box,
-        #[weak]
-        window,
-        move || {
-            poll_windows(rx, scroll, buttons_box, window, oc);
-        }
-    ));
 }
 
 #[must_use]
@@ -294,21 +283,36 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
 
     scroll.add_controller(scroll_controller);
 
-    #[allow(clippy::type_complexity)]
-    let on_change_cell: Rc<std::cell::RefCell<Option<Rc<dyn Fn()>>>> =
-        Rc::new(std::cell::RefCell::new(None));
-    let oc_cell = on_change_cell.clone();
     let scroll_r = scroll.clone();
     let buttons_r = buttons_box.clone();
     let window_r = window.clone();
-    let on_change: Rc<dyn Fn()> = Rc::new(move || {
-        if let Some(ref cb) = *oc_cell.borrow() {
-            spawn_refresh_delayed(&scroll_r, &buttons_r, &window_r, cb, 350);
+    let on_change_cell: Rc<RefCell<Option<Weak<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    let on_change: Rc<dyn Fn()> = Rc::new({
+        let cell = on_change_cell.clone();
+        let scroll_s = scroll_r.clone();
+        let buttons_s = buttons_r.clone();
+        let window_s = window_r.clone();
+        move || {
+            if let Some(cb) = cell.borrow().as_ref().and_then(|w| w.upgrade()) {
+                let scroll_t = scroll_s.clone();
+                let buttons_t = buttons_s.clone();
+                let window_t = window_s.clone();
+                let cb_t = cb.clone();
+                spawn_refresh_delayed(
+                    &scroll_t,
+                    &buttons_t,
+                    &window_t,
+                    Rc::new(move || cb_t()),
+                    350,
+                );
+            }
         }
     });
-    on_change_cell.borrow_mut().replace(on_change.clone());
-    let oc = on_change.clone();
+    on_change_cell
+        .borrow_mut()
+        .replace(Rc::downgrade(&on_change));
 
+    let oc = on_change.clone();
     window.connect_map(clone!(
         #[weak]
         scroll,
@@ -318,7 +322,7 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
         window,
         move |_| {
             log::debug!("[workspace_bar] connect_map fired, launching fetch thread");
-            spawn_refresh(&scroll, &buttons_box, &window, &oc);
+            spawn_refresh(&scroll, &buttons_box, &window, oc.clone());
         }
     ));
 
@@ -326,14 +330,14 @@ pub fn build_workspace_bar(window: &ApplicationWindow) -> ScrolledWindow {
 }
 
 fn poll_windows(
-    rx: std::sync::mpsc::Receiver<Option<Vec<WindowInfo>>>,
+    windows: Option<Vec<WindowInfo>>,
     scroll: ScrolledWindow,
     buttons_box: GtkBox,
     window: ApplicationWindow,
     on_change: Rc<dyn Fn()>,
 ) {
-    match rx.try_recv() {
-        Ok(Some(windows)) => {
+    match windows {
+        Some(windows) => {
             log::debug!(
                 "[workspace_bar] poll_windows received {} window(s)",
                 windows.len()
@@ -351,17 +355,9 @@ fn poll_windows(
                 &on_change,
             );
         }
-        Ok(None) => {
+        None => {
             log::debug!("[workspace_bar] extension not available, hiding bar");
             scroll.set_visible(false);
-        }
-        Err(std::sync::mpsc::TryRecvError::Empty) => {
-            glib::idle_add_local_once(move || {
-                poll_windows(rx, scroll, buttons_box, window, on_change);
-            });
-        }
-        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-            log::warn!("[workspace_bar] background thread disconnected without sending");
         }
     }
 }

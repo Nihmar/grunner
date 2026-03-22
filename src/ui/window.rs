@@ -55,6 +55,7 @@ struct AppLoadingContext {
     pinned_apps: Rc<RefCell<Vec<String>>>,
     window: ApplicationWindow,
     dragging: Rc<Cell<bool>>,
+    cfg: Config,
 }
 
 impl Clone for AppLoadingContext {
@@ -67,6 +68,7 @@ impl Clone for AppLoadingContext {
             pinned_apps: Rc::clone(&self.pinned_apps),
             window: self.window.clone(),
             dragging: Rc::clone(&self.dragging),
+            cfg: self.cfg.clone(),
         }
     }
 }
@@ -87,6 +89,7 @@ impl AppLoadingContext {
                     &self.pinned_apps,
                     &self.all_apps,
                     &self.dragging,
+                    &self.cfg,
                 );
                 update_strip_visibility(&self.pinned_strip, &pinned, true);
 
@@ -455,6 +458,7 @@ impl WindowContext {
             pinned_strip: self.pinned_strip.clone(),
             toast_overlay: self.toast_overlay.clone(),
             dragging: self.dragging.clone(),
+            cfg: self.cfg.clone(),
         }
     }
 
@@ -576,6 +580,7 @@ impl WindowContext {
             pinned_apps: self.pinned_apps.clone(),
             window: self.window.clone(),
             dragging: self.dragging.clone(),
+            cfg: self.cfg.clone(),
         };
         glib::idle_add_local_once(move || load_ctx.poll());
     }

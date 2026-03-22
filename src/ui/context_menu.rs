@@ -16,6 +16,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::app_mode::AppMode;
+use crate::core::config::Config;
 use crate::item_activation::activate_item;
 use crate::launcher;
 use crate::model::items::{AppItem, CommandItem};
@@ -43,6 +44,7 @@ pub struct WindowCtx {
     pub pinned_strip: GtkBox,
     pub toast_overlay: ToastOverlay,
     pub dragging: Rc<Cell<bool>>,
+    pub cfg: Config,
 }
 
 /// Create a flat menu button with standard CSS classes
@@ -288,10 +290,11 @@ fn build_normal_context_menu(
         let win_ref = ctx.window.clone();
         let weak = weak_popover.clone();
         let dragging_ref = ctx.dragging.clone();
+        let cfg = ctx.cfg.clone();
         add_menu_button(&ctx_menu, "Remove from Favourites", move || {
             if let Some(ref id) = did {
                 remove_pinned_app(&p_apps, id);
-                save_pinned_apps(&p_apps.borrow());
+                save_pinned_apps(&p_apps.borrow(), &cfg);
             }
             refresh_pinned_strip(
                 &p_strip,
@@ -300,6 +303,7 @@ fn build_normal_context_menu(
                 &win_ref,
                 entry_for_btns.text().is_empty(),
                 &dragging_ref,
+                &cfg,
             );
             if let Some(p) = weak.upgrade() {
                 p.popdown();
@@ -316,6 +320,7 @@ fn build_normal_context_menu(
         let toast_ref = ctx.toast_overlay.clone();
         let entry_add = entry_for_btns.clone();
         let dragging_ref = ctx.dragging.clone();
+        let cfg = ctx.cfg.clone();
         add_menu_button(&ctx_menu, "Add to Favourites", move || {
             let Some(ref id) = did else {
                 if let Some(p) = weak.upgrade() {
@@ -335,7 +340,7 @@ fn build_normal_context_menu(
                 return;
             }
             if add_pinned_app(&p_apps, id).is_ok() {
-                save_pinned_apps(&p_apps.borrow());
+                save_pinned_apps(&p_apps.borrow(), &cfg);
             }
             refresh_pinned_strip(
                 &p_strip,
@@ -344,6 +349,7 @@ fn build_normal_context_menu(
                 &win_ref,
                 entry_add.text().is_empty(),
                 &dragging_ref,
+                &cfg,
             );
             if let Some(p) = weak.upgrade() {
                 p.popdown();

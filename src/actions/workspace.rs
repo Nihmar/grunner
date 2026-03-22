@@ -4,9 +4,20 @@
 //! to enumerate, activate, and close windows on the current workspace.
 
 use crate::utils::desktop::resolve_desktop_info;
+use futures::future::join_all;
 use log::{debug, warn};
 use serde::Deserialize;
+use std::sync::OnceLock;
 use zbus::{Connection, proxy};
+
+async fn get_workspace_conn() -> zbus::Result<Connection> {
+    static CONN: OnceLock<Connection> = OnceLock::new();
+    if let Some(c) = CONN.get() {
+        return Ok(c.clone());
+    }
+    let conn = Connection::session().await?;
+    Ok(CONN.get_or_init(|| conn).clone())
+}
 
 #[proxy(
     interface = "org.gnome.Shell.Extensions.Windows",
@@ -21,14 +32,14 @@ trait WindowCalls {
 
 #[derive(Debug, Clone)]
 pub struct WindowInfo {
-    pub id: u64,
+    pub id: u32,
     pub title: String,
     pub icon_name: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct RawWindowEntry {
-    id: u64,
+    id: u32,
     #[serde(rename = "wm_class")]
     wm_class: Option<String>,
     #[serde(rename = "wm_class_instance")]
@@ -42,7 +53,7 @@ struct RawWindowEntry {
 pub async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
     let our_pid = std::process::id();
 
-    let conn = Connection::session()
+    let conn = get_workspace_conn()
         .await
         .map_err(|e| warn!("[workspace] D-Bus session connect failed: {e}"))
         .ok()?;
@@ -132,38 +143,35 @@ pub async fn fetch_workspace_windows() -> Option<Vec<WindowInfo>> {
     Some(result)
 }
 
-pub async fn activate_window(id: u64) {
-    let Ok(conn) = Connection::session().await else {
+pub async fn activate_window(id: u32) {
+    let Ok(conn) = get_workspace_conn().await else {
         return;
     };
     let Ok(windows) = WindowCallsProxy::new(&conn).await else {
         return;
     };
 
-    let result = windows
-        .activate(u32::try_from(id).unwrap_or(u32::MAX))
-        .await;
+    let result = windows.activate(id).await;
     if let Err(e) = result {
         warn!("[workspace] Activate({id}) failed: {e}");
     }
 }
 
-pub async fn close_window(id: u64) {
-    let Ok(conn) = Connection::session().await else {
+pub async fn close_window(id: u32) {
+    let Ok(conn) = get_workspace_conn().await else {
         return;
     };
     let Ok(windows) = WindowCallsProxy::new(&conn).await else {
         return;
     };
 
-    let result = windows.close(u32::try_from(id).unwrap_or(u32::MAX)).await;
+    let result = windows.close(id).await;
     if let Err(e) = result {
         warn!("[workspace] Close({id}) failed: {e}");
     }
 }
 
-pub async fn close_all_windows(ids: Vec<u64>) {
-    for id in ids {
-        close_window(id).await;
-    }
+pub async fn close_all_windows(ids: Vec<u32>) {
+    let futs: Vec<_> = ids.into_iter().map(close_window).collect();
+    join_all(futs).await;
 }

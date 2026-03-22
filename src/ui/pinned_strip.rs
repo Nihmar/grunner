@@ -115,6 +115,7 @@ fn setup_drag_and_drop(
     pinned_apps_ref: &Rc<RefCell<Vec<String>>>,
     drag_source_id: &Rc<RefCell<Option<String>>>,
     dragging: &Rc<Cell<bool>>,
+    cfg: &config::Config,
 ) {
     let did = desktop_id.to_string();
 
@@ -182,6 +183,7 @@ fn setup_drag_and_drop(
     let p_apps = pinned_apps_ref.clone();
     let src_id_drop = drag_source_id.clone();
     let strip_drop = strip.clone();
+    let cfg_s = cfg.clone();
     drop_target.connect_accept(move |_dt, _| {
         let source_id = src_id_drop.borrow().clone();
 
@@ -225,7 +227,7 @@ fn setup_drag_and_drop(
         }
 
         // Persist to config
-        save_pinned_apps(&p_apps.borrow());
+        save_pinned_apps(&p_apps.borrow(), &cfg_s);
 
         info!("Favorites reordered successfully");
         true
@@ -243,6 +245,7 @@ pub fn update_pinned_strip(
     pinned_apps_ref: &Rc<RefCell<Vec<String>>>,
     _all_apps_ref: &Rc<RefCell<Vec<DesktopApp>>>,
     dragging: &Rc<Cell<bool>>,
+    cfg: &config::Config,
 ) {
     if dragging.get() {
         return;
@@ -317,6 +320,7 @@ pub fn update_pinned_strip(
             let p_apps = pinned_apps_ref.clone();
             let p_strip = strip.clone();
             let overlay_clone = overlay.clone();
+            let cfg_s = cfg.clone();
 
             let badge_click = GestureClick::new();
             badge_click.set_button(1);
@@ -328,7 +332,7 @@ pub fn update_pinned_strip(
                     pinned.retain(|d| d != &did);
                     info!("Removed from Favorites: {app_name}");
                 }
-                save_pinned_apps(&p_apps.borrow());
+                save_pinned_apps(&p_apps.borrow(), &cfg_s);
                 p_strip.remove(&overlay_clone);
                 update_strip_visibility(&p_strip, &p_apps.borrow(), true);
             });
@@ -342,6 +346,7 @@ pub fn update_pinned_strip(
                 pinned_apps_ref,
                 &drag_source_id,
                 dragging,
+                cfg,
             );
 
             strip.append(&overlay);
@@ -372,8 +377,8 @@ pub fn update_strip_visibility(strip: &GtkBox, pinned_apps: &[String], query_is_
 }
 
 /// Save pinned apps list to the config file on disk
-pub fn save_pinned_apps(pinned_apps: &[String]) {
-    let mut cfg = config::load();
+pub fn save_pinned_apps(pinned_apps: &[String], cfg: &config::Config) {
+    let mut cfg = cfg.clone();
     cfg.pinned_apps = pinned_apps.to_vec();
     if let Err(e) = crate::settings_window::save::save_config(&cfg) {
         error!("Failed to save pinned apps: {e}");
@@ -388,6 +393,7 @@ pub fn refresh_pinned_strip(
     window: &libadwaita::ApplicationWindow,
     query_is_empty: bool,
     dragging: &Rc<Cell<bool>>,
+    cfg: &config::Config,
 ) {
     let pinned = pinned_apps.borrow();
     let apps = all_apps.borrow();
@@ -399,6 +405,7 @@ pub fn refresh_pinned_strip(
         pinned_apps,
         all_apps,
         dragging,
+        cfg,
     );
     update_strip_visibility(strip, &pinned, query_is_empty);
 }
