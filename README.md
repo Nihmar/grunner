@@ -426,6 +426,7 @@ src/
 │   ├── window.rs               # Main window, search entry, list view, keyboard nav
 │   ├── context_menu.rs         # Context menu helpers (copy, open, etc.)
 │   ├── list_factory.rs         # List item factory with bind strategies
+│   ├── result_row.rs           # Composite row widget (icon + name + desc)
 │   ├── pinned_strip.rs         # Favorites/pinned apps sidebar
 │   ├── power_bar.rs            # Power action bar (settings, suspend, reboot, etc.)
 │   ├── obsidian_bar.rs         # Obsidian action bar
