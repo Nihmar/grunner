@@ -195,6 +195,10 @@ fn build_result(
         }
     }
 
+    let clipboard_text = meta
+        .get("clipboardText")
+        .and_then(|val| String::try_from(val.clone()).ok());
+
     let icon = meta.get("icon").and_then(parse_icon_variant);
 
     Some(SearchResult {
@@ -205,6 +209,7 @@ fn build_result(
         app_icon: app_icon.to_string(),
         bus_name: provider.bus_name.clone(),
         object_path: provider.object_path.clone(),
+        clipboard_text,
     })
 }
 

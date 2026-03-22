@@ -35,4 +35,5 @@ pub struct SearchResult {
     pub app_icon: String,
     pub bus_name: String,
     pub object_path: String,
+    pub clipboard_text: Option<String>,
 }

@@ -50,11 +50,17 @@ pub fn open_file_or_line(line: &str) {
             debug!("Using editor: {editor}");
             let mut cmd = std::process::Command::new(&editor);
 
-            // Add line number argument for text editors (not for xdg-open)
-            if editor != "xdg-open" {
-                cmd.arg(format!("+{line_num}"));
+            match editor.as_str() {
+                "code" | "codium" | "hx" | "helix" => {
+                    cmd.arg(format!("{file}:{line_num}"));
+                }
+                _ => {
+                    if editor != "xdg-open" {
+                        cmd.arg(format!("+{line_num}"));
+                    }
+                    cmd.arg(file);
+                }
             }
-            cmd.arg(file);
 
             debug!("Spawning command: {cmd:?}");
             if let Err(e) = cmd.spawn() {

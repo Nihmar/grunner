@@ -18,6 +18,9 @@ pub fn discover_providers(blacklist: &[String]) -> Vec<SearchProvider> {
         PathBuf::from("/usr/share/gnome-shell/search-providers"),
         PathBuf::from(format!("{home}/.local/share/gnome-shell/search-providers")),
         PathBuf::from("/var/lib/flatpak/exports/share/gnome-shell/search-providers"),
+        PathBuf::from(format!(
+            "{home}/.local/share/flatpak/exports/share/gnome-shell/search-providers"
+        )),
     ];
 
     debug!("Discovering search providers, blacklist: {blacklist:?}");

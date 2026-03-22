@@ -156,6 +156,15 @@ fn activate_obsidian_action(item: &ObsidianActionItem, ctx: &ActivationContext) 
 
 fn activate_search_result(item: &SearchResultItem, ctx: &ActivationContext) {
     let (bus, path, id, terms) = (item.bus_name(), item.object_path(), item.id(), item.terms());
+
+    if let Some(text) = item.clipboard_text()
+        && let Some(display) = gtk4::gdk::Display::default()
+    {
+        let clipboard = display.clipboard();
+        clipboard.set_text(&text);
+        info!("Copied '{text}' to clipboard from search result activation");
+    }
+
     info!("Activating search result: {id} from provider {bus}");
     let timestamp = ctx.timestamp;
     std::thread::spawn(move || {

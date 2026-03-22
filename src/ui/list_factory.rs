@@ -44,7 +44,7 @@ impl<'a> BindContext<'a> {
 ///
 /// Each strategy handles binding a specific type of item to the UI widgets.
 /// This allows for easy extension and testing of individual binding behaviors.
-pub trait BindStrategy {
+pub trait BindStrategy: Sync {
     fn matches(&self, ctx: &BindContext, line: &str) -> bool;
     fn bind(&self, ctx: &BindContext, line: &str);
 }
@@ -74,7 +74,7 @@ struct ShellCommandBinder;
 
 impl BindStrategy for ShellCommandBinder {
     fn matches(&self, ctx: &BindContext, line: &str) -> bool {
-        ctx.mode == ActiveMode::CustomScript || line.starts_with("Run: ") || line.contains(" | ")
+        ctx.mode == ActiveMode::CustomScript || line.starts_with("Run: ")
     }
 
     fn bind(&self, ctx: &BindContext, line: &str) {
@@ -98,8 +98,9 @@ struct GrepResultBinder;
 impl BindStrategy for GrepResultBinder {
     fn matches(&self, ctx: &BindContext, line: &str) -> bool {
         ctx.mode == ActiveMode::ObsidianGrep
-            || (line.contains(':') && !line.starts_with('/'))
-            || (line.starts_with('/') && line.matches(':').count() >= 2)
+            || (ctx.mode == ActiveMode::None
+                && (line.contains(':') && !line.starts_with('/')
+                    || line.starts_with('/') && line.matches(':').count() >= 2))
     }
 
     fn bind(&self, ctx: &BindContext, line: &str) {
@@ -185,17 +186,19 @@ impl BindStrategy for DefaultBinder {
         set_desc(ctx.desc_label, "");
     }
 }
+static BINDERS: std::sync::OnceLock<Vec<&'static dyn BindStrategy>> = std::sync::OnceLock::new();
 
-/// List of all binding strategies in order of priority
-fn get_binders() -> Vec<Box<dyn BindStrategy>> {
-    vec![
-        Box::new(CalculatorBinder),
-        Box::new(ShellCommandBinder),
-        Box::new(GrepResultBinder),
-        Box::new(ObsidianFileBinder),
-        Box::new(FilePathBinder),
-        Box::new(DefaultBinder),
-    ]
+fn get_binders() -> &'static Vec<&'static dyn BindStrategy> {
+    BINDERS.get_or_init(|| {
+        vec![
+            &CalculatorBinder,
+            &ShellCommandBinder,
+            &GrepResultBinder,
+            &ObsidianFileBinder,
+            &FilePathBinder,
+            &DefaultBinder,
+        ]
+    })
 }
 
 /// Create a factory for the list view
@@ -306,8 +309,31 @@ pub fn create_factory(
         }
     });
 
-    // Unbind signal to clean up
+    // Unbind signal to clean up data without destroying widgets
     factory.connect_unbind(move |_factory, item| {
+        let item = item
+            .downcast_ref::<ListItem>()
+            .expect("Needs to be ListItem");
+        if let Some(hbox) = item.child().and_then(|c| c.downcast::<GtkBox>().ok()) {
+            if let Some(image) = hbox.first_child().and_then(|c| c.downcast::<Image>().ok()) {
+                image.clear();
+            }
+            if let Some(vbox) = hbox.last_child().and_then(|c| c.downcast::<GtkBox>().ok()) {
+                if let Some(name_label) =
+                    vbox.first_child().and_then(|c| c.downcast::<Label>().ok())
+                {
+                    name_label.set_text("");
+                }
+                if let Some(desc_label) = vbox.last_child().and_then(|c| c.downcast::<Label>().ok())
+                {
+                    desc_label.set_text("");
+                }
+            }
+        }
+    });
+
+    // Teardown signal to destroy widgets when items leave the pool
+    factory.connect_teardown(move |_factory, item| {
         let item = item
             .downcast_ref::<ListItem>()
             .expect("Needs to be ListItem");

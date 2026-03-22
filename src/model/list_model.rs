@@ -314,6 +314,7 @@ impl ProviderSearchPoller {
                                 r.bus_name,
                                 r.object_path,
                                 this.terms.clone(),
+                                r.clipboard_text,
                             )
                             .upcast::<glib::Object>()
                         })

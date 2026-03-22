@@ -64,6 +64,11 @@ mod imp {
         ///
         /// Passed back to the provider when activating the result for context.
         pub terms: RefCell<Vec<String>>,
+        /// Text to copy to clipboard when the result is activated
+        ///
+        /// This is provided by some providers (e.g., GNOME Calculator) and should only
+        /// be used at activation time, not during passive search result rendering.
+        pub clipboard_text: RefCell<Option<String>>,
     }
 
     /// GTK object subclass implementation
@@ -127,6 +132,7 @@ impl SearchResultItem {
         bus_name: impl Into<String>,
         object_path: impl Into<String>,
         terms: Vec<String>,
+        clipboard_text: Option<String>,
     ) -> Self {
         let obj: Self = glib::Object::new();
         let imp = obj.imp();
@@ -141,6 +147,7 @@ impl SearchResultItem {
         *imp.bus_name.borrow_mut() = bus_name.into();
         *imp.object_path.borrow_mut() = object_path.into();
         *imp.terms.borrow_mut() = terms;
+        *imp.clipboard_text.borrow_mut() = clipboard_text;
 
         obj
     }
@@ -209,5 +216,13 @@ impl SearchResultItem {
     #[must_use]
     pub fn terms(&self) -> Vec<String> {
         self.imp().terms.borrow().clone()
+    }
+
+    /// Get the clipboard text to copy when this result is activated
+    ///
+    /// Returns `None` if no clipboard text is associated with this result.
+    #[must_use]
+    pub fn clipboard_text(&self) -> Option<String> {
+        self.imp().clipboard_text.borrow().clone()
     }
 }
