@@ -9,24 +9,23 @@ use gtk4::gdk;
 
 pub mod themes;
 
+#[derive(Clone)]
 pub struct ThemeManager {
     provider: gtk4::CssProvider,
-    custom_css: Option<String>,
 }
 
 impl ThemeManager {
     #[must_use]
     pub fn new() -> Self {
         let provider = gtk4::CssProvider::new();
-        Self {
-            provider,
-            custom_css: None,
-        }
+        Self { provider }
     }
 
-    pub fn apply(&mut self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
+    pub fn apply(&self, mode: ThemeMode, custom_path: Option<&str>, display: &gdk::Display) {
         let style_manager = libadwaita::StyleManager::default();
 
+        #[allow(unused_assignments)]
+        let mut custom_css: Option<String> = None;
         let css: &str = match mode {
             ThemeMode::System => {
                 log::info!("Using system theme (libadwaita defaults)");
@@ -70,13 +69,14 @@ impl ThemeManager {
                 themes::DRACULA
             }
             ThemeMode::Custom => {
-                self.custom_css = Self::load_custom_theme(custom_path);
-                self.custom_css.as_deref().unwrap_or(themes::DARK)
+                custom_css = Self::load_custom_theme(custom_path);
+                custom_css.as_deref().unwrap_or(themes::DARK)
             }
         };
 
         self.provider.load_from_data(css);
         log::info!("Loaded CSS provider with {} bytes", css.len());
+        gtk4::style_context_remove_provider_for_display(display, &self.provider);
         gtk4::style_context_add_provider_for_display(
             display,
             &self.provider,

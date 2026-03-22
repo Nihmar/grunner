@@ -34,7 +34,7 @@ pub(crate) fn parse_colon_command(query: &str) -> (&str, &str) {
 /// File-search commands (`:ob`, `:f`, `:fg`) require the concrete
 /// [`AppCommandHandler`] wrapper because `file_search::run_*` needs `&AppListModel`.
 pub struct CommandHandler<T: CommandSink> {
-    pub model: T,
+    pub(crate) model: T,
 }
 
 impl<T: CommandSink> CommandHandler<T> {

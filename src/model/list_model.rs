@@ -387,6 +387,7 @@ pub trait CommandSink: Clone + 'static {
     fn count(&self) -> u32;
     fn select(&self, pos: u32);
     fn bump_gen(&self) -> u64;
+    fn current_gen(&self) -> u64;
     fn schedule<F: FnOnce() + 'static>(&self, f: F);
     fn bump_and_schedule<F: FnOnce() + 'static>(&self, f: F);
     fn get_commands(&self, query: &str) -> Vec<CommandConfig>;
@@ -421,13 +422,22 @@ impl CommandSink for AppListModel {
         self.bump_task_gen()
     }
 
+    fn current_gen(&self) -> u64 {
+        self.state.task_gen()
+    }
+
     fn schedule<F: FnOnce() + 'static>(&self, f: F) {
         AppListModel::schedule_command(self, f);
     }
 
     fn bump_and_schedule<F: FnOnce() + 'static>(&self, f: F) {
-        self.bump_task_gen();
-        AppListModel::schedule_command(self, f);
+        let generation = self.bump_task_gen();
+        let model_clone = self.clone();
+        self.schedule_command(move || {
+            if model_clone.state.task_gen() == generation {
+                f();
+            }
+        });
     }
 
     fn get_commands(&self, query: &str) -> Vec<CommandConfig> {
@@ -606,21 +616,6 @@ impl AppListModel {
 
     pub(crate) fn bump_task_gen(&self) -> u64 {
         self.state.bump_task_gen()
-    }
-
-    /// Bump the task generation counter and schedule a command that
-    /// only executes if no newer bump has occurred.
-    pub(crate) fn bump_and_schedule<F>(&self, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        let generation = self.bump_task_gen();
-        let model_clone = self.clone();
-        self.schedule_command(move || {
-            if model_clone.state.task_gen() == generation {
-                f();
-            }
-        });
     }
 
     pub fn schedule_populate(&self, query: &str) {

@@ -440,6 +440,7 @@ struct WindowContext {
     all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
     pinned_apps: Rc<RefCell<Vec<String>>>,
     dragging: Rc<Cell<bool>>,
+    theme_manager: crate::core::theme::ThemeManager,
 }
 
 impl WindowContext {
@@ -458,8 +459,7 @@ impl WindowContext {
     }
 
     fn setup_theme(&self) {
-        let mut theme_manager = crate::core::theme::ThemeManager::new();
-        theme_manager.apply(
+        self.theme_manager.apply(
             self.cfg.theme,
             self.cfg.custom_theme_path.as_deref(),
             &self.display,
@@ -474,9 +474,9 @@ impl WindowContext {
         });
 
         let display = self.display.clone();
+        let theme_manager = self.theme_manager.clone();
         self.callbacks.connect_theme_changed(move |_| {
             let config = crate::core::config::load();
-            let mut theme_manager = crate::core::theme::ThemeManager::new();
             theme_manager.apply(config.theme, config.custom_theme_path.as_deref(), &display);
         });
 
@@ -797,7 +797,6 @@ fn setup_keyboard_controller(
 ///
 /// # Panics
 /// Panics if the default GDK display cannot be obtained.
-#[allow(clippy::too_many_lines)]
 pub fn build_ui(app: &Application, cfg: &Config) {
     debug!("Workspace bar enabled: {}", cfg.workspace_bar_enabled);
 
@@ -851,6 +850,7 @@ pub fn build_ui(app: &Application, cfg: &Config) {
         all_apps: all_apps.clone(),
         pinned_apps: pinned_apps.clone(),
         dragging: dragging.clone(),
+        theme_manager: crate::core::theme::ThemeManager::new(),
     };
 
     wctx.setup_theme();

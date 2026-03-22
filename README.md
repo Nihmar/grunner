@@ -343,7 +343,7 @@ See [docs/ERROR_LOGGING.md](docs/ERROR_LOGGING.md) for full documentation.
 
 ## Theming
 
-10 built-in themes selectable in Settings → Theme or via config:
+10 built-in themes + custom, selectable in Settings → Theme or via config:
 
 | Theme                | Description                          |
 | -------------------- | ------------------------------------ |
@@ -465,7 +465,7 @@ src/
 
 ## Testing
 
-The project has **148 tests** (139 unit + 4 integration + 5 doc-tests) covering all non-visual logic.
+The project has **167 tests** (158 unit + 4 integration + 5 doc-tests) covering all non-visual logic.
 
 ### Unit tests
 
