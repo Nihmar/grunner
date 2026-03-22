@@ -16,7 +16,7 @@ use crate::core::config::{CommandConfig, ObsidianConfig};
 use crate::launcher::DesktopApp;
 use crate::model::items::SearchResultItem;
 use crate::providers::dbus::{self, SearchProvider as DbusSearchProvider};
-use crate::providers::{AppProvider, CalculatorProvider, CommandProvider, SearchProvider};
+use crate::providers::{AppProvider, CalculatorProvider, SearchProvider};
 use gtk4::SingleSelection;
 use gtk4::gio;
 use gtk4::prelude::*;
@@ -379,7 +379,8 @@ pub struct AppListModel {
 ///
 /// This abstraction allows `CommandHandler` to be tested with mock implementations
 /// and reduces coupling between command logic and the concrete model type.
-pub trait CommandSink {
+pub trait CommandSink: Clone + 'static {
+    fn mode(&self) -> ActiveMode;
     fn set_mode(&self, mode: ActiveMode);
     fn clear(&self);
     fn push(&self, item: &impl IsA<glib::Object>);
@@ -388,9 +389,14 @@ pub trait CommandSink {
     fn bump_gen(&self) -> u64;
     fn schedule<F: FnOnce() + 'static>(&self, f: F);
     fn bump_and_schedule<F: FnOnce() + 'static>(&self, f: F);
+    fn get_commands(&self, query: &str) -> Vec<CommandConfig>;
+    fn obsidian_config(&self) -> Option<ObsidianConfig>;
 }
 
 impl CommandSink for AppListModel {
+    fn mode(&self) -> ActiveMode {
+        self.active_mode()
+    }
     fn set_mode(&self, mode: ActiveMode) {
         self.set_active_mode(mode);
     }
@@ -422,6 +428,26 @@ impl CommandSink for AppListModel {
     fn bump_and_schedule<F: FnOnce() + 'static>(&self, f: F) {
         self.bump_task_gen();
         AppListModel::schedule_command(self, f);
+    }
+
+    fn get_commands(&self, query: &str) -> Vec<CommandConfig> {
+        let commands = self.config.commands.borrow();
+        commands
+            .iter()
+            .filter(|cmd| {
+                if query.is_empty() {
+                    true
+                } else {
+                    cmd.name.to_lowercase().contains(&query.to_lowercase())
+                        || cmd.command.to_lowercase().contains(&query.to_lowercase())
+                }
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn obsidian_config(&self) -> Option<ObsidianConfig> {
+        self.config.obsidian_cfg.clone()
     }
 }
 
@@ -539,7 +565,7 @@ impl AppListModel {
         } else if self.state.active_mode() == ActiveMode::CustomScript {
             use crate::command_handler::CommandHandler;
             let query = self.state.current_query();
-            let handler = CommandHandler::new(self);
+            let handler = CommandHandler::new(self.clone());
             handler.handle_sh(&query);
         }
     }
@@ -691,7 +717,7 @@ impl AppListModel {
     /// Handle colon-prefixed commands by routing to appropriate handlers
     fn handle_colon_command(&self, query: &str) {
         use crate::command_handler::CommandHandler;
-        let handler = CommandHandler::new(self);
+        let handler = CommandHandler::new(self.clone());
         handler.handle_colon_command(query);
     }
 
@@ -745,24 +771,6 @@ impl AppListModel {
             clear_store,
         };
         glib::idle_add_local_once(move || poller.poll());
-    }
-}
-
-impl CommandProvider for AppListModel {
-    fn get_commands(&self, query: &str) -> Vec<CommandConfig> {
-        let commands = self.config.commands.borrow();
-        commands
-            .iter()
-            .filter(|cmd| {
-                if query.is_empty() {
-                    true
-                } else {
-                    cmd.name.to_lowercase().contains(&query.to_lowercase())
-                        || cmd.command.to_lowercase().contains(&query.to_lowercase())
-                }
-            })
-            .cloned()
-            .collect()
     }
 }
 
