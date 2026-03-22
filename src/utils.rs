@@ -98,17 +98,16 @@ pub fn contract_home(path: &std::path::Path) -> String {
 /// - there's an equals sign in the middle
 #[must_use]
 pub fn is_calculator_result(line: &str) -> bool {
-    if !line.contains('=') {
+    let Some((expr, result)) = line.split_once('=') else {
+        return false;
+    };
+    // Reject multiple '='
+    if result.contains('=') {
         return false;
     }
 
-    let parts: Vec<&str> = line.split('=').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-
-    let expr = parts[0].trim();
-    let result = parts[1].trim();
+    let expr = expr.trim();
+    let result = result.trim();
 
     if expr.is_empty() {
         return false;
@@ -118,11 +117,7 @@ pub fn is_calculator_result(line: &str) -> bool {
         return false;
     }
 
-    if !result.chars().any(|c| c.is_ascii_digit()) {
-        return false;
-    }
-
-    true
+    result.chars().any(|c| c.is_ascii_digit())
 }
 
 /// Get the icon for a file based on its content type

@@ -229,16 +229,14 @@ impl CommandSink for AppListModel {
     }
 
     fn get_commands(&self, query: &str) -> Vec<CommandConfig> {
+        let query_lower = query.to_lowercase();
         let commands = self.config.commands.borrow();
         commands
             .iter()
             .filter(|cmd| {
-                if query.is_empty() {
-                    true
-                } else {
-                    cmd.name.to_lowercase().contains(&query.to_lowercase())
-                        || cmd.command.to_lowercase().contains(&query.to_lowercase())
-                }
+                query_lower.is_empty()
+                    || cmd.name.to_lowercase().contains(&query_lower)
+                    || cmd.command.to_lowercase().contains(&query_lower)
             })
             .cloned()
             .collect()

@@ -30,6 +30,9 @@ pub struct DesktopApp {
     pub desktop_id: String,
     /// Display name of the application (from the `Name=` field)
     pub name: String,
+    /// Pre-computed lowercase name for case-insensitive search without allocation
+    #[serde(skip)]
+    pub name_lower: String,
     /// Command to execute when launching the application (from the `Exec=` field)
     pub exec: String,
     /// Description or comment about the application (from the `Comment=` field)
@@ -125,9 +128,13 @@ fn try_load_cache(dirs: &[PathBuf]) -> Option<Vec<DesktopApp>> {
         }
     };
 
-    // Deserialize cache
+    // Deserialize cache and populate computed fields
     match bincode::deserialize::<Vec<DesktopApp>>(&bytes) {
-        Ok(apps) => {
+        Ok(mut apps) => {
+            // Populate name_lower (skipped during deserialization)
+            for app in &mut apps {
+                app.name_lower = app.name.to_lowercase();
+            }
             info!("Loaded {} applications from cache", apps.len());
             Some(apps)
         }
@@ -241,7 +248,7 @@ fn scan_apps(dirs: &[PathBuf]) -> Vec<DesktopApp> {
     debug!("Successfully parsed {} applications", apps.len());
 
     // Sort applications alphabetically for consistent UI presentation
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_unstable_by(|a, b| a.name_lower.cmp(&b.name_lower));
 
     info!(
         "Scanned {} applications from {} directories",
@@ -403,6 +410,7 @@ pub(crate) fn parse_desktop_file(path: &Path) -> Option<DesktopApp> {
     );
     Some(DesktopApp {
         desktop_id,
+        name_lower: name.to_lowercase(),
         name,
         exec,
         description,

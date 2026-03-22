@@ -92,21 +92,18 @@ impl AppProvider {
         if !query.contains(char::is_whitespace) && query.len() < 15 {
             let mut scored: Vec<_> = apps
                 .iter()
-                .filter(|app| {
-                    app.name.to_lowercase().starts_with(&query_lower)
-                        || app.name.to_lowercase().contains(&query_lower)
-                })
-                .map(|app| {
-                    let score = if app.name.to_lowercase().starts_with(&query_lower) {
-                        100
+                .filter_map(|app| {
+                    if app.name_lower.starts_with(&query_lower) {
+                        Some((100, app))
+                    } else if app.name_lower.contains(&query_lower) {
+                        Some((50, app))
                     } else {
-                        50
-                    };
-                    (score, app)
+                        None
+                    }
                 })
                 .collect();
 
-            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            scored.sort_unstable_by(|a, b| b.0.cmp(&a.0));
             let prefix_results: Vec<_> = scored
                 .into_iter()
                 .take(max_results)
@@ -133,7 +130,7 @@ impl AppProvider {
             })
             .collect();
 
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        scored.sort_unstable_by(|a, b| b.0.cmp(&a.0));
         scored
             .into_iter()
             .take(max_results)
