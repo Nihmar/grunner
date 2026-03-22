@@ -9,9 +9,7 @@ use glib::WeakRef;
 use glib::clone;
 use gtk4::gdk;
 use gtk4::prelude::*;
-use gtk4::{
-    Align, Box as GtkBox, Button, EventControllerMotion, GestureClick, Orientation, Popover,
-};
+use gtk4::{Align, Box as GtkBox, Button, GestureClick, Orientation, Popover};
 use libadwaita::{ApplicationWindow, Toast, ToastOverlay};
 use log::error;
 use std::cell::{Cell, RefCell};
@@ -192,34 +190,14 @@ pub fn open_with_default_app(path: &str) {
 /// Set up right-click context menu on the results list
 #[allow(clippy::cast_possible_truncation)]
 pub fn setup_list_context_menu(list_view: &gtk4::ListView, ctx: &WindowCtx) {
-    let hovered_pos = Rc::new(Cell::<u32>::new(0));
-
-    let motion = EventControllerMotion::new();
-    let hovered_for_motion = hovered_pos.clone();
-    motion.connect_enter(clone!(
-        #[weak]
-        list_view,
-        move |_controller, _x, _y| {
-            if let Some(pos) = list_view
-                .model()
-                .and_then(|m| m.downcast::<gtk4::SingleSelection>().ok())
-                .map(|s| s.selected())
-            {
-                hovered_for_motion.set(pos);
-            }
-        }
-    ));
-    list_view.add_controller(motion);
-
     let right_click = GestureClick::new();
     right_click.set_button(3);
     let ctx = ctx.clone();
-    let hovered = hovered_pos.clone();
     right_click.connect_pressed(clone!(
         #[weak]
         list_view,
         move |_gesture, _n_press, click_x, click_y| {
-            let clicked_pos = hovered.get();
+            let clicked_pos = ctx.model.selection.selected();
 
             let Some(obj) = ctx.model.store.item(clicked_pos) else {
                 return;
