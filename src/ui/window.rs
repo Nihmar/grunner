@@ -108,22 +108,6 @@ impl AppLoadingContext {
 // UI Construction Helpers
 // ---------------------------------------------------------------------------
 
-/// Setup CSS provider and apply theme based on configuration
-fn setup_css(cfg: &Config, display: &gdk::Display) {
-    // Load and apply CSS stylesheet for custom widget styling
-    let provider = CssProvider::new();
-    provider.load_from_data(include_str!("style.css"));
-    gtk4::style_context_add_provider_for_display(
-        display,
-        &provider,
-        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
-
-    // Apply theme based on configuration
-    let mut theme_manager = crate::core::theme::ThemeManager::new();
-    theme_manager.apply(cfg.theme, cfg.custom_theme_path.as_deref(), display);
-}
-
 /// Initialize the data model
 fn setup_model(cfg: &Config) -> AppListModel {
     AppListModel::new(
@@ -435,6 +419,168 @@ struct PinnedUiState {
     apps: Rc<RefCell<Vec<String>>>,
 }
 
+/// Internal context for UI construction phases
+///
+/// Groups all shared state needed during UI building so that helper
+/// functions receive a single struct instead of many individual arguments.
+#[derive(Clone)]
+struct WindowContext {
+    display: gdk::Display,
+    cfg: Config,
+    model: AppListModel,
+    current_mode: Rc<Cell<AppMode>>,
+    window: ApplicationWindow,
+    callbacks: AppCallbacks,
+    entry: Entry,
+    list_view: ListView,
+    obsidian_bar: Option<GtkBox>,
+    command_icon: Image,
+    pinned_strip: GtkBox,
+    toast_overlay: ToastOverlay,
+    all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
+    pinned_apps: Rc<RefCell<Vec<String>>>,
+    dragging: Rc<Cell<bool>>,
+}
+
+impl WindowContext {
+    fn ctx(&self) -> WindowCtx {
+        WindowCtx {
+            window: self.window.clone(),
+            entry: self.entry.clone(),
+            model: self.model.clone(),
+            current_mode: self.current_mode.clone(),
+            pinned_apps: self.pinned_apps.clone(),
+            all_apps: self.all_apps.clone(),
+            pinned_strip: self.pinned_strip.clone(),
+            toast_overlay: self.toast_overlay.clone(),
+            dragging: self.dragging.clone(),
+        }
+    }
+
+    fn setup_theme(&self) {
+        let mut theme_manager = crate::core::theme::ThemeManager::new();
+        theme_manager.apply(
+            self.cfg.theme,
+            self.cfg.custom_theme_path.as_deref(),
+            &self.display,
+        );
+    }
+
+    fn wire_callbacks(&self) {
+        let model = self.model.clone();
+        self.callbacks.connect_config_changed(move |_| {
+            let config = crate::core::config::load();
+            model.apply_config(&config);
+        });
+
+        let display = self.display.clone();
+        self.callbacks.connect_theme_changed(move |_| {
+            let config = crate::core::config::load();
+            let mut theme_manager = crate::core::theme::ThemeManager::new();
+            theme_manager.apply(config.theme, config.custom_theme_path.as_deref(), &display);
+        });
+
+        let window = self.window.clone();
+        self.callbacks.connect_window_resized(move |_| {
+            let config = crate::core::config::load();
+            window.set_resizable(true);
+            window.set_default_size(config.window_width, config.window_height);
+            window.set_resizable(false);
+        });
+    }
+
+    fn setup_dragging(&self, root: &GtkBox) {
+        let click = GestureClick::new();
+        click.set_button(1);
+        click.set_propagation_phase(gtk4::PropagationPhase::Target);
+        let window = self.window.clone();
+        click.connect_pressed(move |gesture, _n_press, x, y| {
+            let Some(surface) = window.surface() else {
+                return;
+            };
+            let Some(toplevel) = surface.downcast_ref::<gdk::Toplevel>() else {
+                return;
+            };
+            let Some(device) = gesture.device() else {
+                return;
+            };
+            let button = gesture.current_button().cast_signed();
+            toplevel.begin_move(&device, button, x, y, gdk::CURRENT_TIME);
+        });
+        root.add_controller(click);
+    }
+
+    fn wire_signals(&self) {
+        if let Some(ref obsidian_bar) = self.obsidian_bar {
+            connect_window_signals(
+                &self.window,
+                &self.entry,
+                obsidian_bar,
+                &self.command_icon,
+                &self.model,
+                &self.current_mode,
+            );
+        }
+
+        let icon_theme = gtk4::IconTheme::for_display(&self.display);
+        let obsidian_icon_name = ["obsidian", "md.obsidian.Obsidian", "text-x-markdown"]
+            .iter()
+            .find(|&&name| icon_theme.has_icon(name))
+            .copied()
+            .unwrap_or("text-x-markdown");
+
+        let pinned_ui = PinnedUiState {
+            strip: self.pinned_strip.clone(),
+            apps: self.pinned_apps.clone(),
+        };
+        if let Some(ref obsidian_bar) = self.obsidian_bar {
+            connect_search_signals(
+                &self.entry,
+                &self.model,
+                &self.current_mode,
+                obsidian_bar,
+                &self.command_icon,
+                obsidian_icon_name,
+                &pinned_ui,
+            );
+        }
+
+        setup_keyboard_controller(
+            &self.list_view,
+            &self.window,
+            &self.model,
+            &self.current_mode,
+            &self.pinned_apps,
+            &self.all_apps,
+        );
+        connect_list_signals(
+            &self.list_view,
+            &self.window,
+            &self.model,
+            &self.current_mode,
+        );
+        setup_list_context_menu(&self.list_view, &self.ctx());
+    }
+
+    fn start_loading(&self) {
+        let dirs = self.cfg.expanded_app_dirs();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(launcher::load_apps(&dirs));
+        });
+        let load_ctx = AppLoadingContext {
+            rx: Rc::new(rx),
+            model: self.model.clone(),
+            all_apps: self.all_apps.clone(),
+            pinned_strip: self.pinned_strip.clone(),
+            pinned_apps: self.pinned_apps.clone(),
+            window: self.window.clone(),
+            dragging: self.dragging.clone(),
+        };
+        glib::idle_add_local_once(move || load_ctx.poll());
+    }
+}
+
 /// Connect search entry signals (text changes, icon updates)
 fn connect_search_signals(
     entry: &Entry,
@@ -510,35 +656,6 @@ fn connect_list_signals(
             window.hide();
         }
     ));
-}
-
-/// Start background loading of desktop applications
-fn start_background_loading(
-    cfg: &Config,
-    model: &AppListModel,
-    all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>>,
-    pinned_strip: GtkBox,
-    pinned_apps: Rc<RefCell<Vec<String>>>,
-    window: &ApplicationWindow,
-    dragging: Rc<Cell<bool>>,
-) {
-    let dirs = cfg.expanded_app_dirs();
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    std::thread::spawn(move || {
-        let _ = tx.send(launcher::load_apps(&dirs));
-    });
-
-    let ctx = AppLoadingContext {
-        rx: Rc::new(rx),
-        model: model.clone(),
-        all_apps,
-        pinned_strip,
-        pinned_apps,
-        window: window.clone(),
-        dragging,
-    };
-    glib::idle_add_local_once(move || ctx.poll());
 }
 
 /// Scroll the list view to ensure a selected item is visible
@@ -684,58 +801,23 @@ fn setup_keyboard_controller(
 pub fn build_ui(app: &Application, cfg: &Config) {
     debug!("Workspace bar enabled: {}", cfg.workspace_bar_enabled);
 
-    // 1. Display and CSS Setup
     let display = gtk4::gdk::Display::default().expect("Cannot connect to display");
-    setup_css(cfg, &display);
-
-    // 2. Data Model Initialization
     let model = setup_model(cfg);
-    let current_mode: Rc<Cell<AppMode>> = Rc::new(Cell::new(AppMode::Normal));
-
-    // Shared state for loaded apps and pinned apps
+    let current_mode = Rc::new(Cell::new(AppMode::Normal));
     let all_apps: Rc<RefCell<Vec<launcher::DesktopApp>>> = Rc::new(RefCell::new(Vec::new()));
-    let pinned_apps: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(cfg.pinned_apps.clone()));
-    let dragging: Rc<Cell<bool>> = Rc::new(Cell::new(false));
-
-    // 3. Window Creation
+    let pinned_apps = Rc::new(RefCell::new(cfg.pinned_apps.clone()));
+    let dragging = Rc::new(Cell::new(false));
     let window = create_window(app, cfg);
-
-    // 4. AppCallbacks for settings hot-reload
     let callbacks = AppCallbacks::new();
 
-    callbacks.connect_config_changed(clone!(
-        #[strong]
-        model,
-        move |_| {
-            let config = crate::core::config::load();
-            model.apply_config(&config);
-        }
-    ));
+    let provider = CssProvider::new();
+    provider.load_from_data(include_str!("style.css"));
+    gtk4::style_context_add_provider_for_display(
+        &display,
+        &provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 
-    let display_for_theme = display.clone();
-    callbacks.connect_theme_changed(move |_| {
-        let config = crate::core::config::load();
-        let mut theme_manager = crate::core::theme::ThemeManager::new();
-        theme_manager.apply(
-            config.theme,
-            config.custom_theme_path.as_deref(),
-            &display_for_theme,
-        );
-    });
-
-    callbacks.connect_window_resized(clone!(
-        #[weak]
-        window,
-        move |_| {
-            let config = crate::core::config::load();
-            window.set_resizable(true);
-            window.set_default_size(config.window_width, config.window_height);
-            window.set_resizable(false);
-        }
-    ));
-
-    // 5. Main Layout Construction
-    // Main search entry field
     let entry = Entry::builder()
         .placeholder_text("Search applications…")
         .hexpand(true)
@@ -753,107 +835,28 @@ pub fn build_ui(app: &Application, cfg: &Config) {
             &dragging,
         );
 
-    // Enable window dragging on background click
-    let click = GestureClick::new();
-    click.set_button(1); // left click only
-    click.set_propagation_phase(gtk4::PropagationPhase::Target);
-    click.connect_pressed(clone!(
-        #[weak]
-        window,
-        move |gesture, _n_press, x, y| {
-            let Some(surface) = window.surface() else {
-                return;
-            };
-            let Some(toplevel) = surface.downcast_ref::<gdk::Toplevel>() else {
-                return;
-            };
-            let Some(device) = gesture.device() else {
-                return;
-            };
-            let button = gesture.current_button().cast_signed();
-            toplevel.begin_move(&device, button, x, y, gdk::CURRENT_TIME);
-        }
-    ));
-    root.add_controller(click);
-
-    // Display the window
-    window.present();
-
-    // Shared context for UI functions
-    let ctx = WindowCtx {
-        window: window.clone(),
-        entry: entry.clone(),
+    let wctx = WindowContext {
+        display: display.clone(),
+        cfg: cfg.clone(),
         model: model.clone(),
         current_mode: current_mode.clone(),
-        pinned_apps: pinned_apps.clone(),
-        all_apps: all_apps.clone(),
+        window: window.clone(),
+        callbacks: callbacks.clone(),
+        entry: entry.clone(),
+        list_view: list_view.clone(),
+        obsidian_bar: obsidian_bar.clone(),
+        command_icon: command_icon.clone(),
         pinned_strip: pinned_strip.clone(),
         toast_overlay: toast_overlay.clone(),
+        all_apps: all_apps.clone(),
+        pinned_apps: pinned_apps.clone(),
         dragging: dragging.clone(),
     };
 
-    // 5. Connect Signals
-    // 5.1 Window lifecycle signals
-    if let Some(ref obsidian_bar) = obsidian_bar {
-        connect_window_signals(
-            &window,
-            &entry,
-            obsidian_bar,
-            &command_icon,
-            &model,
-            &current_mode,
-        );
-    }
-
-    // 5.2 Icon Theme Configuration
-    let icon_theme = gtk4::IconTheme::for_display(&display);
-    let obsidian_icon_name = ["obsidian", "md.obsidian.Obsidian", "text-x-markdown"]
-        .iter()
-        .find(|&&name| icon_theme.has_icon(name))
-        .copied()
-        .unwrap_or("text-x-markdown");
-
-    // 5.3 Search entry signals
-    let pinned_ui = PinnedUiState {
-        strip: pinned_strip.clone(),
-        apps: pinned_apps.clone(),
-    };
-    if let Some(ref obsidian_bar) = obsidian_bar {
-        connect_search_signals(
-            &entry,
-            &model,
-            &current_mode,
-            obsidian_bar,
-            &command_icon,
-            obsidian_icon_name,
-            &pinned_ui,
-        );
-    }
-
-    // 5.4 Keyboard navigation
-    setup_keyboard_controller(
-        &list_view,
-        &window,
-        &model,
-        &current_mode,
-        &pinned_apps,
-        &all_apps,
-    );
-
-    // 5.5 List view activation
-    connect_list_signals(&list_view, &window, &model, &current_mode);
-
-    // 5.6 List view context menu
-    setup_list_context_menu(&list_view, &ctx);
-
-    // 6. Background Application Loading
-    start_background_loading(
-        cfg,
-        &model,
-        all_apps,
-        pinned_strip,
-        pinned_apps,
-        &window,
-        dragging,
-    );
+    wctx.setup_theme();
+    wctx.wire_callbacks();
+    wctx.setup_dragging(&root);
+    window.present();
+    wctx.wire_signals();
+    wctx.start_loading();
 }
