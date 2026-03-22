@@ -6,11 +6,10 @@
 
 use crate::app_mode::ActiveMode;
 use crate::model::items::{AppItem, CommandItem, ObsidianActionItem, SearchResultItem};
+use crate::ui::result_row::ResultRow;
 use crate::utils::{contract_home, get_file_icon, is_calculator_result};
 use gtk4::prelude::*;
-use gtk4::{
-    Align, Box as GtkBox, Image, Label, ListItem, Orientation, SignalListItemFactory, Widget,
-};
+use gtk4::{Image, Label, ListItem, SignalListItemFactory, Widget};
 
 /// Context for binding list items, containing all necessary data
 pub struct BindContext<'a> {
@@ -206,10 +205,13 @@ fn get_binders() -> &'static Vec<&'static dyn BindStrategy> {
 /// This function builds a `GTK SignalListItemFactory` that handles
 /// the creation and binding of list items based on their type.
 ///
+/// Uses `ResultRow` — a custom composite widget that holds direct
+/// references to its children, avoiding tree traversal on every bind.
+///
 /// # Panics
 ///
 /// Panics if the list item cannot be downcast to `ListItem`, or if
-/// expected child widgets (hbox, image, vbox, labels) are missing.
+/// expected child widgets are missing.
 #[must_use]
 pub fn create_factory(
     active_mode: ActiveMode,
@@ -222,43 +224,7 @@ pub fn create_factory(
         let item = item
             .downcast_ref::<ListItem>()
             .expect("Needs to be ListItem");
-
-        // Create horizontal box for icon and text
-        let hbox = GtkBox::new(Orientation::Horizontal, 12);
-        hbox.set_margin_top(6);
-        hbox.set_margin_bottom(6);
-        hbox.set_margin_start(12);
-        hbox.set_margin_end(12);
-        hbox.set_halign(Align::Fill);
-
-        // Create icon
-        let image = Image::new();
-        image.set_pixel_size(32);
-        image.set_valign(Align::Center);
-        image.add_css_class("app-icon");
-        hbox.append(&image);
-
-        // Create vertical box for text (name + description)
-        let vbox = GtkBox::new(Orientation::Vertical, 2);
-        vbox.set_valign(Align::Center);
-        vbox.set_hexpand(true);
-
-        // Create name label
-        let name_label = Label::new(None);
-        name_label.set_halign(Align::Start);
-        name_label.add_css_class("row-name");
-        vbox.append(&name_label);
-
-        // Create description label
-        let desc_label = Label::new(None);
-        desc_label.set_halign(Align::Start);
-        desc_label.add_css_class("row-desc");
-        desc_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-        desc_label.set_max_width_chars(70);
-        vbox.append(&desc_label);
-
-        hbox.append(&vbox);
-        item.set_child(Some(&hbox));
+        item.set_child(Some(&ResultRow::new()));
     });
 
     // Bind signal to populate data
@@ -268,44 +234,31 @@ pub fn create_factory(
             .expect("Needs to be ListItem");
         let child = item.item().expect("Needs item");
 
-        // Extract widgets from the list item
-        let hbox = item
+        let row = item
             .child()
-            .and_then(|c| c.downcast::<GtkBox>().ok())
-            .expect("missing hbox");
-        let image = hbox
-            .first_child()
-            .and_then(|c| c.downcast::<Image>().ok())
-            .expect("missing image");
-        let vbox = image
-            .next_sibling()
-            .and_then(|c| c.downcast::<GtkBox>().ok())
-            .expect("missing vbox");
-        let name_label = vbox
-            .first_child()
-            .and_then(|c| c.downcast::<Label>().ok())
-            .expect("missing name_label");
-        let desc_label = name_label
-            .next_sibling()
-            .and_then(|c| c.downcast::<Label>().ok())
-            .expect("missing desc_label");
+            .and_then(|c| c.downcast::<ResultRow>().ok())
+            .expect("missing ResultRow");
+
+        let image = row.image();
+        let name_label = row.name_label();
+        let desc_label = row.desc_label();
 
         // Downcast to specific types and bind
         if let Some(app_item) = child.downcast_ref::<AppItem>() {
-            bind_app_item(&image, &name_label, &desc_label, app_item);
+            bind_app_item(image, name_label, desc_label, app_item);
         } else if let Some(cmd_item) = child.downcast_ref::<CommandItem>() {
             bind_command_item(
-                &image,
-                &name_label,
-                &desc_label,
+                image,
+                name_label,
+                desc_label,
                 cmd_item,
                 active_mode,
                 vault_path.as_deref(),
             );
         } else if let Ok(obs_item) = child.clone().downcast::<ObsidianActionItem>() {
-            bind_obsidian_item(&image, &name_label, &desc_label, &obs_item);
+            bind_obsidian_item(image, name_label, desc_label, &obs_item);
         } else if let Ok(sr_item) = child.clone().downcast::<SearchResultItem>() {
-            bind_search_result_item(&image, &name_label, &desc_label, &sr_item);
+            bind_search_result_item(image, name_label, desc_label, &sr_item);
         }
     });
 
@@ -314,21 +267,10 @@ pub fn create_factory(
         let item = item
             .downcast_ref::<ListItem>()
             .expect("Needs to be ListItem");
-        if let Some(hbox) = item.child().and_then(|c| c.downcast::<GtkBox>().ok()) {
-            if let Some(image) = hbox.first_child().and_then(|c| c.downcast::<Image>().ok()) {
-                image.clear();
-            }
-            if let Some(vbox) = hbox.last_child().and_then(|c| c.downcast::<GtkBox>().ok()) {
-                if let Some(name_label) =
-                    vbox.first_child().and_then(|c| c.downcast::<Label>().ok())
-                {
-                    name_label.set_text("");
-                }
-                if let Some(desc_label) = vbox.last_child().and_then(|c| c.downcast::<Label>().ok())
-                {
-                    desc_label.set_text("");
-                }
-            }
+        if let Some(row) = item.child().and_then(|c| c.downcast::<ResultRow>().ok()) {
+            row.image().clear();
+            row.name_label().set_text("");
+            row.desc_label().set_text("");
         }
     });
 

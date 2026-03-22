@@ -2,9 +2,7 @@
 
 use crate::core::global_state::get_tokio_runtime;
 use futures::stream::{FuturesUnordered, StreamExt};
-use gtk4::gdk::Display;
-use gtk4::prelude::DisplayExt;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -74,16 +72,33 @@ async fn query_all_streaming(
 
     let terms_str: Vec<&str> = terms.iter().map(String::as_str).collect();
 
+    // Build proxies once per batch — Proxy::new is async and does bus-name
+    // lookup, so reusing them across searches avoids redundant work.
+    let mut proxy_cache: HashMap<String, zbus::Proxy<'_>> = HashMap::new();
+    for provider in providers {
+        if !proxy_cache.contains_key(&provider.bus_name)
+            && let Ok(proxy) = zbus::Proxy::new(
+                &conn,
+                provider.bus_name.as_str(),
+                provider.object_path.as_str(),
+                "org.gnome.Shell.SearchProvider2",
+            )
+            .await
+        {
+            proxy_cache.insert(provider.bus_name.clone(), proxy);
+        }
+    }
+
     let mut futs: FuturesUnordered<_> = providers
         .iter()
-        .map(|provider| {
-            let conn = conn.clone();
+        .filter_map(|provider| {
+            let proxy = proxy_cache.get(&provider.bus_name)?.clone();
             let terms_str = terms_str.clone();
             let bus_name = provider.bus_name.clone();
-            async move {
-                let result = query_one(&conn, provider, &terms_str, max_per_provider).await;
+            Some(async move {
+                let result = query_one(&proxy, provider, &terms_str, max_per_provider).await;
                 (bus_name, result)
-            }
+            })
         })
         .collect();
 
@@ -107,7 +122,7 @@ async fn query_all_streaming(
 }
 
 async fn query_one(
-    conn: &Connection,
+    proxy: &zbus::Proxy<'_>,
     provider: &SearchProvider,
     terms: &[&str],
     max_results: usize,
@@ -118,14 +133,6 @@ async fn query_one(
         "Querying search provider: {} with terms: {:?}",
         provider.bus_name, terms
     );
-
-    let proxy = zbus::Proxy::new(
-        conn,
-        provider.bus_name.as_str(),
-        provider.object_path.as_str(),
-        "org.gnome.Shell.SearchProvider2",
-    )
-    .await?;
 
     let timeout_dur = Duration::from_secs(3);
 
@@ -183,21 +190,10 @@ fn build_result(
     let name = take_str(&mut meta, "name").unwrap_or_else(|| id.clone());
     let description = take_str(&mut meta, "description").unwrap_or_default();
 
-    if let Some(val) = meta.get("clipboardText")
-        && let Ok(text) = String::try_from(val.clone())
-    {
-        if let Some(display) = Display::default() {
-            let clipboard = display.clipboard();
-            clipboard.set_text(&text);
-            info!("Copied '{text}' to clipboard from search provider metadata");
-        } else {
-            warn!("No default GDK Display available — cannot copy to clipboard");
-        }
-    }
-
-    let clipboard_text = meta
-        .get("clipboardText")
-        .and_then(|val| String::try_from(val.clone()).ok());
+    // Clipboard handling is deferred to activation time (item_activation.rs)
+    // where it runs on the GTK main thread — calling from here would be
+    // thread-unsafe.
+    let clipboard_text = take_str(&mut meta, "clipboardText");
 
     let icon = meta.get("icon").and_then(parse_icon_variant);
 

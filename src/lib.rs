@@ -31,6 +31,7 @@ pub mod ui {
     pub mod obsidian_bar;
     pub mod pinned_strip;
     pub mod power_bar;
+    pub mod result_row;
     pub mod window;
     pub mod window_context;
     pub mod workspace_bar;

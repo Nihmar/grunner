@@ -445,22 +445,18 @@ impl AppListModel {
             return;
         }
 
-        // Regular application search
-        self.store.remove_all();
+        // Regular application search — splice replaces existing content
+        // atomically (single items-changed signal) instead of N append() calls.
         self.bump_task_gen();
 
-        // Use providers for standard search
-        let mut all_results: Vec<glib::Object> = Vec::new();
+        let all_results: Vec<glib::Object> = self
+            .config
+            .providers
+            .iter()
+            .flat_map(|p| p.search(query))
+            .collect();
 
-        for provider in self.config.providers.iter() {
-            let mut results = provider.search(query);
-            all_results.append(&mut results);
-        }
-
-        // Add results to store
-        for item in all_results {
-            self.store.append(&item);
-        }
+        self.store.splice(0, self.store.n_items(), &all_results);
 
         // Schedule search provider query to mimic GNOME Search behavior
         if !query.is_empty() {
