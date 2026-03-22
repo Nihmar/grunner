@@ -57,7 +57,7 @@ impl<R: 'static> SubprocessRunner<R> {
     pub fn poll(self) {
         match self.rx.try_recv() {
             Ok(results) => {
-                if self.model.task_gen.get() == self.generation {
+                if self.model.state.task_gen() == self.generation {
                     (self.processor)(&self.model, self.generation, results);
                 }
             }

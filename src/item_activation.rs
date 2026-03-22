@@ -37,7 +37,7 @@ impl<'a> ActivationContext<'a> {
 
     #[must_use]
     pub fn obsidian_config(&self) -> Option<&'a ObsidianConfig> {
-        self.model.obsidian_cfg.as_ref()
+        self.model.config.obsidian_cfg.as_ref()
     }
 }
 

@@ -6,8 +6,10 @@
 //! - Search provider integration
 //! - Real-time result updates with background threads
 //!
-//! The `AppListModel` struct is the central coordinator that manages
-//! all search modes, executes commands, and updates the GTK list store.
+//! The `AppListModel` struct coordinates three sub-components:
+//! - [`SearchState`]: manages query text and task generation for cancellation
+//! - [`DebounceScheduler`]: handles debounce timers for commands and search
+//! - `ModelConfig`: holds configuration (`max_results`, obsidian, commands, blacklist)
 
 use crate::app_mode::ActiveMode;
 use crate::core::config::{CommandConfig, ObsidianConfig};
@@ -25,6 +27,220 @@ use std::time::Duration;
 const DEFAULT_SEARCH_DEBOUNCE_MS: u32 = 100;
 const PROVIDER_SEARCH_DEBOUNCE_MS: u32 = 120;
 const PROVIDER_CLEAR_TIMEOUT_MS: u64 = 25;
+
+// ── Search State ─────────────────────────────────────────────────────────────
+
+/// Manages search state: current query and task generation for cancellation.
+///
+/// Task generation allows stale async operations to be detected and discarded
+/// when the user types new input before previous searches complete.
+#[derive(Clone)]
+pub struct SearchState {
+    current_query: Rc<RefCell<String>>,
+    task_gen: Rc<Cell<u64>>,
+    active_mode: Rc<Cell<ActiveMode>>,
+}
+
+impl SearchState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            current_query: Rc::new(RefCell::new(String::new())),
+            task_gen: Rc::new(Cell::new(0)),
+            active_mode: Rc::new(Cell::new(ActiveMode::None)),
+        }
+    }
+
+    #[must_use]
+    pub fn current_query(&self) -> String {
+        self.current_query.borrow().clone()
+    }
+
+    pub fn set_query(&self, query: &str) {
+        *self.current_query.borrow_mut() = query.to_string();
+    }
+
+    #[must_use]
+    pub fn active_mode(&self) -> ActiveMode {
+        self.active_mode.get()
+    }
+
+    pub fn set_active_mode(&self, mode: ActiveMode) {
+        self.active_mode.set(mode);
+    }
+
+    #[must_use]
+    pub fn bump_task_gen(&self) -> u64 {
+        let next = self.task_gen.get() + 1;
+        self.task_gen.set(next);
+        next
+    }
+
+    #[must_use]
+    pub fn task_gen(&self) -> u64 {
+        self.task_gen.get()
+    }
+}
+
+impl Default for SearchState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Debounce Scheduler ────────────────────────────────────────────────────────
+
+/// Manages debounce timers for command execution and search operations.
+///
+/// Provides separate scheduling for:
+/// - Commands (colon commands) using `schedule_command`
+/// - Search providers using `schedule_search`
+pub struct DebounceScheduler {
+    command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
+    command_debounce_ms: Cell<u32>,
+    search_debounce: Rc<RefCell<Option<glib::SourceId>>>,
+    search_debounce_ms: u32,
+}
+
+impl DebounceScheduler {
+    #[must_use]
+    pub fn new(command_ms: u32, search_ms: u32) -> Self {
+        Self {
+            command_debounce: Rc::new(RefCell::new(None)),
+            command_debounce_ms: Cell::new(command_ms),
+            search_debounce: Rc::new(RefCell::new(None)),
+            search_debounce_ms: search_ms,
+        }
+    }
+
+    #[must_use]
+    pub fn command_debounce_ms(&self) -> u32 {
+        self.command_debounce_ms.get()
+    }
+
+    pub fn set_command_debounce_ms(&self, ms: u32) {
+        self.command_debounce_ms.set(ms);
+    }
+
+    pub fn cancel_command(&self) {
+        if let Some(id) = self.command_debounce.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    pub fn cancel_search(&self) {
+        if let Some(id) = self.search_debounce.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    pub fn schedule_command<F>(&self, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.cancel_command();
+        Self::schedule_with_delay(&self.command_debounce, self.command_debounce_ms.get(), f);
+    }
+
+    pub fn schedule_search<F>(&self, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.cancel_search();
+        Self::schedule_with_delay(&self.search_debounce, self.search_debounce_ms, f);
+    }
+
+    pub fn schedule_command_with_delay<F>(&self, delay_ms: u32, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.cancel_command();
+        Self::schedule_with_delay(&self.command_debounce, delay_ms, f);
+    }
+
+    fn schedule_with_delay<F>(slot: &Rc<RefCell<Option<glib::SourceId>>>, delay_ms: u32, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        if let Some(id) = slot.borrow_mut().take() {
+            id.remove();
+        }
+        let mut f_opt = Some(f);
+        let slot_clone = slot.clone();
+        let source_id =
+            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
+                *slot_clone.borrow_mut() = None;
+                if let Some(f) = f_opt.take() {
+                    f();
+                }
+                glib::ControlFlow::Break
+            });
+        *slot.borrow_mut() = Some(source_id);
+    }
+}
+
+impl Clone for DebounceScheduler {
+    fn clone(&self) -> Self {
+        Self {
+            command_debounce: Rc::clone(&self.command_debounce),
+            command_debounce_ms: Cell::new(self.command_debounce_ms.get()),
+            search_debounce: Rc::clone(&self.search_debounce),
+            search_debounce_ms: self.search_debounce_ms,
+        }
+    }
+}
+
+// ── Model Config ─────────────────────────────────────────────────────────────
+
+/// Holds configuration settings for the search model.
+///
+/// Contains values that can be updated via `apply_config` without recreating the model.
+#[derive(Clone)]
+pub struct ModelConfig {
+    pub max_results: Cell<usize>,
+    pub obsidian_cfg: Option<ObsidianConfig>,
+    pub commands: Rc<RefCell<Vec<CommandConfig>>>,
+    pub blacklist: Rc<RefCell<Vec<String>>>,
+    pub disable_modes: Cell<bool>,
+    pub providers: Rc<Vec<Box<dyn SearchProvider>>>,
+}
+
+impl ModelConfig {
+    pub fn new(
+        max_results: usize,
+        obsidian_cfg: Option<ObsidianConfig>,
+        blacklist: Vec<String>,
+        commands: Vec<CommandConfig>,
+        disable_modes: bool,
+        all_apps: Rc<RefCell<Vec<DesktopApp>>>,
+    ) -> Self {
+        let providers = Rc::new(vec![
+            Box::new(AppProvider::new(all_apps, max_results)) as Box<dyn SearchProvider>,
+            Box::new(CalculatorProvider::new()) as Box<dyn SearchProvider>,
+        ]);
+
+        Self {
+            max_results: Cell::new(max_results),
+            obsidian_cfg,
+            commands: Rc::new(RefCell::new(commands)),
+            blacklist: Rc::new(RefCell::new(blacklist)),
+            disable_modes: Cell::new(disable_modes),
+            providers,
+        }
+    }
+
+    pub fn apply_config(&self, config: &crate::core::config::Config) {
+        self.max_results.set(config.max_results);
+        self.disable_modes.set(config.disable_modes);
+
+        for provider in self.providers.iter() {
+            provider.set_max_results(config.max_results);
+        }
+
+        (*self.blacklist.borrow_mut()).clone_from(&config.search_provider_blacklist);
+        (*self.commands.borrow_mut()).clone_from(&config.commands);
+    }
+}
 
 // ── Pollers ───────────────────────────────────────────────────────────────────
 
@@ -59,7 +275,7 @@ impl ProviderSearchPoller {
     /// and manages a timeout to show a loading indicator.
     fn poll(self) {
         // Early exit if search generation has changed
-        if self.model.task_gen.get() != self.generation {
+        if self.model.state.task_gen() != self.generation {
             return;
         }
 
@@ -70,7 +286,7 @@ impl ProviderSearchPoller {
             match this.rx.try_recv() {
                 Ok(results) => {
                     // Double-check generation after receiving results
-                    if this.model.task_gen.get() != this.generation {
+                    if this.model.state.task_gen() != this.generation {
                         return;
                     }
 
@@ -137,51 +353,26 @@ impl ProviderSearchPoller {
 
 /// Main data model for Grunner's search interface
 ///
-/// This struct manages all aspects of search functionality:
-/// - Application listing and fuzzy search
-/// - Command execution and result display
-/// - Search provider integration
-/// - Obsidian vault searching
-/// - Result caching and UI synchronization
+/// Coordinates three sub-components:
+/// - [`SearchState`]: query text and task generation for cancellation
+/// - [`DebounceScheduler`]: debounce timers for commands and search
+/// - `ModelConfig`: configuration (`max_results`, obsidian, commands, blacklist)
+///
+/// The struct itself provides GTK list/selection models and delegates
+/// to the sub-components.
 #[derive(Clone)]
 pub struct AppListModel {
-    /// GTK list store containing the current search results
     pub(crate) store: gio::ListStore,
-    /// GTK selection model for tracking selected item
     pub(crate) selection: SingleSelection,
 
-    /// All available desktop applications (cached)
-    all_apps: Rc<RefCell<Vec<DesktopApp>>>,
+    pub(crate) state: SearchState,
+    pub(crate) debounce: DebounceScheduler,
+    pub(crate) config: ModelConfig,
 
-    /// Current search query text
-    current_query: Rc<RefCell<String>>,
-    /// Maximum number of results to show
-    pub(crate) max_results: Cell<usize>,
-
-    /// Generation counter for cancelling stale async tasks
-    pub(crate) task_gen: Rc<Cell<u64>>,
-    /// Obsidian configuration (if enabled)
-    pub obsidian_cfg: Option<ObsidianConfig>,
-    /// Current active mode for UI rendering
-    pub(crate) active_mode: Rc<Cell<ActiveMode>>,
-    /// Debounce timer source ID for delayed command execution
-    pub(crate) command_debounce: Rc<RefCell<Option<glib::SourceId>>>,
-    /// Debounce delay in milliseconds
-    pub(crate) command_debounce_ms: Cell<u32>,
-    /// Debounce timer source ID for delayed search execution
-    search_debounce: Rc<RefCell<Option<glib::SourceId>>>,
-    /// Debounce delay in milliseconds for default search mode
-    search_debounce_ms: u32,
     /// Cached GNOME Shell search providers
     search_providers: Rc<std::cell::OnceCell<Vec<DbusSearchProvider>>>,
-    /// List of search provider IDs to exclude
-    search_provider_blacklist: Rc<RefCell<Vec<String>>>,
-    /// List of custom script commands
-    pub(crate) commands: Rc<RefCell<Vec<crate::core::config::CommandConfig>>>,
-    /// Whether all special modes (colon commands) are disabled
-    pub(crate) disable_modes: Cell<bool>,
-    /// Search providers for different search types
-    providers: Rc<Vec<Box<dyn SearchProvider>>>,
+    /// All available desktop applications (used by providers)
+    all_apps: Rc<RefCell<Vec<DesktopApp>>>,
 }
 
 /// Trait for command handlers that need to interact with the list model.
@@ -239,12 +430,12 @@ impl AppListModel {
 
     /// Set the current active mode
     pub(crate) fn set_active_mode(&self, mode: ActiveMode) {
-        self.active_mode.set(mode);
+        self.state.set_active_mode(mode);
     }
 
     /// Get the current active mode
     pub(crate) fn active_mode(&self) -> ActiveMode {
-        self.active_mode.get()
+        self.state.active_mode()
     }
 
     /// Append an item to the list store
@@ -269,7 +460,7 @@ impl AppListModel {
 
     /// Return a reference to the Obsidian configuration, if present
     pub(crate) fn obsidian_config(&self) -> Option<&ObsidianConfig> {
-        self.obsidian_cfg.as_ref()
+        self.config.obsidian_cfg.as_ref()
     }
 
     /// Create a new `AppListModel` with the given configuration
@@ -295,37 +486,27 @@ impl AppListModel {
         selection.set_autoselect(true);
         selection.set_can_unselect(false);
 
-        // Initialize search providers
         let all_apps = Rc::new(RefCell::new(Vec::new()));
-        let commands_rc = Rc::new(RefCell::new(commands));
-        let blacklist_rc = Rc::new(RefCell::new(search_provider_blacklist));
 
-        let providers = Rc::new(vec![
-            Box::new(AppProvider::new(all_apps.clone(), max_results)) as Box<dyn SearchProvider>,
-            Box::new(CalculatorProvider::new()) as Box<dyn SearchProvider>,
-            // CommandProvider is used only in :sh mode, handled separately
-            // DbusSearchProvider is handled separately due to async nature
-        ]);
+        let state = SearchState::new();
+        let debounce = DebounceScheduler::new(command_debounce_ms, DEFAULT_SEARCH_DEBOUNCE_MS);
+        let config = ModelConfig::new(
+            max_results,
+            obsidian_cfg,
+            search_provider_blacklist,
+            commands,
+            disable_modes,
+            all_apps.clone(),
+        );
 
         Self {
             store,
             selection,
-            all_apps,
-            current_query: Rc::new(RefCell::new(String::new())),
-            max_results: Cell::new(max_results),
-
-            task_gen: Rc::new(Cell::new(0)),
-            obsidian_cfg,
-            active_mode: Rc::new(Cell::new(ActiveMode::None)),
-            command_debounce: Rc::new(RefCell::new(None)),
-            command_debounce_ms: Cell::new(command_debounce_ms),
-            search_debounce: Rc::new(RefCell::new(None)),
-            search_debounce_ms: DEFAULT_SEARCH_DEBOUNCE_MS,
+            state,
+            debounce,
+            config,
             search_providers: Rc::new(std::cell::OnceCell::new()),
-            search_provider_blacklist: blacklist_rc,
-            commands: commands_rc,
-            disable_modes: Cell::new(disable_modes),
-            providers,
+            all_apps,
         }
     }
 
@@ -335,7 +516,7 @@ impl AppListModel {
     /// It triggers a repopulation of the list with the current query.
     pub fn set_apps(&self, apps: Vec<DesktopApp>) {
         *self.all_apps.borrow_mut() = apps;
-        let query = self.current_query.borrow().clone();
+        let query = self.state.current_query();
         self.populate(&query);
     }
 
@@ -343,36 +524,21 @@ impl AppListModel {
     ///
     /// This updates all configurable settings without restarting the app.
     pub fn apply_config(&self, config: &crate::core::config::Config) {
-        let old_max_results = self.max_results.get();
+        let old_max_results = self.config.max_results.get();
 
-        // Update max_results
-        self.max_results.set(config.max_results);
-
-        // Update disable_modes
-        self.disable_modes.set(config.disable_modes);
-
-        // Update max_results on providers
-        for provider in self.providers.iter() {
-            provider.set_max_results(config.max_results);
-        }
+        self.config.apply_config(config);
 
         // Update command debounce
-        self.command_debounce_ms.set(config.command_debounce_ms);
-
-        // Update search provider blacklist
-        (*self.search_provider_blacklist.borrow_mut())
-            .clone_from(&config.search_provider_blacklist);
-
-        // Update commands
-        (*self.commands.borrow_mut()).clone_from(&config.commands);
+        self.debounce
+            .set_command_debounce_ms(config.command_debounce_ms);
 
         // Repopulate if max_results changed or in CustomScript mode
         if old_max_results != config.max_results {
-            let query = self.current_query.borrow().clone();
+            let query = self.state.current_query();
             self.populate(&query);
-        } else if self.active_mode.get() == ActiveMode::CustomScript {
+        } else if self.state.active_mode() == ActiveMode::CustomScript {
             use crate::command_handler::CommandHandler;
-            let query = self.current_query.borrow().clone();
+            let query = self.state.current_query();
             let handler = CommandHandler::new(self);
             handler.handle_sh(&query);
         }
@@ -382,59 +548,11 @@ impl AppListModel {
     ///
     /// Used when the user types new input before a delayed command executes.
     fn cancel_debounce(&self) {
-        if let Some(id) = self.command_debounce.borrow_mut().take() {
-            id.remove();
-        }
+        self.debounce.cancel_command();
     }
 
     fn cancel_search_debounce(&self) {
-        if let Some(id) = self.search_debounce.borrow_mut().take() {
-            id.remove();
-        }
-    }
-
-    fn schedule_with_debounce<F>(slot: &Rc<RefCell<Option<glib::SourceId>>>, delay_ms: u32, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        if let Some(id) = slot.borrow_mut().take() {
-            id.remove();
-        }
-        let mut f_opt = Some(f);
-        let slot_clone = slot.clone();
-        let source_id =
-            glib::timeout_add_local(Duration::from_millis(delay_ms.into()), move || {
-                *slot_clone.borrow_mut() = None;
-                if let Some(f) = f_opt.take() {
-                    f();
-                }
-                glib::ControlFlow::Break
-            });
-        *slot.borrow_mut() = Some(source_id);
-    }
-
-    /// Schedule a command to run after a delay with debouncing
-    ///
-    /// # Arguments
-    /// * `delay_ms` - Delay in milliseconds before executing the command
-    /// * `f` - Closure to execute (typically a command runner)
-    ///
-    /// This cancels any existing debounce timer and sets up a new one,
-    /// ensuring commands only run after the user has stopped typing.
-    fn schedule_command_with_delay<F>(&self, delay_ms: u32, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        self.cancel_debounce();
-        Self::schedule_with_debounce(&self.command_debounce, delay_ms, f);
-    }
-
-    fn schedule_search_with_delay<F>(&self, delay_ms: u32, f: F)
-    where
-        F: FnOnce() + 'static,
-    {
-        self.cancel_search_debounce();
-        Self::schedule_with_debounce(&self.search_debounce, delay_ms, f);
+        self.debounce.cancel_search();
     }
 
     /// Schedule a command to run with the configured default debounce delay
@@ -442,57 +560,30 @@ impl AppListModel {
     where
         F: FnOnce() + 'static,
     {
-        self.schedule_command_with_delay(self.command_debounce_ms.get(), f);
+        self.debounce.schedule_command(f);
     }
 
     fn schedule_search<F>(&self, f: F)
     where
         F: FnOnce() + 'static,
     {
-        self.schedule_search_with_delay(self.search_debounce_ms, f);
+        self.debounce.schedule_search(f);
     }
 
-    /// Schedule a search provider query to run in parallel with application search
-    ///
-    /// This mimics GNOME Search behavior where search provider results appear
-    /// alongside application results when filtering.
-    fn schedule_provider_search(&self, query: String, clear_store: bool) {
-        // Discover providers (cached after first use)
-        let providers = self
-            .search_providers
-            .get_or_init(|| dbus::discover_providers(&self.search_provider_blacklist.borrow()));
-
-        if providers.is_empty() {
-            return;
-        }
-
-        self.active_mode.set(ActiveMode::None);
-        self.bump_task_gen();
-        let providers_clone: Vec<DbusSearchProvider> = providers.clone();
-        let max = self.max_results.get();
-        let model_clone = self.clone();
-        // Use shorter debounce for search providers for more responsive feel
-        self.schedule_command_with_delay(PROVIDER_SEARCH_DEBOUNCE_MS, move || {
-            model_clone.run_provider_search(providers_clone, query, max, clear_store);
-        });
+    /// Schedule a search provider query to run with a specific delay
+    fn schedule_provider_search_with_delay<F>(&self, delay_ms: u32, f: F)
+    where
+        F: FnOnce() + 'static,
+    {
+        self.debounce.schedule_command_with_delay(delay_ms, f);
     }
 
-    /// Increment the task generation counter and return the new value
-    ///
-    /// This is used to identify stale async tasks - if a task's generation
-    /// doesn't match the current one, its results should be discarded.
     pub(crate) fn bump_task_gen(&self) -> u64 {
-        let next_gen = self.task_gen.get() + 1;
-        self.task_gen.set(next_gen);
-        next_gen
+        self.state.bump_task_gen()
     }
 
     /// Bump the task generation counter and schedule a command that
     /// only executes if no newer bump has occurred.
-    ///
-    /// This encapsulates the common bump-and-check pattern used by
-    /// handlers that schedule async work which should be cancelled
-    /// when the user types new input.
     pub(crate) fn bump_and_schedule<F>(&self, f: F)
     where
         F: FnOnce() + 'static,
@@ -500,63 +591,12 @@ impl AppListModel {
         let generation = self.bump_task_gen();
         let model_clone = self.clone();
         self.schedule_command(move || {
-            if model_clone.task_gen.get() == generation {
+            if model_clone.state.task_gen() == generation {
                 f();
             }
         });
     }
 
-    /// Main entry point for updating search results based on query
-    ///
-    /// This method routes the query to the appropriate handler:
-    /// - Colon commands (starting with `:`) go to command handlers
-    /// - Empty queries show all applications
-    /// - Non-empty queries trigger fuzzy application search
-    pub fn populate(&self, query: &str) {
-        *self.current_query.borrow_mut() = query.to_string();
-        self.active_mode.set(ActiveMode::None);
-        self.cancel_debounce();
-        self.cancel_search_debounce();
-
-        // Handle colon-prefixed commands (skip if modes are disabled)
-        if !self.disable_modes.get() && query.starts_with(':') {
-            self.handle_colon_command(query);
-            return;
-        }
-
-        // Regular application search
-        self.store.remove_all();
-        self.bump_task_gen();
-
-        // Use providers for standard search
-        let mut all_results: Vec<glib::Object> = Vec::new();
-
-        for provider in self.providers.iter() {
-            let mut results = provider.search(query);
-            all_results.append(&mut results);
-        }
-
-        // Add results to store
-        for item in all_results {
-            self.store.append(&item);
-        }
-
-        // Schedule search provider query to mimic GNOME Search behavior
-        if !query.is_empty() {
-            self.schedule_provider_search(query.to_string(), false);
-        }
-
-        // Auto-select first item if we have results
-        if self.store.n_items() > 0 {
-            self.selection.set_selected(0);
-        }
-    }
-
-    /// Schedule a populate call with debounce for default search mode
-    ///
-    /// This method should be called from UI when the search query changes.
-    /// It will cancel any pending search debounce and schedule a new one.
-    /// Colon commands are handled immediately without debounce.
     pub fn schedule_populate(&self, query: &str) {
         self.cancel_debounce();
         self.cancel_search_debounce();
@@ -580,6 +620,74 @@ impl AppListModel {
         }
     }
 
+    /// Main entry point for updating search results based on query
+    ///
+    /// This method routes the query to the appropriate handler:
+    /// - Colon commands (starting with `:`) go to command handlers
+    /// - Empty queries show all applications
+    /// - Non-empty queries trigger fuzzy application search
+    pub fn populate(&self, query: &str) {
+        self.state.set_query(query);
+        self.state.set_active_mode(ActiveMode::None);
+        self.cancel_debounce();
+        self.cancel_search_debounce();
+
+        // Handle colon-prefixed commands (skip if modes are disabled)
+        if !self.config.disable_modes.get() && query.starts_with(':') {
+            self.handle_colon_command(query);
+            return;
+        }
+
+        // Regular application search
+        self.store.remove_all();
+        self.bump_task_gen();
+
+        // Use providers for standard search
+        let mut all_results: Vec<glib::Object> = Vec::new();
+
+        for provider in self.config.providers.iter() {
+            let mut results = provider.search(query);
+            all_results.append(&mut results);
+        }
+
+        // Add results to store
+        for item in all_results {
+            self.store.append(&item);
+        }
+
+        // Schedule search provider query to mimic GNOME Search behavior
+        if !query.is_empty() {
+            self.schedule_provider_search(query.to_string(), false);
+        }
+
+        // Auto-select first item if we have results
+        if self.store.n_items() > 0 {
+            self.selection.set_selected(0);
+        }
+    }
+
+    /// Schedule a search provider query to run in parallel with application search
+    fn schedule_provider_search(&self, query: String, clear_store: bool) {
+        // Discover providers (cached after first use)
+        let providers = self
+            .search_providers
+            .get_or_init(|| dbus::discover_providers(&self.config.blacklist.borrow()));
+
+        if providers.is_empty() {
+            return;
+        }
+
+        self.state.set_active_mode(ActiveMode::None);
+        self.bump_task_gen();
+        let providers_clone: Vec<DbusSearchProvider> = providers.clone();
+        let max = self.config.max_results.get();
+        let model_clone = self.clone();
+        // Use shorter debounce for search providers for more responsive feel
+        self.schedule_provider_search_with_delay(PROVIDER_SEARCH_DEBOUNCE_MS, move || {
+            model_clone.run_provider_search(providers_clone, query, max, clear_store);
+        });
+    }
+
     /// Handle colon-prefixed commands by routing to appropriate handlers
     fn handle_colon_command(&self, query: &str) {
         use crate::command_handler::CommandHandler;
@@ -588,11 +696,6 @@ impl AppListModel {
     }
 
     /// Run a search query through GNOME Shell search providers
-    ///
-    /// This method coordinates the complex streaming search process:
-    /// 1. Sets up a timeout to show "searching..." indicator
-    /// 2. Spawns a background thread to query all providers
-    /// 3. Sets up a poller to receive streaming results
     fn run_provider_search(
         &self,
         providers: Vec<DbusSearchProvider>,
@@ -600,7 +703,7 @@ impl AppListModel {
         max: usize,
         clear_store: bool,
     ) {
-        let generation = self.task_gen.get();
+        let generation = self.state.task_gen();
         let model_clone = self.clone();
         let terms: Vec<String> = query.split_whitespace().map(String::from).collect();
 
@@ -613,7 +716,7 @@ impl AppListModel {
             let timeout_id = glib::timeout_add_local(
                 Duration::from_millis(PROVIDER_CLEAR_TIMEOUT_MS),
                 move || {
-                    if clear_model.task_gen.get() == clear_gen {
+                    if clear_model.state.task_gen() == clear_gen {
                         clear_model.store.remove_all();
                         clear_model
                             .selection
@@ -647,7 +750,7 @@ impl AppListModel {
 
 impl CommandProvider for AppListModel {
     fn get_commands(&self, query: &str) -> Vec<CommandConfig> {
-        let commands = self.commands.borrow();
+        let commands = self.config.commands.borrow();
         commands
             .iter()
             .filter(|cmd| {
@@ -663,39 +766,27 @@ impl CommandProvider for AppListModel {
     }
 }
 
+impl Default for DebounceScheduler {
+    fn default() -> Self {
+        Self::new(300, DEFAULT_SEARCH_DEBOUNCE_MS)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::utils::is_calculator_result;
 
     #[test]
     fn test_is_calculator_result() {
-        // Test basic calculator results
         assert!(is_calculator_result("2 + 2 = 4"));
         assert!(is_calculator_result("10 / 2 = 5"));
-
-        // Test function results
         assert!(is_calculator_result("sin(0) = 0"));
         assert!(is_calculator_result("cos(0) = 1"));
         assert!(is_calculator_result("sqrt(4) = 2"));
-        assert!(is_calculator_result("tan(0) = 0"));
-
-        // Test constant results
         assert!(is_calculator_result("pi = 3.1415926536"));
         assert!(is_calculator_result("e = 2.7182818285"));
-
-        // Test complex expressions with functions
-        assert!(is_calculator_result("sin(0 + 0) = 0"));
-        assert!(is_calculator_result("sqrt(2 + 2) = 2"));
-
-        // Test invalid results (no equals sign or wrong format)
         assert!(!is_calculator_result("abc"));
         assert!(!is_calculator_result("2 + 2"));
         assert!(!is_calculator_result(""));
-
-        // Note: is_calculator_result only checks format, not validity of expression
-        // "sin(x) = 1" has valid format (letters, parentheses, equals, number)
-        // but would fail at evaluation because 'x' is not a recognized identifier
-        // This is correct behavior - the function identifies potential calculator results,
-        // not validated results
     }
 }

@@ -342,8 +342,8 @@ fn build_main_layout(
     };
 
     // Create list view factory for rendering result items
-    let active_mode = model.active_mode.get();
-    let vault_path = model.obsidian_cfg.as_ref().map(|cfg| {
+    let active_mode = model.active_mode();
+    let vault_path = model.config.obsidian_cfg.as_ref().map(|cfg| {
         crate::utils::expand_home(&cfg.vault)
             .to_string_lossy()
             .into_owned()

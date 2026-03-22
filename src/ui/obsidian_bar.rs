@@ -91,7 +91,7 @@ pub fn build_obsidian_bar(
                 let arg_opt = (!arg.is_empty()).then_some(arg);
 
                 // Perform the Obsidian action if configuration is available
-                if let Some(cfg) = &model.obsidian_cfg {
+                if let Some(cfg) = &model.config.obsidian_cfg {
                     perform_obsidian_action(action, arg_opt, cfg);
                 }
 

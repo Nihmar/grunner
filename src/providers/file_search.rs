@@ -20,8 +20,8 @@ use crate::providers::{SubprocessRunner, spawn_subprocess};
 /// The command output is sent back to the main thread via a channel,
 /// then processed by a `SubprocessRunner` to update the UI.
 pub fn run_subprocess(model: &AppListModel, cmd: std::process::Command) {
-    let generation = model.task_gen.get();
-    let max_results = model.max_results.get();
+    let generation = model.state.task_gen();
+    let max_results = model.config.max_results.get();
     let model_clone = model.clone();
 
     let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
