@@ -1,4 +1,6 @@
 use crate::utils::clipboard::copy_text;
+use gtk4::gio;
+use gtk4::prelude::AppInfoExt;
 use log::{debug, error, info, warn};
 use std::path::Path;
 
@@ -36,8 +38,8 @@ pub(crate) fn parse_file_line(line: &str) -> Option<(&str, u32)> {
 /// If no display is available, falls back to silently ignoring clipboard copy.
 ///
 /// If the input matches `<file:line:content>` format (like grep output),
-/// opens the file at the specified line using the system EDITOR or xdg-open.
-/// If it's just a file path, opens the file.
+/// opens the file at the specified line using the system EDITOR or GIO.
+/// If it's just a file path, opens the file via GIO.
 /// If the path doesn't exist, copies the text to clipboard as a fallback.
 pub fn open_file_or_line(line: &str) {
     debug!("Opening file or line: {line}");
@@ -46,27 +48,40 @@ pub fn open_file_or_line(line: &str) {
         // Verify file exists before attempting to open
         if Path::new(file).exists() {
             info!("Opening file {file} at line {line_num}");
-            let editor = std::env::var("EDITOR").unwrap_or_else(|_| "xdg-open".to_string());
+            let editor = std::env::var("EDITOR").unwrap_or_else(|_| String::new());
             debug!("Using editor: {editor}");
-            let mut cmd = std::process::Command::new(&editor);
 
-            match editor.as_str() {
-                "code" | "codium" | "hx" | "helix" => {
-                    cmd.arg(format!("{file}:{line_num}"));
-                }
-                _ => {
-                    if editor != "xdg-open" {
-                        cmd.arg(format!("+{line_num}"));
-                    }
-                    cmd.arg(file);
-                }
+            if editor.is_empty() {
+                // No EDITOR set, open via GIO (default app for file type)
+                open_file_via_gio(file);
+                return;
             }
 
-            debug!("Spawning command: {cmd:?}");
-            if let Err(e) = cmd.spawn() {
-                error!("Failed to open file {file} at line {line_num}: {e}");
-            } else {
-                info!("Successfully opened file {file} at line {line_num}");
+            let cmdline = match editor.as_str() {
+                "code" | "codium" | "hx" | "helix" => {
+                    format!("{editor} {file}:{line_num}")
+                }
+                _ => format!("{editor} +{line_num} {file}"),
+            };
+
+            debug!("Launching editor via AppInfo: {cmdline}");
+            match gio::AppInfo::create_from_commandline(
+                &cmdline,
+                Some(&editor),
+                gio::AppInfoCreateFlags::SUPPORTS_STARTUP_NOTIFICATION,
+            ) {
+                Ok(app_info) => {
+                    if let Err(e) =
+                        app_info.launch(&[] as &[gio::File], gio::AppLaunchContext::NONE)
+                    {
+                        error!("Failed to open file {file} at line {line_num}: {e}");
+                    } else {
+                        info!("Successfully opened file {file} at line {line_num}");
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to create AppInfo for editor: {e}");
+                }
             }
             return;
         }
@@ -74,17 +89,27 @@ pub fn open_file_or_line(line: &str) {
 
     // If not a file:line pattern or file doesn't exist, try opening as plain file
     if Path::new(line).exists() {
-        info!("Opening file: {line}");
-        if let Err(e) = std::process::Command::new("xdg-open").arg(line).spawn() {
-            error!("Failed to open file {line} with xdg-open: {e}");
-        } else {
-            info!("Successfully opened file: {line}");
-        }
+        open_file_via_gio(line);
     } else {
         // Path doesn't exist - copy text to clipboard as fallback
         warn!("Path does not exist, copying to clipboard: {line}");
         copy_text(line);
         info!("Copied text to clipboard: {line}");
+    }
+}
+
+/// Open a file with the default application via GIO
+fn open_file_via_gio(path: &str) {
+    info!("Opening file: {path}");
+    let file_uri = if path.starts_with('/') {
+        format!("file://{path}")
+    } else {
+        path.to_string()
+    };
+    if let Err(e) = gio::AppInfo::launch_default_for_uri(&file_uri, gio::AppLaunchContext::NONE) {
+        error!("Failed to open file {path}: {e}");
+    } else {
+        info!("Successfully opened file: {path}");
     }
 }
 

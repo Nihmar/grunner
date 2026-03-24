@@ -1,4 +1,6 @@
 use crate::actions::show_error_notification;
+use gtk4::gio;
+use gtk4::gio::prelude::AppInfoExt;
 use log::{debug, error, info, warn};
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -84,69 +86,124 @@ pub fn find_terminal() -> Option<String> {
 /// * `exec` - Command string to execute
 /// * `terminal` - Whether to run the command inside a terminal emulator
 /// * `working_dir` - Optional working directory (None = current directory)
+/// * `desktop_id` - Optional desktop entry ID (unused currently, reserved for future GIO integration)
 ///
-/// If `terminal` is true, launches the command inside the discovered terminal emulator.
-/// Different terminals have different argument syntax for running commands.
+/// Uses `gio::AppInfo::create_from_commandline()` for non-terminal apps, which
+/// detaches the launched process from Grunner's process tree. Falls back to
+/// `Command::spawn()` if GIO fails.
+///
+/// For terminal apps, uses `Command::spawn()` directly since terminal emulators
+/// require specific argument syntax.
 #[allow(clippy::needless_pass_by_value)]
-pub fn launch_app(exec: &str, terminal: bool, working_dir: Option<String>) {
+pub fn launch_app(
+    exec: &str,
+    terminal: bool,
+    working_dir: Option<String>,
+    _desktop_id: Option<&str>,
+) {
     debug!("Launching application: {exec} (terminal: {terminal}, working_dir: {working_dir:?})");
     let clean = crate::launcher::clean_exec(exec);
     debug!("Cleaned execution command: {clean}");
 
     if terminal {
-        debug!("Looking for terminal emulator");
-        if let Some(term) = find_terminal() {
-            info!("Using terminal emulator: {term}");
-            let mut cmd = std::process::Command::new(&term);
-            if let Some(ref dir) = working_dir {
-                cmd.current_dir(dir);
-            }
-            match term.as_str() {
-                // GNOME and XFCE terminals use "--" separator
-                "gnome-terminal" | "xfce4-terminal" => {
-                    cmd.arg("--").arg("sh").arg("-c").arg(&clean);
-                }
+        launch_in_terminal(&clean, working_dir);
+    } else {
+        launch_via_app_info(&clean, &working_dir);
+    }
+}
 
-                // Kitty uses "--" separator and supports --hold
-                "kitty" => {
-                    cmd.arg("--hold").arg("--").arg("sh").arg("-c").arg(&clean);
+/// Launch via `gio::AppInfo::create_from_commandline`
+///
+/// This detaches the child process from Grunner's process tree,
+/// preventing zombie processes and memory aggregation issues.
+fn launch_via_app_info(clean: &str, working_dir: &Option<String>) {
+    let parts: Vec<&str> = clean.split_whitespace().collect();
+    if let Some((prog, args)) = parts.split_first() {
+        let cmdline = clean.to_string();
+        let display_name = prog.to_string();
+        match gio::AppInfo::create_from_commandline(
+            &cmdline,
+            Some(&display_name),
+            gio::AppInfoCreateFlags::SUPPORTS_STARTUP_NOTIFICATION,
+        ) {
+            Ok(app_info) => {
+                debug!("Launching via gio::AppInfo: {cmdline}");
+                let ctx = gio::AppLaunchContext::new();
+                if let Some(dir) = working_dir {
+                    use gtk4::prelude::AppLaunchContextExt;
+                    ctx.setenv("PWD", dir);
                 }
-                // Default to "-e" for unknown terminals
-                _ => {
-                    cmd.arg("-e").arg("sh").arg("-c").arg(&clean);
+                if let Err(e) = app_info.launch(&[] as &[gio::File], Some(&ctx)) {
+                    error!("Failed to launch via AppInfo: {e}");
+                    warn!("Falling back to Command::spawn");
+                    launch_via_command(prog, args, working_dir);
+                } else {
+                    info!("Successfully launched via AppInfo: {cmdline}");
                 }
             }
-            debug!("Spawning terminal command: {cmd:?}");
-            if let Err(e) = cmd.spawn() {
-                error!("Failed to launch terminal {term} with command '{clean}': {e}");
-                show_error_notification(&format!("Failed to launch: {clean}"));
-            } else {
-                info!("Successfully launched application in terminal {term}: {clean}");
+            Err(e) => {
+                error!("Failed to create AppInfo for '{cmdline}': {e}");
+                warn!("Falling back to Command::spawn");
+                launch_via_command(prog, args, working_dir);
             }
-        } else {
-            warn!("No terminal emulator found for command: {clean}");
-            show_error_notification("No terminal emulator found");
         }
     } else {
-        // Run directly without terminal, avoiding shell injection
-        let parts: Vec<&str> = clean.split_whitespace().collect();
-        if let Some((prog, args)) = parts.split_first() {
-            let mut cmd = std::process::Command::new(prog);
-            cmd.args(args);
-            if let Some(ref dir) = working_dir {
-                cmd.current_dir(dir);
-            }
-            debug!("Spawning command directly: {cmd:?}");
-            if let Err(e) = cmd.spawn() {
-                error!("Failed to launch command '{clean}': {e}");
-                show_error_notification(&format!("Failed to launch: {clean}"));
-            } else {
-                info!("Successfully launched application: {clean}");
-            }
-        } else {
-            warn!("Empty command after clean_exec: {clean}");
-            show_error_notification("Invalid command");
+        warn!("Empty command after clean_exec: {clean}");
+        show_error_notification("Invalid command");
+    }
+}
+
+/// Fallback: launch via `std::process::Command::spawn()`
+fn launch_via_command(prog: &str, args: &[&str], working_dir: &Option<String>) {
+    let mut cmd = std::process::Command::new(prog);
+    cmd.args(args);
+    if let Some(dir) = working_dir {
+        cmd.current_dir(dir);
+    }
+    debug!("Spawning command directly: {cmd:?}");
+    if let Err(e) = cmd.spawn() {
+        error!("Failed to launch command '{prog}': {e}");
+        show_error_notification(&format!("Failed to launch: {prog}"));
+    } else {
+        info!("Successfully launched application: {prog}");
+    }
+}
+
+/// Launch a command inside a terminal emulator
+///
+/// Terminal emulators have varying argument syntax, so we handle them individually.
+fn launch_in_terminal(clean: &str, working_dir: Option<String>) {
+    debug!("Looking for terminal emulator");
+    if let Some(term) = find_terminal() {
+        info!("Using terminal emulator: {term}");
+        let mut cmd = std::process::Command::new(&term);
+        if let Some(ref dir) = working_dir {
+            cmd.current_dir(dir);
         }
+        match term.as_str() {
+            // GNOME and XFCE terminals use "--" separator
+            "gnome-terminal" | "xfce4-terminal" => {
+                cmd.arg("--").arg("sh").arg("-c").arg(clean);
+            }
+            // Kitty uses "--" separator and supports --hold
+            "kitty" => {
+                cmd.arg("--hold").arg("--").arg("sh").arg("-c").arg(clean);
+            }
+            // Default to "-e" for unknown terminals
+            _ => {
+                cmd.arg("-e").arg("sh").arg("-c").arg(clean);
+            }
+        }
+        debug!("Spawning terminal command: {cmd:?}");
+        if let Err(e) = cmd.spawn() {
+            error!("Failed to launch terminal {term} with command '{clean}': {e}");
+            show_error_notification(&format!("Failed to launch: {clean}"));
+        } else {
+            info!("Successfully launched application in terminal {term}: {clean}");
+        }
+    } else {
+        warn!("No terminal emulator found for command: {clean}");
+        show_error_notification("No terminal emulator found");
     }
 }
 

@@ -38,6 +38,8 @@ mod imp {
         pub exec: String,
         /// Whether the application should run in a terminal
         pub terminal: bool,
+        /// Desktop entry ID for GIO launch
+        pub desktop_id: String,
     }
 
     /// Main GTK object implementation struct
@@ -103,6 +105,7 @@ impl AppItem {
             icon: app.icon.clone(),
             exec: app.exec.clone(),
             terminal: app.terminal,
+            desktop_id: app.desktop_id.clone(),
         };
 
         obj
@@ -136,5 +139,11 @@ impl AppItem {
     #[must_use]
     pub fn terminal(&self) -> bool {
         self.imp().data.borrow().terminal
+    }
+
+    /// Get the desktop entry ID for GIO launch
+    #[must_use]
+    pub fn desktop_id(&self) -> String {
+        self.imp().data.borrow().desktop_id.clone()
     }
 }

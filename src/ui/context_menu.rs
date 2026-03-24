@@ -172,15 +172,28 @@ pub fn open_in_file_manager(path: &str) {
     let parent = std::path::Path::new(path)
         .parent()
         .map_or_else(|| path.to_string(), |p| p.to_string_lossy().to_string());
-
-    if let Err(e) = std::process::Command::new("xdg-open").arg(&parent).spawn() {
+    let uri = if parent.starts_with('/') {
+        format!("file://{parent}")
+    } else {
+        parent
+    };
+    if let Err(e) =
+        gtk4::gio::AppInfo::launch_default_for_uri(&uri, gtk4::gio::AppLaunchContext::NONE)
+    {
         error!("Failed to open file manager: {e}");
     }
 }
 
 /// Open a file with the default application
 pub fn open_with_default_app(path: &str) {
-    if let Err(e) = std::process::Command::new("xdg-open").arg(path).spawn() {
+    let uri = if path.starts_with('/') {
+        format!("file://{path}")
+    } else {
+        path.to_string()
+    };
+    if let Err(e) =
+        gtk4::gio::AppInfo::launch_default_for_uri(&uri, gtk4::gio::AppLaunchContext::NONE)
+    {
         error!("Failed to open file with default app: {e}");
     }
 }

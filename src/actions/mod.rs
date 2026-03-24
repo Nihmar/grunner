@@ -21,7 +21,8 @@ pub use obsidian::*;
 pub use power::*;
 pub use settings::*;
 
-use gtk4::prelude::ApplicationExt;
+use gtk4::gio;
+use gtk4::prelude::{ApplicationExt, DisplayExt};
 use log::{debug, error, info};
 
 /// Show an error notification to the user
@@ -35,25 +36,27 @@ pub fn show_error_notification(message: &str) {
     }
 }
 
-/// Open a URI using xdg-open
+/// Open a URI using GIO's default handler
 ///
 /// # Arguments
-/// * `uri` - The URI to open (obsidian://, http://, etc.)
+/// * `uri` - The URI to open (obsidian://, http://, file://, etc.)
 ///
-/// # Errors
-/// Returns an error if xdg-open fails to spawn or execute.
-///
-/// Uses the system's default URI handler (xdg-open on Linux) to open the URI.
+/// Uses `gio::AppInfo::launch_default_for_uri()` which handles the URI
+/// via the correct application without spawning child processes under Grunner.
 pub fn open_uri(uri: &str) -> Result<(), std::io::Error> {
     debug!("Opening URI: {uri}");
-    match std::process::Command::new("xdg-open").arg(uri).spawn() {
-        Ok(_) => {
+    let ctx = gtk4::gdk::Display::default().map(|d| d.app_launch_context());
+    match gio::AppInfo::launch_default_for_uri(uri, ctx.as_ref()) {
+        Ok(()) => {
             info!("Successfully opened URI: {uri}");
             Ok(())
         }
         Err(e) => {
             error!("Failed to open URI '{uri}': {e}");
-            Err(e)
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ))
         }
     }
 }

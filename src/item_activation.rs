@@ -75,7 +75,13 @@ fn activate_app(item: &AppItem) {
         item.exec(),
         item.terminal()
     );
-    launch_app(&item.exec(), item.terminal(), None);
+    let did = item.desktop_id();
+    let desktop_id = if did.is_empty() {
+        None
+    } else {
+        Some(did.as_str())
+    };
+    launch_app(&item.exec(), item.terminal(), None, desktop_id);
 }
 
 fn activate_command(item: &CommandItem, ctx: &ActivationContext) {
@@ -132,7 +138,7 @@ fn activate_command(item: &CommandItem, ctx: &ActivationContext) {
                     command_to_run.to_string()
                 };
 
-                launch_app(&final_command, true, working_dir);
+                launch_app(&final_command, true, working_dir, None);
             }
         }
         _ => {

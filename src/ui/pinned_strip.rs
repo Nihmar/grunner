@@ -291,10 +291,11 @@ pub fn update_pinned_strip(
             // Left-click: launch app and hide window
             let exec = app.exec.clone();
             let terminal = app.terminal;
+            let did = desktop_id.clone();
             let win_click = window.clone();
             btn.connect_clicked(move |_| {
                 info!("Launching pinned app: {exec}");
-                launch_app(&exec, terminal, None);
+                launch_app(&exec, terminal, None, Some(&did));
                 win_click.hide();
             });
 
@@ -365,7 +366,7 @@ pub fn launch_pinned_by_index(
         && let Some(app) = loaded_apps.iter().find(|a| a.desktop_id == *desktop_id)
     {
         info!("Launching pinned app #{index}: {}", app.name);
-        launch_app(&app.exec, app.terminal, None);
+        launch_app(&app.exec, app.terminal, None, Some(&app.desktop_id));
         window.hide();
     }
 }
