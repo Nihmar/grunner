@@ -215,7 +215,7 @@ Searches your home directory using `plocate` (falls back to `find`). Press `Ente
 Searches file contents under `~` using `ripgrep` (falls back to `grep`). Press `Enter` to open the file at the matching line in `$EDITOR`.
 
 ```
-:fg TODO fixme
+:fg some_text
 ```
 
 #### `:ob [text]` — Obsidian actions
